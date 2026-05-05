@@ -2,10 +2,12 @@ import { ReactNode, Suspense } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
+import { RegulatoryBanner } from "@/components/app-shell/regulatory-banner";
 import { NAV_ITEMS, ROLE_BADGE } from "@/components/app-shell/nav-config";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import type { NotificationItem } from "@/components/app-shell/notification-bell";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -36,14 +38,24 @@ async function AppShell({ children }: { children: ReactNode }) {
     )
     .filter((s): s is { id: string; name: string; country: "US" | "GB" } => s !== null);
 
-  let notificationCount = 0;
+  let notifications: NotificationItem[] = [];
   if (currentSiteId) {
-    const { count } = await supabase
+    const { data } = await supabase
       .from("notifications")
-      .select("*", { count: "exact", head: true })
+      .select("id, kind, title, body, deadline_at, incident_id, created_at")
       .eq("site_id", currentSiteId)
-      .is("resolved_at", null);
-    notificationCount = count ?? 0;
+      .is("resolved_at", null)
+      .order("deadline_at", { ascending: true })
+      .limit(20);
+    notifications = (data ?? []).map((n) => ({
+      id: n.id,
+      kind: n.kind,
+      title: n.title,
+      body: n.body,
+      deadline_at: n.deadline_at,
+      incident_id: n.incident_id,
+      created_at: n.created_at,
+    }));
   }
 
   const fullName = profile.full_name ?? profile.email;
@@ -56,12 +68,13 @@ async function AppShell({ children }: { children: ReactNode }) {
         <Topbar
           sites={sites}
           currentSiteId={currentSiteId}
-          notificationCount={notificationCount}
+          notifications={notifications}
           fullName={fullName}
           email={profile.email}
           roleLabel={roleLabel}
           currentSiteName={currentMembership?.site?.name ?? null}
         />
+        <RegulatoryBanner deadlines={notifications} />
         <main className="flex-1 px-6 py-6">{children}</main>
       </SidebarInset>
     </SidebarProvider>

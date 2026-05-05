@@ -1,13 +1,13 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SiteSwitcher, type SwitcherSite } from "./site-switcher";
-import { NotificationBell } from "./notification-bell";
+import { NotificationBell, type NotificationItem } from "./notification-bell";
 import { UserMenu } from "./user-menu";
 
 export function Topbar({
   sites,
   currentSiteId,
-  notificationCount,
+  notifications,
   fullName,
   email,
   roleLabel,
@@ -15,7 +15,7 @@ export function Topbar({
 }: {
   sites: SwitcherSite[];
   currentSiteId: string | null;
-  notificationCount: number;
+  notifications: NotificationItem[];
   fullName: string;
   email: string;
   roleLabel: string;
@@ -27,7 +27,7 @@ export function Topbar({
       <Separator orientation="vertical" className="mx-1 h-5" />
       <SiteSwitcher sites={sites} currentSiteId={currentSiteId} />
       <div className="ml-auto flex items-center gap-1">
-        <NotificationBell count={notificationCount} />
+        <NotificationBell notifications={notifications} />
         <UserMenu
           fullName={fullName}
           email={email}
