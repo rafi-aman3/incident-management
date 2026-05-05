@@ -14,15 +14,15 @@
 
 ## 0. Source Material We Reviewed
 
-| Source | What it gives us |
-|---|---|
-| `docs/EHS_Incident_Forms_Latest.pdf` (10 chapters + 2 appendices, v1.1, May 2026) | Full paper forms for collecting field data. Covers Injury, Illness, Near-miss, Property Damage, Environmental Release, Unsafe Condition, Observation, Investigation, CAPA, and Dangerous Occurrence. Lists every field for each incident type. |
-| `docs/IncidentManagementSystem-2/uploads/PRD.txt` | The 29-page PRD: goals, modules, three-track routing, risk matrix, OSHA and RIDDOR rules, data model, design tokens, and demo screen descriptions. |
-| `docs/IncidentManagementSystem-2/uploads/Forms.txt` | A plain-text copy of the printable forms package. We use it as the field list. |
-| `docs/IncidentManagementSystem-2/*.jsx` + `EHS Incident Management.html` | A working React + Babel demo in the browser: Shell, Dashboard, Incidents list and detail, 3-step ReportWizard with body map and 5×5 matrix, Investigation Kanban + Detail, CAPA module, Reports module (OSHA 300 / 300A / 301 / RIDDOR previews). |
-| `docs/IncidentManagementSystem-2/styles.css` + `colors_and_type.css` | Ready-to-use visual tokens for the SDS Manager design system. |
-| `uploads/Investigation Routing Logic.png` | A picture that shows the routing decision (Track A / B / C). |
-| Web research (May 2026) | ISO 45001 standard, OSHA ITA 2026 deadlines, root-cause analysis methods (5-Why, Fishbone, TapRoot), CAPA effectiveness checks, 5×5 risk matrix rules, RIDDOR 2013 deadlines, EHS KPI strategy. |
+| Source                                                                            | What it gives us                                                                                                                                                                                                                                  |
+|-----------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `docs/EHS_Incident_Forms_Latest.pdf` (10 chapters + 2 appendices, v1.1, May 2026) | Full paper forms for collecting field data. Covers Injury, Illness, Near-miss, Property Damage, Environmental Release, Unsafe Condition, Observation, Investigation, CAPA, and Dangerous Occurrence. Lists every field for each incident type.    |
+| `docs/IncidentManagementSystem-2/uploads/PRD.txt`                                 | The 29-page PRD: goals, modules, three-track routing, risk matrix, OSHA and RIDDOR rules, data model, design tokens, and demo screen descriptions.                                                                                                |
+| `docs/IncidentManagementSystem-2/uploads/Forms.txt`                               | A plain-text copy of the printable forms package. We use it as the field list.                                                                                                                                                                    |
+| `docs/IncidentManagementSystem-2/*.jsx` + `EHS Incident Management.html`          | A working React + Babel demo in the browser: Shell, Dashboard, Incidents list and detail, 3-step ReportWizard with body map and 5×5 matrix, Investigation Kanban + Detail, CAPA module, Reports module (OSHA 300 / 300A / 301 / RIDDOR previews). |
+| `docs/IncidentManagementSystem-2/styles.css` + `colors_and_type.css`              | Ready-to-use visual tokens for the SDS Manager design system.                                                                                                                                                                                     |
+| `uploads/Investigation Routing Logic.png`                                         | A picture that shows the routing decision (Track A / B / C).                                                                                                                                                                                      |
+| Web research (May 2026)                                                           | ISO 45001 standard, OSHA ITA 2026 deadlines, root-cause analysis methods (5-Why, Fishbone, TapRoot), CAPA effectiveness checks, 5×5 risk matrix rules, RIDDOR 2013 deadlines, EHS KPI strategy.                                                   |
 
 ---
 
@@ -225,26 +225,26 @@ These are **promises**, not just features. They tell the customer what we will *
 #### 2.4.4 User-hesitation map (the most important table in this section)
 For every common reason a buyer or worker hesitates, the system has a concrete answer. **Every design review must walk this table.**
 
-| Who hesitates | What they fear | Our concrete answer | Section |
-|---|---|---|---|
-| **Site Admin** | "I do not trust the cloud with my safety data." | Self-hosted Postgres. Local-disk file storage in v1. Data never leaves your network. | §12.4, §15.3 |
-| **Site Admin** | "Will I get locked into a vendor?" | Standard Postgres schema. Open ORM. No proprietary file format. | §12.4 |
-| **Site Admin** | "Setup will take us months." | 7-step setup wizard, save & resume, default-and-skip on every step. Target: under 30 minutes. | §16.3 |
-| **EHS Manager** | "Audit prep takes us 3 weeks every year." | Reports are a live projection of incident data. The OSHA 300 Log on screen *is* the OSHA 300 Log of record. | §9, Foundational Concepts |
-| **EHS Manager** | "Will I miss an OSHA / RIDDOR deadline?" | Notifications fire at classification. Top-bar bell + dashboard banner with countdown. | §11 |
-| **EHS Manager** | "What if a supervisor closes a CAPA they own?" | Cannot. Database `CHECK` constraint blocks it. | §8.3, §12.3 |
-| **EHS Manager** | "Will my OSHA 301s be missing the right fields?" | Field 17 ("object that directly harmed") is captured explicitly in the Report Wizard. Auto-drafted into 301. | §6.2 Step 2, §9.3 |
-| **Supervisor** | "Investigation backlog will swallow my week." | Track A vs Track B vs Track C splits the load. Track C auto-closes. Only Track A is a full investigation. | §5 |
-| **Supervisor** | "I cannot tell which incident is urgent." | Severity badge + track badge on every list row. Sev 1–2 surfaces to the top with red banners. | §6.3, §11.1 |
-| **Worker** | "Is reporting going to get me in trouble?" | Plain copy on the worker welcome card: "Nobody gets in trouble for reporting a near-miss." Anonymous mode for BBS. | §16.4, §15.5.9 |
-| **Worker** | "How long will this take? I have actual work to do." | 3-step wizard, target under 3 minutes. Voice-to-text. Body map. Drag-and-drop photos. | §6.2, §16.2 |
-| **Worker** | "What if I do not know which category to pick?" | "If you are not sure, pick **Observation**." Stated explicitly on the welcome tour. | §16.4 |
-| **Worker** | "What if I make a mistake?" | "Try a practice report (nothing is saved)" sandbox mode. | §16.6 |
-| **Worker on a coworker** | "I do not want to name my colleague." | Anonymous toggle on BBS observations. Free-text observed_target supports a generic team name. | §15.5.9 |
-| **Verifier** | "What if my team is too small to find an independent verifier?" | Cross-site verification supported. Risk and mitigation noted. | §19 item 9 |
-| **Buyer comparing vendors** | "Will it integrate with my SDS data?" | It *is* your SDS data. Native auto-attach to chemical incidents. | §15.2 |
-| **Buyer comparing vendors** | "What if we expand to a new country?" | Routing engine is table-driven via `Site.regulator`. Adding a regulator is config, not code. | §5, §2.3 |
-| **Buyer comparing vendors** | "Will workers actually adopt it?" | Time-to-first-report metric tracked from day one. Onboarding success metrics in §16.11. | §16.11 |
+| Who hesitates               | What they fear                                                  | Our concrete answer                                                                                                | Section                   |
+|-----------------------------|-----------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|---------------------------|
+| **Site Admin**              | "I do not trust the cloud with my safety data."                 | Self-hosted Postgres. Local-disk file storage in v1. Data never leaves your network.                               | §12.4, §15.3              |
+| **Site Admin**              | "Will I get locked into a vendor?"                              | Standard Postgres schema. Open ORM. No proprietary file format.                                                    | §12.4                     |
+| **Site Admin**              | "Setup will take us months."                                    | 7-step setup wizard, save & resume, default-and-skip on every step. Target: under 30 minutes.                      | §16.3                     |
+| **EHS Manager**             | "Audit prep takes us 3 weeks every year."                       | Reports are a live projection of incident data. The OSHA 300 Log on screen *is* the OSHA 300 Log of record.        | §9, Foundational Concepts |
+| **EHS Manager**             | "Will I miss an OSHA / RIDDOR deadline?"                        | Notifications fire at classification. Top-bar bell + dashboard banner with countdown.                              | §11                       |
+| **EHS Manager**             | "What if a supervisor closes a CAPA they own?"                  | Cannot. Database `CHECK` constraint blocks it.                                                                     | §8.3, §12.3               |
+| **EHS Manager**             | "Will my OSHA 301s be missing the right fields?"                | Field 17 ("object that directly harmed") is captured explicitly in the Report Wizard. Auto-drafted into 301.       | §6.2 Step 2, §9.3         |
+| **Supervisor**              | "Investigation backlog will swallow my week."                   | Track A vs Track B vs Track C splits the load. Track C auto-closes. Only Track A is a full investigation.          | §5                        |
+| **Supervisor**              | "I cannot tell which incident is urgent."                       | Severity badge + track badge on every list row. Sev 1–2 surfaces to the top with red banners.                      | §6.3, §11.1               |
+| **Worker**                  | "Is reporting going to get me in trouble?"                      | Plain copy on the worker welcome card: "Nobody gets in trouble for reporting a near-miss." Anonymous mode for BBS. | §16.4, §15.5.9            |
+| **Worker**                  | "How long will this take? I have actual work to do."            | 3-step wizard, target under 3 minutes. Voice-to-text. Body map. Drag-and-drop photos.                              | §6.2, §16.2               |
+| **Worker**                  | "What if I do not know which category to pick?"                 | "If you are not sure, pick **Observation**." Stated explicitly on the welcome tour.                                | §16.4                     |
+| **Worker**                  | "What if I make a mistake?"                                     | "Try a practice report (nothing is saved)" sandbox mode.                                                           | §16.6                     |
+| **Worker on a coworker**    | "I do not want to name my colleague."                           | Anonymous toggle on BBS observations. Free-text observed_target supports a generic team name.                      | §15.5.9                   |
+| **Verifier**                | "What if my team is too small to find an independent verifier?" | Cross-site verification supported. Risk and mitigation noted.                                                      | §19 item 9                |
+| **Buyer comparing vendors** | "Will it integrate with my SDS data?"                           | It *is* your SDS data. Native auto-attach to chemical incidents.                                                   | §15.2                     |
+| **Buyer comparing vendors** | "What if we expand to a new country?"                           | Routing engine is table-driven via `Site.regulator`. Adding a regulator is config, not code.                       | §5, §2.3                  |
+| **Buyer comparing vendors** | "Will workers actually adopt it?"                               | Time-to-first-report metric tracked from day one. Onboarding success metrics in §16.11.                            | §16.11                    |
 
 #### 2.4.5 The design rule for every screen
 When a designer or engineer is unsure about a design choice, the rule is one sentence:
@@ -275,13 +275,13 @@ We will be asked for these. Saying yes makes the product worse:
 
 ## 3. Target Users and Roles
 
-| Role | Main actions | Permissions |
-|---|---|---|
-| **Shop-floor worker** | Reports incidents and observations. Sees their own reports. | Can create incidents (any type). Can view their own reports. Can attach evidence. |
-| **Supervisor** | Reviews and overrides severity. Assigns triage owners. Manages team incidents. | All worker permissions, plus override classification, assign within team, escalate to investigation. |
-| **EHS Manager** | Leads investigations. Assigns CAPAs. Manages regulatory reports. | All supervisor permissions, plus open and close investigations, submit OSHA / RIDDOR reports, assign verifiers. |
-| **Independent verifier** | Confirms CAPA effectiveness and closes it (cannot be the owner). | Can sign off on CAPAs they did not own. |
-| **Site administrator** | Sets up sites, users, roles, notification rules, and regulator references. | All EHS Manager permissions, plus system setup. |
+| Role                     | Main actions                                                                   | Permissions                                                                                                     |
+|--------------------------|--------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| **Shop-floor worker**    | Reports incidents and observations. Sees their own reports.                    | Can create incidents (any type). Can view their own reports. Can attach evidence.                               |
+| **Supervisor**           | Reviews and overrides severity. Assigns triage owners. Manages team incidents. | All worker permissions, plus override classification, assign within team, escalate to investigation.            |
+| **EHS Manager**          | Leads investigations. Assigns CAPAs. Manages regulatory reports.               | All supervisor permissions, plus open and close investigations, submit OSHA / RIDDOR reports, assign verifiers. |
+| **Independent verifier** | Confirms CAPA effectiveness and closes it (cannot be the owner).               | Can sign off on CAPAs they did not own.                                                                         |
+| **Site administrator**   | Sets up sites, users, roles, notification rules, and regulator references.     | All EHS Manager permissions, plus system setup.                                                                 |
 
 > **Separation-of-duties rule:** the system MUST NOT let the same person be both `owner` and `verifier` on a CAPA. This rule is in the API layer, not only in the screen.
 
@@ -309,11 +309,11 @@ We will be asked for these. Saying yes makes the product worse:
 ### 4.2 Three close events, all separate
 The life cycle has **three close events**. Each one is independent. Each one is in the audit log.
 
-| Close event | When it fires | Who owns it | What it ends |
-|---|---|---|---|
-| **Incident closed** | First capture and classification are done. The incident is routed to Track A / B / C. | Reporter or Supervisor | The triage phase |
-| **Investigation closed** | RCA is finished. May or may not lead to CAPA. | Lead investigator | The investigation phase |
-| **CAPA closed** | Action is done AND a different person has confirmed it works. | Verifier (not the owner) | The action phase |
+| Close event              | When it fires                                                                         | Who owns it              | What it ends            |
+|--------------------------|---------------------------------------------------------------------------------------|--------------------------|-------------------------|
+| **Incident closed**      | First capture and classification are done. The incident is routed to Track A / B / C. | Reporter or Supervisor   | The triage phase        |
+| **Investigation closed** | RCA is finished. May or may not lead to CAPA.                                         | Lead investigator        | The investigation phase |
+| **CAPA closed**          | Action is done AND a different person has confirmed it works.                         | Verifier (not the owner) | The action phase        |
 
 Closing an incident does **not** close its investigation. Closing an investigation does **not** close its CAPAs. This is a key design rule. The data model must reflect it (each entity has its own `closed_at` timestamp).
 
@@ -331,11 +331,11 @@ Closing an incident does **not** close its investigation. Closing an investigati
 
 This is the decision gate at the heart of the system. A classified incident goes to exactly one track.
 
-| Track | Severity | What happens | Default outcome |
-|---|---|---|---|
-| **A — Full investigation** | S1 (Critical), S2 (Major) | Lead investigator + team. Full 5-Why RCA. Evidence is required. CAPA must be considered. All deaths, amputations, hospital cases, and RIDDOR specified injuries go here. | Investigation → CAPA(s) → verified close |
-| **B — Light investigation** | S3 (Moderate) | Supervisor-led short review. Simple RCA. CAPA is optional. Used for high-potential near-misses and moderate injuries with medical care. | Investigation → optional CAPA → close |
-| **C — Log and close** | S4 (Minor), S5 (Insignificant) | No investigation. Log it, give first aid if needed, auto-close. Used for paper cuts and low-risk observations. | Auto-close with full audit trail |
+| Track                       | Severity                       | What happens                                                                                                                                                             | Default outcome                          |
+|-----------------------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|
+| **A — Full investigation**  | S1 (Critical), S2 (Major)      | Lead investigator + team. Full 5-Why RCA. Evidence is required. CAPA must be considered. All deaths, amputations, hospital cases, and RIDDOR specified injuries go here. | Investigation → CAPA(s) → verified close |
+| **B — Light investigation** | S3 (Moderate)                  | Supervisor-led short review. Simple RCA. CAPA is optional. Used for high-potential near-misses and moderate injuries with medical care.                                  | Investigation → optional CAPA → close    |
+| **C — Log and close**       | S4 (Minor), S5 (Insignificant) | No investigation. Log it, give first aid if needed, auto-close. Used for paper cuts and low-risk observations.                                                           | Auto-close with full audit trail         |
 
 ### 5.1 Routing rules per incident type
 - **Injury** — based on severity. First aid only → C. Medical treatment → B. Hospital, amputation, or death → A.
@@ -355,16 +355,16 @@ Supervisors can override the auto-classification. The override writes a log entr
 ## 6. Module 1 — Incident Reporting
 
 ### 6.1 The eight incident types
-| Type | Definition |
-|---|---|
-| Injury | A person is physically hurt (cut, burn, fracture). |
-| Illness | A work-caused disease (hearing loss, dermatitis). |
-| Near-miss | An event that could have caused harm but did not. |
-| Property damage | Damage to equipment, machines, or buildings. |
-| Environmental release | A spill, leak, or release to air, water, or soil. |
-| Unsafe condition | A dangerous situation found (missing guard, exposed wire). |
-| Observation | A general safety note (good or bad). |
-| Dangerous occurrence | A RIDDOR-reportable event (collapse, explosion, scaffold over 5 m). |
+| Type                  | Definition                                                          |
+|-----------------------|---------------------------------------------------------------------|
+| Injury                | A person is physically hurt (cut, burn, fracture).                  |
+| Illness               | A work-caused disease (hearing loss, dermatitis).                   |
+| Near-miss             | An event that could have caused harm but did not.                   |
+| Property damage       | Damage to equipment, machines, or buildings.                        |
+| Environmental release | A spill, leak, or release to air, water, or soil.                   |
+| Unsafe condition      | A dangerous situation found (missing guard, exposed wire).          |
+| Observation           | A general safety note (good or bad).                                |
+| Dangerous occurrence  | A RIDDOR-reportable event (collapse, explosion, scaffold over 5 m). |
 
 ### 6.2 The 3-step reporting wizard
 
