@@ -846,9 +846,10 @@ Every entity in §12.2 below carries these standard columns implicitly: `id` (UU
 
 | Entity | Purpose | Key fields |
 |---|---|---|
-| `InspectionTemplate` | A reusable inspection checklist (forklift pre-use, fire-extinguisher, etc.). | id, name, items (JSONB), schedule (daily / weekly / monthly / yearly / on_demand), assigned_to_role, site_id |
-| `Inspection` | One run of an inspection. | id, template_id, site_id, area, inspector_id, conducted_at, gps_lat, gps_lng, status (passed / failed / partial), photo_file_ids[] |
-| `InspectionFinding` | A failed item from an inspection. May escalate to a CAPA or Unsafe Condition incident. | id, inspection_id, item_id, finding, severity, capa_id (nullable), incident_id (nullable) |
+| `InspectionTemplate` | A reusable inspection checklist (forklift pre-use, fire-extinguisher, etc.). The current pointer; the actual checklist content lives in the version row. | id, name, category, schedule (daily / weekly / monthly / quarterly / yearly / on_demand), start_time_local, assigned_to_role, site_id, current_version_id, linked_document_id (nullable), status (draft / active / archived) — see §15.5.4 |
+| `InspectionTemplateVersion` | One published version of a template's checklist. Created every time the items change. Old versions stay viewable for audit. | id, template_id, version_number (semver), items (JSONB — list of items, each with question, response_type, required, photo_required, comment_required_if_fail, regulation_ref), change_summary, approved_by, approved_at, status (draft / active / archived) |
+| `Inspection` | One run of an inspection. The `template_version_id` is snapshotted at start so future template edits do not rewrite history. | id, template_version_id, site_id, area, inspector_id, started_at, conducted_at, gps_lat, gps_lng, status (in_progress / passed / failed / partial), signature_method (typed / drawn / qr), photo_file_ids[] |
+| `InspectionFinding` | A failed item from an inspection. May escalate to a CAPA, an Unsafe Condition incident, or both. | id, inspection_id, item_id (refers to the JSONB item id inside the snapshotted version), finding_text, severity (minor / major / immediate_danger), evidence_file_ids[], capa_id (nullable), incident_id (nullable) |
 
 #### 12.2.10 Permit-to-Work
 
@@ -1189,10 +1190,102 @@ A **safety audit** is a planned check of a workplace area against a checklist. A
 - **Certification expiry alerts.** Many courses expire (forklift, first aid, hot work, confined space). The Dashboard surfaces "N certifications expiring in the next 30 days" so the EHS manager can schedule the refresher before the gap.
 
 #### 15.5.4 Inspection management
-**Inspections** are short, regular checks. Examples: daily forklift pre-use check, weekly fire-extinguisher check, monthly PPE-station check.
-- Mobile-friendly checklist.
-- A failed check should be able to trigger an Unsafe Condition incident.
-- Photo and signature on each check.
+**Inspections** are short, regular checks. Examples: daily forklift pre-use check, weekly fire-extinguisher check, monthly PPE-station check, quarterly fall-arrest check.
+
+An inspection is defined by a **template** (the checklist) and a **schedule** (how often). The system handles template authoring, scheduling, execution, and finding capture in one flow.
+
+##### How the template is handled — full lifecycle
+
+**1. Author the template (EHS Manager / Site Admin).**
+A template stores the checklist plus the rules for using it. Fields:
+- **Name** — for example "Daily forklift pre-use check."
+- **Category** — equipment / facility / PPE / chemical / safety-system / environmental.
+- **Items** — the individual check questions. Each item has: question text, response type (pass/fail / yes/no / numeric reading / multi-choice), required (yes/no), photo required (yes/no), comment required if fail (yes/no), reference to a regulation or SOP (optional).
+- **Schedule** — daily / weekly / monthly / quarterly / yearly / on_demand. Plus a `start_time_local` for daily / weekly schedules.
+- **Assigned-to role** — which user role runs this inspection (worker / supervisor / EHS manager).
+- **Site scope** — one site, many sites, or all sites of a country.
+- **Linked SOP** — optional `Document` link (so when the SOP changes, the template can be re-reviewed).
+
+**2. Versioning (immutable history).**
+A template is a living document. When a check item is added, removed, or rewritten, the system creates a **new `InspectionTemplateVersion`** — it does not edit the old one. Reasons:
+- Inspections completed against the old version must still read correctly five years later (OSHA retention).
+- An auditor must see exactly what was checked on the day of an incident, not the latest checklist.
+- Version-numbering is semver-style (1.0 → 1.1 for minor edits, 2.0 for a major change).
+
+The current "active" version is what new inspections start from. Old versions stay viewable but are marked **archived**.
+
+**3. Scheduling and the inspection queue.**
+- A scheduler runs daily at site-local midnight.
+- For every active template with a schedule, it creates the next due `Inspection` row in the assigned role's queue.
+- The queue lives on the inspector's Dashboard ("3 inspections due today").
+- Overdue inspections turn red on the Dashboard at the role's manager view.
+- On-demand templates have no schedule — the inspector starts them manually.
+
+**4. Execution (mobile-friendly).**
+- Inspector taps an item from their queue.
+- The Inspection record is created at this moment, with `template_version_id` snapshotted from the active version. From this point, the checklist is **frozen** — even if someone publishes a new template version mid-inspection, the inspector finishes against the version they started with.
+- GPS is captured at start (if mobile and GPS allowed).
+- For each item: pass / fail / N/A, optional comment, optional photo. Photos are stored as `File` rows linked to the Inspection.
+- Items marked "photo required" or "comment required if fail" are enforced before submit.
+- On submit: status auto-calculated. **Passed** = every required item passed. **Failed** = any required item failed. **Partial** = any required item not answered.
+- The inspector signs off (typed name, drawn signature, or QR-code self-scan).
+
+**5. Finding capture (the failure path).**
+- Each failed item creates an `InspectionFinding` row. The finding stores: which item, what was wrong, severity (minor / major / immediate-danger), evidence file ids.
+- The inspector chooses, in one tap, what to do with each finding:
+  - **Open a CAPA** — most common. The CAPA is pre-filled with title, description, and source = this finding. Owner / verifier picked at create time.
+  - **Open an Unsafe Condition incident** — if the hazard is persistent or the area must be closed. The incident routes through the normal three-track routing engine (§5).
+  - **Both** — if the issue needs a fix (CAPA) AND a hazard report (incident).
+  - **Note only** — for minor cosmetic items.
+- The link between finding → CAPA / incident is permanent. From any CAPA you can see "this came from inspection X on date Y, item Z."
+
+**6. Template library (reusable starter set).**
+The system ships with about 20 starter templates so a new site is not building checklists from scratch:
+- Forklift pre-use (daily)
+- Fire extinguisher (monthly)
+- Eyewash and emergency shower (weekly)
+- First-aid kit (monthly)
+- Ladder (before each use)
+- Fall-arrest harness (before each use, quarterly thorough)
+- Scaffold (before each use, weekly thorough)
+- Ground-fault circuits / electrical panels (yearly)
+- Fume hood and LEV (annual)
+- Machine guards (weekly)
+- PPE station (monthly)
+- SDS station (quarterly)
+- Spill-kit station (monthly)
+- Confined-space rescue gear (monthly)
+- Fire-alarm panel (monthly)
+- Sprinkler-system (annual)
+- Site-wide housekeeping walk (weekly)
+- Loading-dock pedestrian walkway (daily)
+- Forklift battery / charger (weekly)
+- Vehicle pre-use (daily)
+
+Site admins can clone a starter and edit the items. They cannot edit the starters in place — that protects the library across sites.
+
+**7. Approvals on safety-critical templates.**
+For inspections that protect people (fall arrest, confined-space gear, fire suppression), a template change goes through **Management of Change** (§15.5.2) before publishing. The change record carries a risk assessment and EHS-manager sign-off. For non-critical templates (housekeeping, PPE station), the EHS manager publishes directly.
+
+##### What the user sees on screen
+- **Template list page** — sortable by category, schedule, last-updated, version. Buttons: New template, Clone, Archive.
+- **Template editor** — drag-and-drop items, response-type per item, preview of the mobile checklist.
+- **Inspection queue** — what is due today, this week, overdue. One tap to start.
+- **Inspection runner** — mobile-friendly checklist that works portrait or landscape. Photo capture inline.
+- **Finding triage modal** — one screen to decide CAPA / incident / both / note for each failed item.
+- **Inspection history** — for any template, a timeline of every inspection run against every version. Auditor view.
+
+##### Data model — one change to §12.2.9
+The existing data model in §12.2.9 already supports this with **one change**: add `InspectionTemplateVersion` so the immutability rule (point 4 above) is real. Updated entities:
+
+| Entity | Updated definition |
+|---|---|
+| `InspectionTemplate` | id, name, category, schedule, assigned_to_role, site_id, current_version_id, status (draft / active / archived). The `current_version_id` points to the row that new inspections will use. |
+| `InspectionTemplateVersion` | id, template_id, version_number (semver), items (JSONB), change_summary, approved_by, approved_at, status (draft / active / archived). One row per published change. |
+| `Inspection` | id, template_version_id (frozen at start, NOT template_id), site_id, area, inspector_id, conducted_at, started_at, gps_lat, gps_lng, status (in_progress / passed / failed / partial), signature_method, photo_file_ids[]. |
+| `InspectionFinding` | id, inspection_id, item_id (the JSONB item id from the snapshotted version), finding_text, severity (minor / major / immediate_danger), evidence_file_ids[], capa_id (nullable), incident_id (nullable). |
+
+The key change is `Inspection.template_version_id` instead of `template_id`. This locks the checklist used for that run, so future template edits cannot rewrite history. Same pattern as `Document` → `DocumentVersion` → `DocumentAcknowledgement` (§15.4 and §12.2.5).
 
 #### 15.5.5 Permit-to-work
 A **permit-to-work** is a controlled approval for high-risk work. Examples: hot work (welding, cutting), confined-space entry, working at height, energized electrical work.
@@ -1325,31 +1418,31 @@ If a customer ever asks for the full QHSE platform, this is the door to walk thr
 ### 15.6 What we build — full scope
 Every module in §15 is in build scope. There is no separate "v1.5" or "v2+" backlog. Delivery order is in §18 (the phased roadmap), not module scope.
 
-| Module | In scope | Notes |
-|---|---|---|
-| File upload + storage on incidents (local disk) | ✅ | |
-| Audit trail (`ActivityLog`) + soft delete | ✅ | |
-| Auto-attach SDS from library | ✅ | |
-| Cross-linking (any record to any record) | ✅ | |
-| Export bundle (ZIP / merged PDF) | ✅ | |
-| Document Control (version history, approvals, e-signatures, forced acknowledgement) | ✅ | |
-| Training management + LMS link | ✅ | |
-| Audit management module | ✅ | |
-| Change control / Management of Change (MOC) | ✅ | |
-| Inspection management | ✅ | |
-| Permit-to-Work + gas-test records + isolation (LOTO) certificates + live permit register | ✅ | |
-| Risk register | ✅ | |
-| Risk register → leading-indicator dashboard | ✅ | |
-| Supplier / contractor management | ✅ | |
-| Toolbox Talks (with QR sign-off) | ✅ | |
-| BBS Observation Cards (anonymous mode + 6-class taxonomy + GPS map clusters + stop-the-job) | ✅ | |
-| JSA / HIRA pre-work risk assessment | ✅ | |
-| Multi-language toolbox talks (EN / AR / HI / UR / Tagalog) | ✅ | |
-| Emergency Management (response plans, muster points, drill scheduling, contact directory, command-post screen) | ✅ | |
-| Environmental Compliance (waste streams, emissions monitoring, EIA, ISO 14001 mapping) | ✅ | |
-| Stop-the-Job logging + dashboard tile | ✅ | |
-| Move file storage to cloud (S3 / GCS / Azure Blob) | ❌ | Out of scope — we self-host (see §12.7). Reconsider only if data volume or geo-distribution forces it. |
-| Quality module suite (NCR / supplier audit / calibration / complaints) | ❌ | Out of scope — project is EHS, not full QHSE. See §15.5.13. |
+| Module                                                                                                         | In scope | Notes                                                                                                  |
+|----------------------------------------------------------------------------------------------------------------|----------|--------------------------------------------------------------------------------------------------------|
+| File upload + storage on incidents (local disk)                                                                | ✅        |                                                                                                        |
+| Audit trail (`ActivityLog`) + soft delete                                                                      | ✅        |                                                                                                        |
+| Auto-attach SDS from library                                                                                   | ✅        |                                                                                                        |
+| Cross-linking (any record to any record)                                                                       | ✅        |                                                                                                        |
+| Export bundle (ZIP / merged PDF)                                                                               | ✅        |                                                                                                        |
+| Document Control (version history, approvals, e-signatures, forced acknowledgement)                            | ✅        |                                                                                                        |
+| Training management + LMS link                                                                                 | ✅        |                                                                                                        |
+| Audit management module                                                                                        | ✅        |                                                                                                        |
+| Change control / Management of Change (MOC)                                                                    | ✅        |                                                                                                        |
+| Inspection management                                                                                          | ✅        |                                                                                                        |
+| Permit-to-Work + gas-test records + isolation (LOTO) certificates + live permit register                       | ✅        |                                                                                                        |
+| Risk register                                                                                                  | ✅        |                                                                                                        |
+| Risk register → leading-indicator dashboard                                                                    | ✅        |                                                                                                        |
+| Supplier / contractor management                                                                               | ✅        |                                                                                                        |
+| Toolbox Talks (with QR sign-off)                                                                               | ✅        |                                                                                                        |
+| BBS Observation Cards (anonymous mode + 6-class taxonomy + GPS map clusters + stop-the-job)                    | ✅        |                                                                                                        |
+| JSA / HIRA pre-work risk assessment                                                                            | ✅        |                                                                                                        |
+| Multi-language toolbox talks (EN / AR / HI / UR / Tagalog)                                                     | ✅        |                                                                                                        |
+| Emergency Management (response plans, muster points, drill scheduling, contact directory, command-post screen) | ✅        |                                                                                                        |
+| Environmental Compliance (waste streams, emissions monitoring, EIA, ISO 14001 mapping)                         | ✅        |                                                                                                        |
+| Stop-the-Job logging + dashboard tile                                                                          | ✅        |                                                                                                        |
+| Move file storage to cloud (S3 / GCS / Azure Blob)                                                             | ❌        | Out of scope — we self-host (see §12.7). Reconsider only if data volume or geo-distribution forces it. |
+| Quality module suite (NCR / supplier audit / calibration / complaints)                                         | ❌        | Out of scope — project is EHS, not full QHSE. See §15.5.13.                                            |
 
 ### 15.7 Data model
 **See §12.** All entities for every module described in this section live in the unified data model. There is no separate "future entities" table. The whole list — File, Document, DocumentVersion, DocumentAcknowledgement, TrainingCourse, TrainingAssignment, Audit, AuditChecklist, AuditFinding, Change, InspectionTemplate, Inspection, InspectionFinding, Permit, PermitGasTest, PermitIsolation, RiskRegister, Contractor, ContractorInduction, ToolboxTalk, ToolboxTalkAttendance, BBSObservation, JSA, EmergencyResponsePlan, MusterPoint, EmergencyDrill, EmergencyContact, WasteStream, WasteManifest, EmissionPermit, EmissionLog — is in §12.2.
@@ -1874,41 +1967,41 @@ We document AI here only so the data model is not painted into a corner if the p
 
 The "Phase" column is the delivery phase from §18 (the roadmap). All in-scope rows are in build plan. "Out of scope" rows are deliberate non-goals listed in §2.2 / §2.4.6 / §15.5.13.
 
-| # | SmartQHSE feature (observed) | Our equivalent | Phase | Section |
-|---|---|---|---|---|
-| 1 | **Incident, near-miss, unsafe-act, unsafe-condition capture from any device** | 8 incident types + 3-step Report Wizard, responsive web | Phase 1 | §6 |
-| 2 | **OSHA 300 / 300A auto-population** | OSHA 300 Log live preview, 300A annual generator | Phase 5 | §9 |
-| 3 | **Three-track auto-routing** (full / light / log-and-close) | Three-track routing engine | Phase 2 | §5 |
-| 4 | **5×5 risk matrix** | 5×5 matrix + override audit | Phase 1 | §10 |
-| 5 | **Independent CAPA verification** | `owner ≠ verifier` enforced at DB level | Phase 4 | §8.3, §12.5 |
-| 6 | **Document Control with version history** | Document module with version + approval + forced acknowledgement | Phase 7 | §15.4 |
-| 7 | **Training records linked to documents** | Training module + auto-trigger on SOP version change | Phase 8 | §15.5.3, §15.4 |
-| 8 | **Toolbox Talks with template library and QR-code attendance** | ToolboxTalk + ToolboxTalkAttendance with QR sign-off | Phase 11 | §15.5.8 |
-| 9 | **Multi-language toolbox talks (EN / AR / HI / UR / Tagalog)** | Markdown-first body + Unicode-clean DB; UI language switcher in Phase 14 | Phase 11 (data) → Phase 14 (UI) | §15.5.8, §16.10 |
-| 10 | **Permit-to-Work (15+ permit types) with multi-signatory and SIMOPS detection** | Permit module with type catalog, multi-sig, SIMOPS | Phase 9 | §15.5.5 |
-| 11 | **Permit gas-test records and isolation (LOTO) certificates** | `PermitGasTest` and `PermitIsolation` entities | Phase 9 | §15.5.5, §12.2.10 |
-| 12 | **Live permit register / map view** | "Active permits" dashboard tile + command-post screen | Phase 9 (register) → Phase 13 (command-post) | §15.5.5, §15.5.11 |
-| 13 | **JSA / HIRA pre-work risk assessment** | JSA module with shared 5×5 matrix | Phase 11 | §15.5.10 |
-| 14 | **BBS / Behavior-Based Safety with 5-class taxonomy** | `BBSObservation` with 6-class taxonomy (incl. `stop_work`) | Phase 11 | §15.5.9 |
-| 15 | **Anonymous BBS reporting** | `is_anonymous` flag on observations | Phase 11 | §15.5.9 |
-| 16 | **GPS-tagged near-miss / observation with site-map clustering** | `gps_lat` / `gps_lng` on observations + map view | Phase 11 (data) → Phase 13 (map view) | §15.5.9, §17.7 |
-| 17 | **Audit management** | Audit + AuditChecklist + AuditFinding modules | Phase 8 | §15.5.1 |
-| 18 | **Inspection management** | InspectionTemplate + Inspection + InspectionFinding modules | Phase 9 | §15.5.4 |
-| 19 | **Risk register** | RiskRegister entity feeding leading indicators | Phase 10 | §15.5.6 |
-| 20 | **Contractor / supplier pre-qualification** | Contractor + ContractorInduction modules | Phase 10 | §15.5.7 |
-| 21 | **Change Control / MOC** | Change entity with safety risk-assessment workflow | Phase 9 | §15.5.2 |
-| 22 | **Emergency response plans, muster points, drill scheduling, contact directory** | Emergency Management module | Phase 13 | §15.5.11 |
-| 23 | **Waste management, emissions monitoring, EIA, ISO 14001** | Environmental Compliance module | Phase 13 | §15.5.12 |
-| 24 | **KPI dashboard auto-populating leading + lagging indicators** | TRIR / DART in Phase 5; broader leading-indicator set in Phase 11 | Phase 5 → Phase 11 | §9.5, §17.6 |
-| 25 | **Real-time compliance dashboards (no spreadsheet consolidation)** | Dashboard is a live projection of incident data | Phase 1+ | Foundational Concepts, §9 |
-| 26 | **Stop-the-Job authority with logging** | `stop_work` BBS classification + dashboard tile | Phase 11 | §15.5.9 |
-| 27 | **Action tracking with deadlines, owners, escalation alerts** | CAPA module with overdue handling | Phase 4 | §8.5 |
-| 28 | **Safety bulletins / lessons-learned distribution** | SafetyBulletin + SafetyBulletinAcknowledgement modules | Phase 12 | §6.4.3, §12.2.16 |
-| 29 | **ARIA AI assistant — generates risk assessments, method statements, HSE plans, JSAs, toolbox talks, RCA drafts, regulatory chat** | Permanent non-goal — competitors compete on AI, we compete on filing forms correctly | Out of scope | §2.2, §2.4.3, §17.8 |
-| 30 | **Non-conformance, supplier audit, calibration, customer complaints (Quality)** | Permanent non-goal — project is EHS, not full QHSE | Out of scope | §2.2, §15.5.13 |
-| 31 | **50+ country regulator coverage (GCC, UK, US, India, EU)** | OSHA + HSE / RIDDOR are in scope; routing engine is table-driven via `Site.regulator` so adding a new regulator is config, not code | In scope (scope-limited to OSHA + HSE) | §2.3, §5 |
-| 32 | **Multi-language UI (EN / AR / HI / UR / Tagalog)** | Worker-content multi-language is in scope; UI chrome English-only | In scope (worker content) / Out of scope (UI chrome) | §2.2, §15.5.8, §16.10 |
-| 33 | **Native mobile app (iOS / Android)** | Permanent non-goal — responsive web only. Native would be a separate platform team. | Out of scope | §2.2, §17.7 |
+| #  | SmartQHSE feature (observed)                                                                                                       | Our equivalent                                                                                                                      | Phase                                                | Section                   |
+|----|------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------|---------------------------|
+| 1  | **Incident, near-miss, unsafe-act, unsafe-condition capture from any device**                                                      | 8 incident types + 3-step Report Wizard, responsive web                                                                             | Phase 1                                              | §6                        |
+| 2  | **OSHA 300 / 300A auto-population**                                                                                                | OSHA 300 Log live preview, 300A annual generator                                                                                    | Phase 5                                              | §9                        |
+| 3  | **Three-track auto-routing** (full / light / log-and-close)                                                                        | Three-track routing engine                                                                                                          | Phase 2                                              | §5                        |
+| 4  | **5×5 risk matrix**                                                                                                                | 5×5 matrix + override audit                                                                                                         | Phase 1                                              | §10                       |
+| 5  | **Independent CAPA verification**                                                                                                  | `owner ≠ verifier` enforced at DB level                                                                                             | Phase 4                                              | §8.3, §12.5               |
+| 6  | **Document Control with version history**                                                                                          | Document module with version + approval + forced acknowledgement                                                                    | Phase 7                                              | §15.4                     |
+| 7  | **Training records linked to documents**                                                                                           | Training module + auto-trigger on SOP version change                                                                                | Phase 8                                              | §15.5.3, §15.4            |
+| 8  | **Toolbox Talks with template library and QR-code attendance**                                                                     | ToolboxTalk + ToolboxTalkAttendance with QR sign-off                                                                                | Phase 11                                             | §15.5.8                   |
+| 9  | **Multi-language toolbox talks (EN / AR / HI / UR / Tagalog)**                                                                     | Markdown-first body + Unicode-clean DB; UI language switcher in Phase 14                                                            | Phase 11 (data) → Phase 14 (UI)                      | §15.5.8, §16.10           |
+| 10 | **Permit-to-Work (15+ permit types) with multi-signatory and SIMOPS detection**                                                    | Permit module with type catalog, multi-sig, SIMOPS                                                                                  | Phase 9                                              | §15.5.5                   |
+| 11 | **Permit gas-test records and isolation (LOTO) certificates**                                                                      | `PermitGasTest` and `PermitIsolation` entities                                                                                      | Phase 9                                              | §15.5.5, §12.2.10         |
+| 12 | **Live permit register / map view**                                                                                                | "Active permits" dashboard tile + command-post screen                                                                               | Phase 9 (register) → Phase 13 (command-post)         | §15.5.5, §15.5.11         |
+| 13 | **JSA / HIRA pre-work risk assessment**                                                                                            | JSA module with shared 5×5 matrix                                                                                                   | Phase 11                                             | §15.5.10                  |
+| 14 | **BBS / Behavior-Based Safety with 5-class taxonomy**                                                                              | `BBSObservation` with 6-class taxonomy (incl. `stop_work`)                                                                          | Phase 11                                             | §15.5.9                   |
+| 15 | **Anonymous BBS reporting**                                                                                                        | `is_anonymous` flag on observations                                                                                                 | Phase 11                                             | §15.5.9                   |
+| 16 | **GPS-tagged near-miss / observation with site-map clustering**                                                                    | `gps_lat` / `gps_lng` on observations + map view                                                                                    | Phase 11 (data) → Phase 13 (map view)                | §15.5.9, §17.7            |
+| 17 | **Audit management**                                                                                                               | Audit + AuditChecklist + AuditFinding modules                                                                                       | Phase 8                                              | §15.5.1                   |
+| 18 | **Inspection management**                                                                                                          | InspectionTemplate + Inspection + InspectionFinding modules                                                                         | Phase 9                                              | §15.5.4                   |
+| 19 | **Risk register**                                                                                                                  | RiskRegister entity feeding leading indicators                                                                                      | Phase 10                                             | §15.5.6                   |
+| 20 | **Contractor / supplier pre-qualification**                                                                                        | Contractor + ContractorInduction modules                                                                                            | Phase 10                                             | §15.5.7                   |
+| 21 | **Change Control / MOC**                                                                                                           | Change entity with safety risk-assessment workflow                                                                                  | Phase 9                                              | §15.5.2                   |
+| 22 | **Emergency response plans, muster points, drill scheduling, contact directory**                                                   | Emergency Management module                                                                                                         | Phase 13                                             | §15.5.11                  |
+| 23 | **Waste management, emissions monitoring, EIA, ISO 14001**                                                                         | Environmental Compliance module                                                                                                     | Phase 13                                             | §15.5.12                  |
+| 24 | **KPI dashboard auto-populating leading + lagging indicators**                                                                     | TRIR / DART in Phase 5; broader leading-indicator set in Phase 11                                                                   | Phase 5 → Phase 11                                   | §9.5, §17.6               |
+| 25 | **Real-time compliance dashboards (no spreadsheet consolidation)**                                                                 | Dashboard is a live projection of incident data                                                                                     | Phase 1+                                             | Foundational Concepts, §9 |
+| 26 | **Stop-the-Job authority with logging**                                                                                            | `stop_work` BBS classification + dashboard tile                                                                                     | Phase 11                                             | §15.5.9                   |
+| 27 | **Action tracking with deadlines, owners, escalation alerts**                                                                      | CAPA module with overdue handling                                                                                                   | Phase 4                                              | §8.5                      |
+| 28 | **Safety bulletins / lessons-learned distribution**                                                                                | SafetyBulletin + SafetyBulletinAcknowledgement modules                                                                              | Phase 12                                             | §6.4.3, §12.2.16          |
+| 29 | **ARIA AI assistant — generates risk assessments, method statements, HSE plans, JSAs, toolbox talks, RCA drafts, regulatory chat** | Permanent non-goal — competitors compete on AI, we compete on filing forms correctly                                                | Out of scope                                         | §2.2, §2.4.3, §17.8       |
+| 30 | **Non-conformance, supplier audit, calibration, customer complaints (Quality)**                                                    | Permanent non-goal — project is EHS, not full QHSE                                                                                  | Out of scope                                         | §2.2, §15.5.13            |
+| 31 | **50+ country regulator coverage (GCC, UK, US, India, EU)**                                                                        | OSHA + HSE / RIDDOR are in scope; routing engine is table-driven via `Site.regulator` so adding a new regulator is config, not code | In scope (scope-limited to OSHA + HSE)               | §2.3, §5                  |
+| 32 | **Multi-language UI (EN / AR / HI / UR / Tagalog)**                                                                                | Worker-content multi-language is in scope; UI chrome English-only                                                                   | In scope (worker content) / Out of scope (UI chrome) | §2.2, §15.5.8, §16.10     |
+| 33 | **Native mobile app (iOS / Android)**                                                                                              | Permanent non-goal — responsive web only. Native would be a separate platform team.                                                 | Out of scope                                         | §2.2, §17.7               |
 
 ### 20.2 Where we will *not* match SmartQHSE — and why
 
@@ -1951,23 +2044,23 @@ These are the items that this comparison surfaced *and* that did not already hav
 
 ## 21. Glossary
 
-| Term | Definition |
-|---|---|
-| **CAPA** | Corrective and Preventive Action — a structured fix + recurrence prevention with a required check. |
-| **DART** | Days Away, Restricted, or Transferred (rate per 200,000 hours). |
-| **EHS** | Environment, Health, and Safety. |
-| **F2508** | UK HSE form series for RIDDOR reports. |
-| **HSE** | UK Health and Safety Executive. |
-| **ITA** | OSHA Injury Tracking Application. |
-| **NIHL** | Noise-Induced Hearing Loss. |
-| **OSHA** | US Occupational Safety and Health Administration. |
-| **PPE** | Personal Protective Equipment. |
-| **RCA** | Root Cause Analysis. |
-| **RIDDOR** | Reporting of Injuries, Diseases and Dangerous Occurrences Regulations 2013 (UK). |
-| **SDS** | Safety Data Sheet. |
-| **SOP** | Standard Operating Procedure. |
-| **Track A / B / C** | Three routing tiers — Full / Light / Log-and-close. |
-| **TRIR** | Total Recordable Incident Rate (per 200,000 hours). |
+| Term                | Definition                                                                                         |
+|---------------------|----------------------------------------------------------------------------------------------------|
+| **CAPA**            | Corrective and Preventive Action — a structured fix + recurrence prevention with a required check. |
+| **DART**            | Days Away, Restricted, or Transferred (rate per 200,000 hours).                                    |
+| **EHS**             | Environment, Health, and Safety.                                                                   |
+| **F2508**           | UK HSE form series for RIDDOR reports.                                                             |
+| **HSE**             | UK Health and Safety Executive.                                                                    |
+| **ITA**             | OSHA Injury Tracking Application.                                                                  |
+| **NIHL**            | Noise-Induced Hearing Loss.                                                                        |
+| **OSHA**            | US Occupational Safety and Health Administration.                                                  |
+| **PPE**             | Personal Protective Equipment.                                                                     |
+| **RCA**             | Root Cause Analysis.                                                                               |
+| **RIDDOR**          | Reporting of Injuries, Diseases and Dangerous Occurrences Regulations 2013 (UK).                   |
+| **SDS**             | Safety Data Sheet.                                                                                 |
+| **SOP**             | Standard Operating Procedure.                                                                      |
+| **Track A / B / C** | Three routing tiers — Full / Light / Log-and-close.                                                |
+| **TRIR**            | Total Recordable Incident Rate (per 200,000 hours).                                                |
 
 ---
 
