@@ -10,6 +10,7 @@ import { CapaProgressSection } from "@/components/capa/detail/progress-section";
 import { OwnerVerifierCard } from "@/components/capa/detail/owner-verifier-card";
 import { SourceInvestigationLink } from "@/components/capa/detail/source-investigation-link";
 import { CompleteCapaButton } from "@/components/capa/detail/complete-capa-button";
+import { VerificationForm } from "@/components/capa/detail/verification-form";
 import { CapaModals, type CapaSiteMember } from "@/components/capa/detail/capa-modals";
 import {
   ActivityTimeline,
@@ -50,6 +51,7 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
 
   const status = capa.status as CapaStatus;
   const isOwner = capa.owner_id === user.id;
+  const isAssignedVerifier = capa.verifier_id === user.id;
   const today = new Date().toISOString().slice(0, 10);
   const isOverdue =
     !!capa.due_date &&
@@ -57,9 +59,22 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
     status !== "verified" &&
     status !== "closed";
 
-  const [canReassignVerifier] = currentSiteId
-    ? await Promise.all([can("capa:reassign_verifier", currentSiteId)])
-    : [false];
+  const [canReassignVerifier, canVerify] = currentSiteId
+    ? await Promise.all([
+        can("capa:reassign_verifier", currentSiteId),
+        can("capa:verify", currentSiteId),
+      ])
+    : [false, false];
+
+  // Verification form rules — viewer must be the assigned verifier (not the
+  // owner) AND have capa:verify AND status must be pending_verification.
+  // Form is HIDDEN (not disabled) when viewer is owner per the critical UX
+  // rule in plan §C2 / DoD #7.
+  const showVerificationForm =
+    status === "pending_verification" &&
+    !isOwner &&
+    isAssignedVerifier &&
+    canVerify;
 
   // Site members for the reassign-verifier modal
   const { data: siteMembersRaw } = await supabase
@@ -167,6 +182,18 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
                 disabled={!editable}
               />
             )}
+
+          {showVerificationForm && <VerificationForm capaId={capa.id} />}
+
+          {status === "pending_verification" && isOwner && (
+            <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
+              <p className="font-medium">Awaiting independent verification</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Your verifier reviews the implementation and submits an outcome.
+                You&apos;ll see the result here when they&apos;re done.
+              </p>
+            </div>
+          )}
 
           <ActivityTimeline events={timeline} />
         </div>

@@ -146,6 +146,111 @@ export async function completeCapa(
 }
 
 // ---------------------------------------------------------------------------
+// verifyCapa — non-owner verifier path. Calls the verify_capa_v1 RPC, which
+// atomically applies the right state change per outcome:
+//   effective            → status='closed', verified_at + closed_at
+//   partially_effective  → as above + auto-creates a follow-up CAPA
+//                          (parent.follow_up_capa_id points at the new row)
+//   not_effective        → status='in_progress', rejection_reason set
+//   too_early_to_verify  → status stays pending_verification, re_verify_at
+//
+// Three layers of "owner ≠ verifier" enforcement:
+//   1) UI hides the form when viewer is owner (in the page render)
+//   2) This server action checks auth.uid() against owner_id AND verifier_id
+//   3) The RPC re-checks both invariants in the same transaction
+//   4) The DB CHECK constraint on `capas` rejects any direct row that
+//      sets verifier_id = owner_id
+// ---------------------------------------------------------------------------
+const VerifyCapaSchema = z.object({
+  capa_id: z.string().uuid(),
+  result: z.enum([
+    "effective",
+    "partially_effective",
+    "not_effective",
+    "too_early_to_verify",
+  ]),
+  method: z.enum([
+    "inspection",
+    "monitoring",
+    "audit_trend",
+    "re_interview",
+    "document_review",
+  ]),
+  notes: z.string().trim().max(5000).optional().or(z.literal("")),
+  re_verify_at: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v ? v : null)),
+});
+
+export async function verifyCapa(
+  _prev: ActionResult | null,
+  fd: FormData
+): Promise<ActionResult> {
+  const parsed = VerifyCapaSchema.safeParse({
+    capa_id: fd.get("capa_id"),
+    result: fd.get("result"),
+    method: fd.get("method"),
+    notes: fd.get("notes") ?? "",
+    re_verify_at: fd.get("re_verify_at") ?? "",
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  if (parsed.data.result === "not_effective" && !parsed.data.notes) {
+    return {
+      ok: false,
+      error: "A rejection reason is required for 'Not effective'.",
+    };
+  }
+  if (
+    parsed.data.result === "too_early_to_verify" &&
+    !parsed.data.re_verify_at
+  ) {
+    return {
+      ok: false,
+      error: "Pick a re-verification date for 'Too early to verify'.",
+    };
+  }
+
+  const { supabase, user, currentSiteId } = await requireUser();
+  await requirePermission("capa:verify", currentSiteId);
+
+  // Pre-check at action layer: viewer must not be the owner.
+  // (RPC re-checks this server-side; UI also hides the form when owner.)
+  const { data: capa } = await supabase
+    .from("capas")
+    .select("owner_id, verifier_id, status")
+    .eq("id", parsed.data.capa_id)
+    .single();
+  if (!capa) return { ok: false, error: "CAPA not found" };
+  if (capa.owner_id === user.id) {
+    return { ok: false, error: "CAPA owner cannot verify their own CAPA" };
+  }
+  if (capa.verifier_id !== user.id) {
+    return { ok: false, error: "Only the assigned verifier can verify this CAPA" };
+  }
+
+  // The RPC accepts NULL for p_notes / p_re_verify_at (PL/pgSQL params are
+  // nullable by default), but the generated TS type marks them as non-null.
+  // Cast at the boundary; the RPC body handles null cases explicitly.
+  const { error: rpcErr } = await supabase.rpc("verify_capa_v1", {
+    p_capa_id: parsed.data.capa_id,
+    p_result: parsed.data.result,
+    p_method: parsed.data.method,
+    p_notes: (parsed.data.notes || null) as unknown as string,
+    p_re_verify_at: parsed.data.re_verify_at as unknown as string,
+    p_actor_id: user.id,
+  });
+  if (rpcErr) return { ok: false, error: rpcErr.message };
+
+  revalidatePath(`/capa/${parsed.data.capa_id}`);
+  revalidatePath("/capa");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // reassignVerifier — gated on capa:reassign_verifier (ehs_manager+).
 // DB CHECK constraint enforces owner_id <> verifier_id; we add a friendly
 // error before that fires.
