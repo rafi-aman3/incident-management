@@ -1,9 +1,19 @@
 # Phase 0 — Foundation
 
-**Status:** in progress
+**Status:** complete (2026-05-05) — see "What actually shipped" below
 **Goal:** A logged-in user lands on a themed app shell with all routes resolving and a populated database.
 **Estimated duration:** 1–2 days
 **Depends on:** nothing (greenfield)
+
+## What actually shipped
+
+- Migration filename uses Supabase CLI's required timestamp prefix (`supabase/migrations/20260505120000_init.sql`), not `0001_init.sql`.
+- **RBAC: full tables shipped, not the `user_role` enum sketched in task #9.** Per CLAUDE.md hard rule + memory `project_rbac_model.md`, authorization is `roles + permissions + role_permissions + site_members + teams + team_members + team_sites + team_permissions`. The 4 default roles (`worker / supervisor / ehs_manager / site_admin`) are seeded rows via `seed_default_roles(org_id)`, not enum values. The `lib/rbac/resolve.ts` resolver is **deferred to Phase 1** since Phase 0 only reads role labels for sidebar visibility — write paths gate on RLS tenancy isolation only.
+- Severity-change audit uses a **deferred constraint trigger** (`incidents_severity_audit AFTER UPDATE … DEFERRABLE INITIALLY DEFERRED`) to enforce same-transaction pairing with `severity_overrides` regardless of insert order.
+- App shell layout wraps everything in `<Suspense>` per Cache Components rules — `requireUser()` is uncached I/O and would otherwise block the route shell.
+- `pnpm db:reset` script not added — destructive against a remote project. Use `pnpm db:push` (incremental migrations) and `pnpm db:seed` (idempotent) instead.
+- Seed consolidated into `scripts/seed.ts` (no separate `seed.sql`) — sidesteps the chicken-and-egg with auth user IDs.
+- `.gitignore` extended with `!.env*.example` so `.env.local.example` ships, and `supabase/.temp/` so the CLI cache stays local.
 
 > **Relationship to `PLANNING/IMS_PLANNING.md`:** That document is the **22-week production roadmap** (7 phases, ending in OSHA ITA submission and WCAG 2.2 hardening). Our Phase 0–3 plan files describe the **stakeholder-demo subset** (~2 weeks). Phase 0 here ≈ Phase 0 there ("Foundation"), but our scope skips ISO 45001 conformance, retention/archival automation, and ITA API wiring — those wait for production. When something in this file conflicts with IMS_PLANNING.md, this file wins for the demo build.
 
