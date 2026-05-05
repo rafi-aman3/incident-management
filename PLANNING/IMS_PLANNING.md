@@ -90,7 +90,7 @@ The investigation closes in one of two ways:
 
 **Important rule:** closing an investigation does NOT close the incident or the CAPAs. Each one closes by itself.
 
-*(See §7 for the module. See §15.3 for the trade-offs of each RCA method.)*
+*(See §7 for the module. See §16.3 for the trade-offs of each RCA method.)*
 
 ### What is a CAPA?
 **CAPA** stands for **Corrective and Preventive Action**. A CAPA is the actual fix. It is the work the company promises to do after an investigation. Each CAPA has:
@@ -115,7 +115,7 @@ The CAPA also shows on a board. The system tracks late CAPAs and sends daily rem
 
 This rule is the difference between a real safety system and a simple checklist tool. The system enforces this rule in the database, not only in the screen design. Without this rule, people just approve their own work without checking. With this rule, the company has a strong audit record.
 
-*(See §8 for the full life cycle. See §15.4 for why this check is the most-skipped step in industry.)*
+*(See §8 for the full life cycle. See §16.4 for why this check is the most-skipped step in industry.)*
 
 ### What are Reports?
 **Reports** are the **regulatory output layer**. They run all the time. They are NOT a workflow step that a person finishes and ticks off. They are auto-built views of the incident data. They update the moment a new case is recorded.
@@ -139,7 +139,7 @@ The reports module supports:
 
 **Key idea:** the reports are never out of date. They are not written by hand. They are a real-time view of the incident data. So the OSHA 300 Log on the screen is the OSHA 300 Log of record.
 
-*(See §9 for the regulatory details. See §15.2 for the OSHA ITA 2026 deadlines. See §15.6 for the leading-vs-lagging KPI strategy.)*
+*(See §9 for the regulatory details. See §16.2 for the OSHA ITA 2026 deadlines. See §16.6 for the leading-vs-lagging KPI strategy.)*
 
 ---
 
@@ -229,6 +229,7 @@ Closing an incident does **not** close its investigation. Closing an investigati
 - **Frontend:** This repo is a Next.js project with breaking changes from normal Next.js (see `AGENTS.md`). Before writing any app code, read `node_modules/next/dist/docs/`. Do not assume App Router or Pages Router behavior from prior knowledge.
 - **UI library:** MUI v5+ with Emotion (per PRD §13). The demo uses hand-written CSS. The production build should use MUI components and keep the SDS Manager tokens.
 - **State / data:** TBD — likely TanStack Query against an SDS Manager backend. The save model needs platform-team confirmation.
+- **Database:** PostgreSQL 16+ recommended (see §12.4 for the full reasoning, ORM options, hosting, and migration plan). Final choice must align with the existing SDS Manager stack.
 - **Charts:** TBD (the demo uses simple CSS bars; for production, pick a library that uses the SDS color tokens).
 
 ---
@@ -413,7 +414,7 @@ The RIDDOR report screen tracks: phone-call date and time, person who called, HS
 - **DART** = (DART Cases × 200,000) / Total Hours Worked
 - **Severity rate** = (Total Lost Workdays × 200,000) / Total Hours Worked
 
-These are **lagging indicators** (they measure things that already happened). v1 will show them clearly. The 2026 industry view says we should also show **leading indicators** (early warnings). See §15 for the list.
+These are **lagging indicators** (they measure things that already happened). v1 will show them clearly. The 2026 industry view says we should also show **leading indicators** (early warnings). See §16 for the list.
 
 ---
 
@@ -495,6 +496,90 @@ Recommendation: use child tables. Use shared lookup tables for taxonomies that s
 4. `Notification` rows are append-only. `notified_at` is set when the deadline action is recorded.
 5. Soft-delete only — incidents and investigations are never hard-deleted (legal retention: 5 years for OSHA, 3 years for RIDDOR).
 
+### 12.4 Database engine choice
+
+> **Recommendation: PostgreSQL 16 (or newer) with a TypeScript ORM.**
+> Final choice must be confirmed with the SDS Manager platform team. They own the wider stack.
+
+#### Why PostgreSQL?
+Our data model needs five things. PostgreSQL gives us all of them in one engine, with no extra add-on services.
+
+| Need | Why we need it | What PostgreSQL gives us |
+|---|---|---|
+| **Strong relational shape** | The data model is full of one-to-many and many-to-many links (Incident → Investigation → CAPA → Verifier). We need foreign keys and JOINs. | First-class foreign keys, JOINs, indexes. |
+| **CHECK constraints at the DB level** | The `CAPA.owner ≠ CAPA.verifier` rule and severity / status enums must hold even if the app has a bug. | `CHECK` constraints, `ENUM` types. |
+| **Append-only audit trail** | `OverrideLog` and the activity timeline must never be edited. | Trigger-based row-versioning patterns (pgMemento, custom triggers). PostgreSQL's `pgaudit` extension also gives session-level audit logs for compliance. |
+| **Per-type detail tables AND optional JSON** | §12.2 recommended one child table per incident type, with shared lookup tables. But some fields suit JSON better (PPE checklist, witnesses array). | `JSONB` columns store flexible data while still being indexable and queryable. |
+| **Row-level security by site / role** | A user from Cleveland Plant must not see Sheffield's incidents. We could put this in app code, but having it in the DB is much safer. | `Row-Level Security (RLS)` policies move multi-site isolation to the storage layer. |
+
+#### Why not the alternatives?
+
+- **MySQL / MariaDB** — works, but `JSONB` (indexable, fast) is a Postgres-only feature. Postgres has stronger CHECK constraint support and easier RLS.
+- **MongoDB / document stores** — wrong shape for this data. The model has many strict relationships and audit rules. Document stores make these harder, not easier.
+- **SQLite** — fine for the demo, not for production. No real concurrency, no row-level security.
+- **Cloud-only stores (DynamoDB, Firestore)** — vendor lock-in, no JOINs, weak constraint support. Avoid.
+
+#### Data-access layer (ORM) — TBD, with two safe options
+
+The Next.js / TypeScript world in 2026 has two leading ORMs. Both work well with PostgreSQL.
+
+| Option | Best for | Trade-offs |
+|---|---|---|
+| **Prisma** | Faster developer experience. Schema-first design. Mature ecosystem. Lots of guides. | Larger bundle, slower cold starts on serverless. A code-gen step is needed before each run. |
+| **Drizzle** | Closer to plain SQL. Smaller bundle. Faster cold starts. Better for serverless / edge. Type updates are instant. | Smaller community than Prisma. Less abstract — you write more SQL-like code. |
+
+**Recommendation:** start with **Prisma** unless the platform team has a strong reason for Drizzle. The data model is large (12+ entities + child tables + future Document / Audit / Permit modules in §15). Prisma's schema file scales better for that size, and the team's onboarding cost is lower.
+
+A third option (**Kysely**) is a SQL query builder, not an ORM. It is good for hand-tuned queries but does not generate types from a schema. Use it if we hit a Prisma performance wall, not before.
+
+#### Database hosting — self-hosted PostgreSQL
+
+**Decision:** we run our own PostgreSQL instance. **No managed services** (no AWS RDS, no Neon, no Supabase, no Cloud SQL). Reasons:
+
+- The SDS Manager platform team already runs its own database. We use the same instance / cluster.
+- No extra vendor bills, no vendor lock-in.
+- Full control over `postgresql.conf`, extensions, backup schedule, and replication.
+- Data stays inside our own network, which simplifies the GDPR / HIPAA / SOC 2 review (see §18.3).
+
+**What we need to operate ourselves (the trade-off):**
+- A running PostgreSQL 16+ server (Linux host or container).
+- Required extensions installed and enabled: `pgaudit` (session audit log), `pgcrypto` (UUIDs and hashing), `pg_trgm` (fast text search). Optional: `pgMemento` if we use a schema-versioning audit pattern.
+- A daily backup job (see "Backup and retention" below) — this is on us, not a vendor.
+- Monitoring (disk usage, connection count, slow queries, replication lag if any).
+- A patch / minor-version upgrade plan.
+- A connection pool (PgBouncer or the ORM's built-in pool) to keep connection count under control.
+
+**Environments:**
+- **Production** — one primary, optional read replica for heavy reports.
+- **Staging** — one instance, restored weekly from a production backup (with PII scrubbed).
+- **Local dev** — Docker `postgres:16` container, seeded with a small fixture dataset.
+
+#### Migrations
+Use the ORM's migration tool (`prisma migrate` or `drizzle-kit`). Migrations must:
+- Live in version control.
+- Be reviewed in pull requests.
+- Run automatically in CI on a fresh test database before any merge.
+- Never be hand-edited after they are merged.
+
+#### Backup and retention (self-hosted)
+Because we host our own Postgres, the backup plan is fully on our team. The plan has four layers:
+
+- **Daily logical dump** — a nightly `pg_dump` of the full database, stored on a different host than the DB server. Keep dumps for at least 35 days.
+- **Continuous WAL archiving for point-in-time recovery (PITR).** Configure `archive_mode = on` and `archive_command` to ship WAL segments to an off-server location. With WAL archiving + a base backup, we can restore the database to any moment within the retention window. PITR is required by the 5-year OSHA / 3-year RIDDOR retention rules.
+- **Weekly base backup** with `pg_basebackup`, kept off-server. Used as the starting point for PITR replays.
+- **File backups** — the `File` table from §15.7 (local-disk uploads in v1) follows the same nightly schedule but writes to a separate off-server target. See §15.3.
+
+**Application-side rules:**
+- **Soft-delete only** at the application level (§12.3 rule 5). Hard delete only by an explicit retention job that runs after the regulatory window.
+- **Restore drill** — we run a restore from backup into the staging environment at least once per quarter. A backup that has never been tested is not a backup.
+
+#### Search
+v1 search is small and can use PostgreSQL full-text search (`tsvector` + `tsquery`) on the incident title and description. v2+ may add OpenSearch / Elastic if free-text search across all attached files (PDFs, photos with OCR) is needed.
+
+#### Caching and sessions
+- Sessions: cookie-based JWT or database-backed session table. The platform team's existing pattern wins.
+- Cache: not needed in v1. Add Redis only if a measured slow path needs it.
+
 ---
 
 ## 13. Design System (SDS Manager v1.0)
@@ -542,11 +627,160 @@ The demo ships eight screens. All work in `EHS Incident Management.html`:
 
 ---
 
-## 15. Industry Best-Practice Notes (May 2026 research)
+## 15. Document Management and Other Standard QMS Modules
+
+### 15.1 Why this section exists
+The PRD scopes v1 to three EHS modules (Incidents → Investigation → CAPA) plus the Reports layer. But every modern QMS (Quality Management System) and incident management tool — MasterControl, Veeva Vault, ETQ Reliance, AssurX, EHS Insight, Riskonnect, SafetyCulture, Ideagen, ComplianceQuest — shares a common backbone of extra features. The 2026 research shows five features in every serious tool:
+
+1. **Document control** with version history.
+2. **Training records** linked to documents.
+3. **Audit trail** for every change.
+4. **Electronic signatures** for sign-off.
+5. **Cross-linking** between documents, incidents, investigations, and CAPAs.
+
+This section explains how our system handles these features. Some belong in v1 (we already have them or need them now). Some belong in v1.5 or later. The architecture must not block any of them.
+
+> **Quote from industry research:** "Document management is the connective tissue of the quality system — the layer through which SOPs govern nonconformance investigations, change controls govern document revisions, and CAPAs govern procedural corrections."
+
+### 15.2 Document Management — what it covers
+A "document" in this system is any file that supports the safety process. There are six main types:
+
+| Document type | Examples | Where it lives in v1 | Owner |
+|---|---|---|---|
+| **SDS (Safety Data Sheets)** | Chemical SDS files for products in use | SDS Manager library (already exists; we link to it) | EHS Manager |
+| **SOPs (Standard Operating Procedures)** | "How to decant IPA in the fume hood" | Linked from incidents and CAPAs (read-only in v1) | Department head |
+| **Evidence files** | Photos of scene, witness statements, maintenance logs, training records | Stored on the incident / investigation record | Lead investigator |
+| **Training records** | Sign-off sheets, certificates | Stored on the affected person's profile | EHS Manager |
+| **Regulatory output** | OSHA 300 Log, 300A, 301 PDF, F2508 | Auto-built from data, stored against the report cycle | System |
+| **Audit trail / activity log** | Every system action — who did what, when | Append-only log table per entity | System |
+
+### 15.3 What v1 must do (basic file handling)
+Even though a full document control module is out of v1, v1 must already do these things. Most are in the demo today; production must keep them.
+
+- **File upload** with size limits (25 MB per file) and allowed types (PNG, JPG, PDF). This is already in the Report Wizard Step 1.
+- **File storage on local disk (v1 decision).** For now, uploaded files are saved to the server's local file system, not to a cloud bucket (S3, GCS, Azure Blob). The reasons are:
+  - Faster to build and test in v1.
+  - No cloud bills or vendor lock-in during early development.
+  - The team can move to cloud storage later without changing the API. The file-storage service must hide the storage location behind a stable URL and a `file_id`. Calling code must never see the disk path.
+  - **What to plan for from day 1:** a stable URL pattern (for example `/api/files/:file_id`), a file-record table (`File` entity with `id`, `parent_type`, `parent_id`, `filename`, `mime_type`, `size_bytes`, `uploaded_by`, `uploaded_at`, `storage_location`), and a `storage_location` field that is just `local:<path>` for v1 but can hold `s3://bucket/key` later.
+  - **Backups:** because files are on local disk in v1, the server's disk must be backed up nightly to an off-server location. Without this, a disk failure loses every piece of evidence.
+  - **Limits to watch:** disk space (set a per-site quota), file count per record (cap at 20 attachments), and total upload size per request.
+- **Access control** at the API layer. Only users with the right role can view a file. The `parent_id` on the file record decides which incident / investigation / CAPA the file belongs to. The same role rules that govern that record govern the file.
+- **Auto-attach** SDS files from the SDS Manager library when a chemical is named in the incident. The demo's investigation detail screen already does this.
+- **Audit trail** — record who uploaded, when, what file, and to which record. The trail cannot be edited.
+- **Soft delete** — files can be hidden but never hard-deleted. Regulatory retention rules: 5 years for OSHA, 3 years for RIDDOR.
+- **Cross-linking** — every uploaded file points to its parent record (incident, investigation, or CAPA). Following the link must work in both directions.
+- **Export bundle** — when a regulator asks, we can export the incident with all evidence in one ZIP or one merged PDF.
+
+### 15.4 What v1.5+ should add (full document control)
+For v1.5 or later, add a real Document Control module. This is the standard set of features in every QMS:
+
+- **Version history** — major and minor versions. Every change is a new version. Old versions stay viewable.
+- **Document life cycle** — Draft → In review → Approved → Published → Under revision → Retired.
+- **Approval workflow** — author submits → reviewer approves → manager signs off. The flow can have many steps.
+- **Electronic signatures** — meet 21 CFR Part 11 if the platform sells into life sciences (drug, device, lab).
+- **Auto-training trigger** — when an SOP version changes, every employee assigned to that SOP must be re-trained. The system tracks who has read the new version.
+- **Effective date and expiry date** — show "next review due in 30 days" warnings on the Dashboard.
+- **Document-to-event linking** — every CAPA points to the SOP it changed. Every investigation points to the SDS it consulted. The audit trail must show "the SOP version in effect at the time the incident happened."
+- **Role-based access** — view, edit, approve, retire — each is a different permission.
+
+### 15.5 Other standard modules every QMS / IMS has
+These modules are common in tools like MasterControl, EHS Insight, ETQ Reliance, AssurX, and Riskonnect. They are out of v1 scope. But the architecture must not block them.
+
+#### 15.5.1 Audit management
+A **safety audit** is a planned check of a workplace area against a checklist. Audits are different from incident investigations — they look for problems before something goes wrong.
+- Schedule audits to repeat (daily, weekly, monthly, yearly).
+- Use a checklist tied to a regulation or standard (ISO 45001, OSHA, RIDDOR).
+- Findings from audits can become CAPAs. The PRD form Chapter 9 already lists "Audit finding" as a valid CAPA source.
+- Audit trail per audit.
+
+#### 15.5.2 Change control / Management of Change (MOC)
+**MOC** is the safety-side process for any change to equipment, process, chemical, or procedure. Before a change goes live, it must be reviewed for safety impact.
+- Trigger MOC when a new chemical is added, an SOP is changed, or equipment is replaced.
+- Risk assessment is required.
+- Sign-off by EHS and the affected department.
+- Link to the SDS Manager library when chemicals are involved.
+- Industry quote: "the change must be tracked, justified, risk-assessed, and approved before it goes live."
+
+#### 15.5.3 Training management
+- Assign training to roles or individuals.
+- Track completion (who, when, score).
+- Link training to SOPs (auto-trigger on new SOP version).
+- Show "training overdue" on the Dashboard.
+- Could integrate with an external LMS (Learning Management System).
+
+#### 15.5.4 Inspection management
+**Inspections** are short, regular checks. Examples: daily forklift pre-use check, weekly fire-extinguisher check, monthly PPE-station check.
+- Mobile-friendly checklist.
+- A failed check should be able to trigger an Unsafe Condition incident.
+- Photo and signature on each check.
+
+#### 15.5.5 Permit-to-work
+A **permit-to-work** is a controlled approval for high-risk work. Examples: hot work (welding, cutting), confined-space entry, working at height, energized electrical work.
+- Workflow: requester → safety review → permit issued → work done → permit closed.
+- A permit must be on file when an incident happens in a permit-required area. The system links the permit to the incident.
+
+#### 15.5.6 Risk register
+A **risk register** is the company's master list of known standing hazards. It is different from the per-incident risk matrix.
+- Each entry: hazard, risk rating, controls in place, owner, review date.
+- The risk register is the source of leading indicators (open hazards count by site).
+
+#### 15.5.7 Supplier and contractor management
+- Track contractor inductions and PPE checks before site entry.
+- Link contractors to incidents. The "employment status" field on the incident form (Employee / Self-employed / Contractor / Volunteer / Member of public) already supports this.
+- Pre-qualify contractors before work starts (insurance, training, certifications).
+
+### 15.6 Summary — what we build, and when
+
+| Module | v1 | v1.5 | v2+ |
+|---|---|---|---|
+| File upload + storage on incidents (local disk) | ✅ | | |
+| Audit trail + soft delete | ✅ | | |
+| Auto-attach SDS from library | ✅ | | |
+| Cross-linking (incident ↔ investigation ↔ CAPA) | ✅ | | |
+| Export bundle (ZIP / merged PDF) | ✅ | | |
+| Move file storage to cloud (S3 / GCS / Azure Blob) | | ✅ | |
+| Document Control (version history, approvals, e-sig) | | ✅ | |
+| Training management + LMS link | | ✅ | |
+| Audit management module | | ✅ | |
+| Change control / MOC | | ✅ | |
+| Inspection management | | | ✅ |
+| Permit-to-work | | | ✅ |
+| Risk register | | | ✅ |
+| Supplier / contractor management | | | ✅ |
+| Risk register → leading-indicator dashboard | | | ✅ |
+
+### 15.7 Data model additions (for future modules)
+The v1 data model (§12.1) does not need to change. But for v1.5+ we should plan these new entities:
+
+| Entity | Purpose |
+|---|---|
+| `File` (v1) | id, parent_type (incident / investigation / capa), parent_id, filename, mime_type, size_bytes, uploaded_by, uploaded_at, storage_location (`local:/var/data/files/2026/05/abc.jpg` in v1, `s3://bucket/key` later) |
+| `Document` | id, title, type (sop / sds / policy / training), version, status (draft / review / approved / published / retired), owner, effective_date, expiry_date, file_url |
+| `DocumentVersion` | id, document_id, version_number, change_summary, approved_by, approved_at, file_url |
+| `Training` | id, user_id, document_id, document_version, completed_at, score, signature |
+| `Audit` | id, type, scope, scheduled_date, completed_date, auditor, findings[], status |
+| `AuditFinding` | id, audit_id, description, severity, capa_id (if escalated) |
+| `Change` | id, type (chemical / sop / equipment), description, risk_assessment, approver, status, approved_at |
+| `Permit` | id, type (hot_work / confined_space / height / electrical), area, requester, approver, valid_from, valid_to, status |
+| `RiskRegister` | id, hazard, site_id, area, current_risk, residual_risk, controls[], owner, review_date |
+
+### 15.8 Why this matters for v1
+Even if these modules are out of v1, three points must guide our v1 build:
+
+1. **Cross-linking is a first-class data primitive.** Every record must have a stable ID and the API must let any record point to any other record. Do not invent new linking patterns later.
+2. **Audit trail is shared infrastructure.** Build one append-only log table that every module writes to. Do not build per-module logs.
+3. **File storage is shared infrastructure.** Build one file-storage service that every module uses. Files have an owner (user), a parent (incident / investigation / CAPA), a version, and an access role. Do not let each module invent its own. v1 stores files on the server's local disk (see §15.3). The service must hide the storage location behind a stable URL so that switching to S3 / GCS / Azure Blob later is a config change, not a rewrite.
+
+If we get these three things right in v1, adding Document Control, Training, Audit, MOC, and the rest in v1.5+ is additive work, not a rewrite.
+
+---
+
+## 16. Industry Best-Practice Notes (May 2026 research)
 
 These notes add current outside practice to the PRD. They guide the build but they do not change the spec.
 
-### 15.1 ISO 45001 alignment
+### 16.1 ISO 45001 alignment
 ISO 45001 is the international standard for workplace health and safety. It needs a written process for incident reporting and investigation that:
 - Captures injuries, illnesses, AND near-misses.
 - Finds root causes, contributing factors, and related hazards.
@@ -554,7 +788,7 @@ ISO 45001 is the international standard for workplace health and safety. It need
 
 Our three-module pipeline (Incidents → Investigation → CAPA) maps to clauses 10.1 and 10.2 of ISO 45001. The Reports layer covers clauses 9.1 to 9.3.
 
-### 15.2 OSHA ITA 2026 deadlines (verified)
+### 16.2 OSHA ITA 2026 deadlines (verified)
 - 300A annual summary: posted **Feb 1 – Apr 30, 2026**. Submitted by **March 2, 2026** for calendar-year 2025 data.
 - 250+ employees → 300A required.
 - 20–249 employees in Appendix A industries → 300A required.
@@ -562,23 +796,23 @@ Our three-module pipeline (Incidents → Investigation → CAPA) maps to clauses
 - Submission methods: web form, CSV upload, or API.
 - PDFs cannot be submitted. ITA validates the CSV format strictly.
 
-### 15.3 Notes on RCA methods
+### 16.3 Notes on RCA methods
 - **5-Why** is required by the PRD. It is good for first-aid and minor cases. But it is "too simple" for complex events. It tends to find only one cause chain.
 - **Fishbone (Ishikawa)** is more thorough. The Forms PDF (Chapter 8) already defines a 6-category Fishbone (People / Process / Equipment / Materials / Environment / Management). We should add it as a togglable second view in v1.5+.
 - **TapRoot®** needs a paid license. It is the industry standard for deaths and high-potential events. Out of scope for v1. But the design should not block it (an `rca_method` field on `Investigation` exists for this reason).
 - Suggested escalation: first-aid → 5-Why; lost-time → Fishbone; death or high-potential → full Fault Tree or TapRoot®.
 
-### 15.4 CAPA effectiveness check
+### 16.4 CAPA effectiveness check
 In industry, the most-skipped step is the **effectiveness check** — and it is the most common audit finding. Our protections:
 - A required "Too early to verify — re-verify on YYYY-MM-DD" option closes the verification step without marking a CAPA effective too early.
 - Verification methods to support: follow-up inspection, repeat monitoring, audit-trend review, re-interview of affected workers, document review.
 - The audit log must show evidence files plus the verifier's signature timestamp.
 
-### 15.5 Risk-matrix conventions
+### 16.5 Risk-matrix conventions
 - A 5 × 5 grid with Likelihood (Rare → Almost Certain) and Severity (Insignificant → Catastrophic) is the most common form. It matches IOSH and SafetyCulture.
 - Risk score = Likelihood × Severity, grouped into 5 bands: Negligible (1–2), Low (3–6), Moderate (7–12), High (13–20), Very High (21–25). The PRD uses 4 cell labels (Low / Medium / High / Critical) — slightly simpler. Keep the PRD bands. Document the score-to-band mapping for the future.
 
-### 15.6 Leading vs. lagging indicators
+### 16.6 Leading vs. lagging indicators
 v1 focuses on lagging indicators (TRIR, DART). The 2026 best practice says we should **balance** them with leading indicators in v1.5+:
 - Near-miss reporting rate (per 100 FTE).
 - Observation rate.
@@ -589,12 +823,12 @@ v1 focuses on lagging indicators (TRIR, DART). The 2026 best practice says we sh
 
 The dashboard already has the chart and card skeleton. We can add these without rework.
 
-### 15.7 Mobile and field use
+### 16.7 Mobile and field use
 The PRD scopes v1 to responsive web. Worth knowing: ISO 45001-aligned EHS systems all converge on **mobile-first capture** with photo upload, voice-to-text, and offline drafts. The wizard already has voice-to-text and drag-and-drop attach. The responsive web layout should keep these features working end to end.
 
 ---
 
-## 16. Implementation Roadmap (phased)
+## 17. Implementation Roadmap (phased)
 
 ### Phase 0 — Foundation (Weeks 1–2)
 - Set up the Next.js app inside the existing SDS Manager monorepo. **Read `node_modules/next/dist/docs/` first.** This repo has breaking changes from upstream Next.js (see `AGENTS.md`).
@@ -646,7 +880,7 @@ The PRD scopes v1 to responsive web. Worth knowing: ISO 45001-aligned EHS system
 
 ---
 
-## 17. Risks and Open Questions
+## 18. Risks and Open Questions
 
 1. **Tech stack details — confirm with platform team.** AGENTS.md flags this Next.js fork as having breaking changes. The production stack (App Router? data-fetching pattern? auth provider?) must be confirmed before Phase 0 ends.
 2. **Multi-jurisdictional sites.** Cleveland is OSHA only. Sheffield is HSE / RIDDOR only. A third site (for example, a Canadian plant) would need OHS provincial reporting. The data model has `Site.regulator` for this. The routing engine must be table-driven, not hard-coded to OSHA / RIDDOR.
@@ -661,7 +895,7 @@ The PRD scopes v1 to responsive web. Worth knowing: ISO 45001-aligned EHS system
 
 ---
 
-## 18. Glossary
+## 19. Glossary
 
 | Term | Definition |
 |---|---|
@@ -683,7 +917,7 @@ The PRD scopes v1 to responsive web. Worth knowing: ISO 45001-aligned EHS system
 
 ---
 
-## 19. References and Sources
+## 20. References and Sources
 
 ### Internal source documents
 - `docs/EHS_Incident_Forms_Latest.pdf` — Printable forms package v1.1 (May 2026).
@@ -735,3 +969,38 @@ The PRD scopes v1 to responsive web. Worth knowing: ISO 45001-aligned EHS system
 - [Measuring Safety: Leading & Lagging Indicators — EHS Insight](https://www.ehsinsight.com/blog/safety-metrics-leading-lagging-indicators)
 - [TRIR vs DART — Ecesis](https://www.ecesis.net/Incident-Management-Software/TRIR-vs-DART-Rate.aspx)
 - [6 Best Safety Dashboard Software for Real-Time EHS Visibility 2026 — BasinCheck](https://basincheck.com/resources/best-safety-dashboard-software)
+
+**Database engine and ORM (added in §12.4)**
+- [Drizzle vs Prisma in 2026 — MakerKit](https://makerkit.dev/blog/tutorials/drizzle-vs-prisma)
+- [Prisma vs Drizzle: Performance, DX & Migration Paths — DesignRevision](https://designrevision.com/blog/prisma-vs-drizzle)
+- [Prisma vs Drizzle vs ZenStack: Choosing a TypeScript ORM in 2026 — DEV](https://dev.to/zenstack/prisma-vs-drizzle-vs-zenstack-choosing-a-typescript-orm-in-2026-5cba)
+- [Next.js with a Database: Prisma, Drizzle, and Server Actions — Raghuveer](https://www.iamraghuveer.com/posts/nextjs-database-server-actions/)
+- [Best ORMs for the Next.js App Router — Shinagawa Labs](https://shinagawa-web.com/en/blogs/nextjs-app-router-orm-comparison)
+- [Postgres Audit Logging Guide — Bytebase](https://www.bytebase.com/blog/postgres-audit-logging/)
+- [Postgres RLS Implementation Guide — Permit.io](https://www.permit.io/blog/postgres-rls-implementation-guide)
+- [What Is Audit Logging in PostgreSQL — Tiger Data](https://www.tigerdata.com/learn/what-is-audit-logging-and-how-to-enable-it-in-postgresql)
+- [Production-Ready Audit Logs in PostgreSQL — Sehban Alam](https://medium.com/@sehban.alam/lets-build-production-ready-audit-logs-in-postgresql-7125481713d8)
+- [PostgreSQL Audit Extension — PGAudit](https://www.pgaudit.org/)
+- [pgMemento — schema-versioning audit trail for PostgreSQL](https://github.com/pgMemento/pgMemento)
+- [How to Implement Audit Trails with Triggers in PostgreSQL — OneUptime](https://oneuptime.com/blog/post/2026-01-25-postgresql-audit-trails-triggers/view)
+
+**Document management and QMS modules (added in §15)**
+- [Document Management Software — AssurX](https://www.assurx.com/document-management-software/)
+- [Document Control Software for QMS — eLeaP](https://quality.eleapsoftware.com/qms-document-management/)
+- [What to know about document control software in 2026 — Qualio](https://www.qualio.com/blog/document-version-control-software-reviews)
+- [QMS Documentation — SimplerQMS](https://simplerqms.com/qms-documentation/)
+- [How to build a QMS in SharePoint — Ideagen](https://www.ideagen.com/thought-leadership/blog/how-to-build-qms-in-sharepoint-complete-guide)
+- [14 Best Quality Management Systems (QMS) in 2026 — Whatfix](https://whatfix.com/blog/quality-management-systems/)
+- [Document Control and Management Software — EHS Insight](https://www.ehsinsight.com/document-control-software)
+- [Why Use Document Management Software — Ecesis](https://www.ecesis.net/Document-Management-Software/Why-Use-Document-Management-Software.aspx)
+- [How EHS Platforms Improve Documentation and Recordkeeping — Simple But Needed](https://sbnsoftware.com/blog/how-ehs-platforms-improve-documentation-and-recordkeeping/)
+- [What Is EHS Software? Top Features — EHS Insight](https://www.ehsinsight.com/blog/what-is-ehs-software-how-it-works-why-it-matters-and-key-features-to-know)
+- [Streamlining the Safety Data Sheets (SDS) Workflow — ComplianceQuest](https://www.compliancequest.com/blog/streamlining-sds-workflow/)
+- [Change Control in Quality Management System — Qualityze](https://www.qualityze.com/blogs/change-control-in-qms)
+- [Change Control Management Software — AssurX QMS](https://www.assurx.com/change-control-management-software/)
+- [QMS Software comprehensive guide — eLeaP](https://quality.eleapsoftware.com/qms-software/)
+- [Top QMS Software 2026 — Dot Compliance](https://www.dotcompliance.com/blog/eqms/what-is-the-top-qms-software-to-use-in-2026/)
+- [FDA QMSR & ISO 13485: Key Changes Effective 2026 — IntuitionLabs](https://intuitionlabs.ai/articles/fda-qmsr-iso-13485-changes-2026)
+- [Incident Management Software — Riskonnect](https://riskonnect.com/incident-management-software/)
+- [Incident Reporting and Investigation Management Software — ComplianceQuest](https://www.compliancequest.com/bloglet/incident-reporting-and-investigation-management-software/)
+- [Best Incident Management Software — ISMS.online](https://www.isms.online/compliance-software/what-is-the-best-incident-management-software/)
