@@ -237,7 +237,7 @@ Login → /capa?tab=pending_verification → see CAPAs awaiting them
 
 ## 8. Page-by-page specification
 
-Each page below uses the same template: **Route · Access · Purpose · Sections · Actions · States · Server actions · Cache strategy · Build priority.**
+Each page below uses the same template: **Route · Access · Purpose · Sections · Actions · States · Server actions · Cache strategy · Phase.** (See §13 for the canonical phase mapping.)
 
 ### 8.1 `/login`
 
@@ -263,7 +263,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   - Error: inline message ("Invalid credentials")
 - **Server actions:** `lib/actions/auth.ts → signIn(prev, fd)`
 - **Cache strategy:** none (form is uncached client component)
-- **Build priority:** **P0** (foundation)
+- **Phase:** **0** (foundation, shipped)
 
 ### 8.2 `/auth/callback`
 
@@ -271,7 +271,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
 - **Access:** Public
 - **Purpose:** Exchange Supabase auth code for session (used by magic-link or OAuth — currently no-op for password auth, kept as a stub).
 - **Sections:** none (route handler, not a page)
-- **Build priority:** **P0**
+- **Phase:** **0** (shipped)
 
 ### 8.3 `/dashboard`
 
@@ -299,7 +299,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   - `'use cache'` on KPI tiles (`cacheTag('kpi:'+siteId)`, invalidated by any incident/CAPA mutation)
   - `'use cache'` on chart data (`cacheTag('incidents:trend:'+siteId+':'+year)`)
   - Suspense for live banners + activity (no `'use cache'`)
-- **Build priority:** **P1**
+- **Phase:** **1**
 
 ### 8.4 `/incidents`
 
@@ -327,7 +327,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   - Empty (no data): "No incidents yet — file your first report"
 - **Server actions:** none (read-only); URL state drives query
 - **Cache strategy:** `'use cache'` per `(siteId, tab, filters, page)` with `cacheTag('incidents:'+siteId)`
-- **Build priority:** **P1**
+- **Phase:** **1**
 
 ### 8.5 `/incidents/new/1` — Wizard Step 1
 
@@ -354,7 +354,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   - Error: toast + form preserved
 - **Server actions:** `lib/actions/incidents.ts → createDraft(prev, fd)`
 - **Cache strategy:** uncached (form)
-- **Build priority:** **P1**
+- **Phase:** **1**
 
 ### 8.6 `/incidents/new/2` — Wizard Step 2
 
@@ -382,7 +382,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   | "Continue to Step 3" | `saveStep2()` → UPDATE draft row → `redirect('/incidents/new/3?id=<uuid>')` |
 - **Server actions:** `saveStep2(prev, fd)`
 - **Cache strategy:** uncached
-- **Build priority:** **P1**
+- **Phase:** **1**
 
 ### 8.7 `/incidents/new/3` — Wizard Step 3
 
@@ -405,7 +405,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   | "Submit" (primary) | `finalizeIncident()` → severity engine + routing + notifications + (if A/B) auto-create investigation → `redirect('/incidents/[id]')` + success toast |
 - **Server actions:** `finalizeIncident(prev, fd)` (atomic transaction)
 - **Cache strategy:** uncached form; on success calls `updateTag('incidents')`, `updateTag('kpi:'+siteId)`
-- **Build priority:** **P1**
+- **Phase:** **1**
 
 ### 8.8 `/incidents/[id]` — Incident detail
 
@@ -443,7 +443,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   - For drafts: redirects to `/incidents/new/[lastStep]` (drafts shouldn't reach detail)
 - **Server actions (called by modals):** `overrideSeverity`, `assignTriageOwner`, `escalateToInvestigation`, `closeIncident`
 - **Cache strategy:** `'use cache'` with `cacheTag('incident:'+id)`; modals invalidate via `updateTag`
-- **Build priority:** **P1**
+- **Phase:** **1**
 
 ### 8.9 `/investigations`
 
@@ -466,7 +466,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   - List view: same data, table format
 - **Server actions:** `advanceInvestigation(id, status)`
 - **Cache strategy:** uncached (status changes frequently); list of investigations cached on `cacheTag('investigations:'+siteId)`
-- **Build priority:** **P2**
+- **Phase:** **2**
 
 ### 8.10 `/investigations/[id]` — Investigation detail
 
@@ -497,7 +497,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   | Assign CAPA | opens modal → on submit `createCapa()` + `closeInvestigation(id, withCapa=true)` |
 - **Server actions:** `addInvestigationTeamMember`, `saveWhy`, `uploadEvidence`, `saveFindings`, `closeInvestigation`, `createCapa`
 - **Cache strategy:** `'use cache'` on summary tab + team; uncached on Timeline (live)
-- **Build priority:** **P2**
+- **Phase:** **2**
 
 ### 8.11 `/capa`
 
@@ -522,7 +522,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   - Empty per tab: contextual message
 - **Server actions:** none on list
 - **Cache strategy:** `'use cache'` per tab; `updateTag('capas:'+siteId)` on any CAPA mutation
-- **Build priority:** **P2**
+- **Phase:** **2**
 
 ### 8.12 `/capa/[id]` — CAPA detail
 
@@ -558,7 +558,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
 - **Critical UX rule:** when viewer is the owner, the Verification form is NOT shown (not just disabled). When viewer is non-owner, the Verification form IS shown but only after status = `pending_verification`. Server action enforces both conditions independently.
 - **Server actions:** `updateCapaProgress`, `completeCapa`, `uploadCapaEvidence`, `verifyCapa`, `reassignVerifier`
 - **Cache strategy:** `'use cache'` on detail data; uncached on activity feed
-- **Build priority:** **P2**
+- **Phase:** **2**
 
 ### 8.13 `/reports`
 
@@ -572,7 +572,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
      - **OSHA 300A Annual Summary** — "Posting period: Feb 1 – Apr 30"; "Generate" → `/reports/osha-300a`
      - **OSHA 301 Reports** — count of incidents needing 301; "Browse" → table of incidents linking to `/reports/osha-301/[id]`
      - **RIDDOR F2508** — count of UK-reportable cases; "Browse" → table linking to `/reports/riddor-f2508/[id]` _(GB sites only)_
-- **Build priority:** **P3**
+- **Phase:** **2**
 
 ### 8.14 `/reports/osha-300`
 
@@ -589,7 +589,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   | Export PDF | streams via route handler `/api/reports/osha-300/pdf?year=&site=` |
   | Export CSV | streams ITA-format CSV |
   | Submit to ITA | opens guidance modal with OSHA ITA URL + CSV download link (we don't ship a real API submission for v1) |
-- **Build priority:** **P3**
+- **Phase:** **2**
 
 ### 8.15 `/reports/osha-300a`
 
@@ -605,7 +605,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   6. **Calculated metrics** — TRIR, DART, Severity Rate (auto-computed from counts + hours)
   7. **Certification block** — manager name, title, signed date (digital sign-off; deferred to v1.5)
   8. **"Print / Export PDF" button**
-- **Build priority:** **P3**
+- **Phase:** **2**
 
 ### 8.16 `/reports/osha-301/[incidentId]`
 
@@ -618,7 +618,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   |---|---|
   | "Edit" | inline form (corrections to pre-filled values; saves to incident/injured_person) |
   | "Generate PDF" | opens `/api/reports/301/[incidentId]` (PDF download) |
-- **Build priority:** **P3**
+- **Phase:** **2**
 
 ### 8.17 `/reports/riddor-f2508/[incidentId]`
 
@@ -629,14 +629,14 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
   - Pre-filled F2508 fields
   - **HSE notification record** card — phone-call timestamp, who called, HSE phone reference, written-submission timestamp, RIDDOR online reference (manually entered after the regulator interaction)
 - **Actions:** Generate PDF · Mark phone notification recorded · Mark online submission recorded
-- **Build priority:** **P3**
+- **Phase:** **2**
 
 ### 8.18 `/admin/*` (stub)
 
 - **Route:** `/admin` and sub-routes
 - **Access:** Site Admin only
 - **Purpose:** Manage sites, users, roles, notification rules. Out of demo scope; stubbed `<EmptyState>` for now.
-- **Build priority:** **P4** (post-demo)
+- **Phase:** **post-v1**
 
 ---
 
@@ -738,18 +738,20 @@ flowchart LR
 
 ---
 
-## 13. Build priority (page-by-page)
+## 13. Phase mapping (page-by-page)
 
-> ⚠️ **Pending revision (2026-05-05).** This table predates the v1-scope expansion to all 5 modules (Incidents, Templates, Inspections, Resources, Planner) — see `docs/SPEC.md` §15 entry "V1 demo scope expanded to all 5 modules". Pages for Templates / Inspections / Resources / Planner are not yet slotted; the P1–P4 split below is stale and will be re-cut once we agree the new phase order. Treat **P0 (Phase 0, shipped)** as the only locked row; everything else is the prior plan, kept for reference until the rewrite lands.
+> Phases match the v1 plan agreed 2026-05-06 — see `docs/SPEC.md` §15 entry "V1 phase split agreed". **Vertical slicing** (one module fully done before the next), **demo-ready at the end of every phase**, full depth, ~6.5 weeks total. Phase 0 is shipped; Incidents gets two phases due to scope. Pages listed below at the phase level; full per-page §8 specs for Templates / Inspections / Resources / Planner will be added when each phase's `plans/0X-*.md` file is written.
 
-| Priority | Pages | Phase |
+| Phase | Goal (demo state at end of phase) | Pages / scope |
 |---|---|---|
-| **P0** | Auth shell: `/login`, `/auth/callback`, `app/(app)/layout.tsx`, route stubs for all named routes; **onboarding scaffolding** (welcome card component, schema delta — see `docs/onboarding.md` §15) | Phase 0 |
-| **P1** | `/dashboard` (basic), `/incidents` (list), `/incidents/new/[1,2,3]` (wizard with sandbox banner), `/incidents/[id]` (detail + 4 triage modals); **worker welcome + tour cards**, **top-8 regulatory tooltips** | Phase 1 |
-| **P2** | `/investigations` (Kanban), `/investigations/[id]` (5-tab detail), `/capa` (5-tab list), `/capa/[id]` (detail + verify form), CAPA-create modal; **supervisor + EHS Manager + verifier welcomes**, **first-action pointers**, **help center side panel** | Phase 2 |
-| **P3** | `/reports` (landing), `/reports/osha-300`, `/reports/osha-300a`, `/reports/osha-301/[id]`, `/reports/riddor-f2508/[id]`, PDF/CSV exports; **admin 7-step Site Setup Wizard** (`/admin/site-setup/[1..7]`), **`/settings`** page, **demo affordances** (reset data, trigger banner, sample-data load), **sandbox auto-cleanup cron**, **proactive nudges**, **remaining 9 tooltips** | Phase 3 |
-| **P4** | `/admin/*` (users mgmt), magic-link auth, real ITA API submission, dark-mode toggle UI, customisable notifications, **re-onboarding (new feature cards, SOP-change forced ack)** | Post-demo |
-| **TBD** | Templates module (org-scoped library, industry presets, versioned builder, per-site assignment); Inspections module (run a template, scheduled + one-off, findings → CAPA, manual escalation to incident); Resources module (Assets registry per-site + Documents library polymorphic linking); Planner module (unified read-only calendar across all modules) — pages, routes, and access matrix to be specified during the phase rewrite | Pending split |
+| **0** *(shipped 2026-05-05, PR #1)* | Foundation: auth shell, schema, RBAC tables seeded, route stubs all resolve | `/login`, `/auth/callback`, `app/(app)/layout.tsx`, all 9 named-route stubs; welcome card component; schema delta from `docs/onboarding.md` §15 |
+| **1** | **Incidents — capture → classify → route.** Worker logs in → 3-step Report Wizard → severity + routing + notifications fire → supervisor sees it in list with triage modals working | `/dashboard` (basic with KPI placeholder), `/incidents` (list + filters), `/incidents/new/[1,2,3]` (wizard with sandbox banner), `/incidents/[id]` (detail + Severity Override / Assign / Escalate / Close modals), `/admin/site-setup/[1..7]` (**7-step Site Setup Wizard** — moved here from old P3); `lib/rbac/resolve.ts` resolver + `can()` helper (deferred from Phase 0); severity engine, routing engine, notification engine; top-bar notification bell + regulatory banner with countdowns; worker welcome card; top-8 regulatory tooltips; sandbox mode; thin file upload to `incident-attachments` bucket |
+| **2** | **Incidents — investigate → CAPA → reports.** Track A incident gets RCA'd, CAPA'd, verified; OSHA 300 / 300A / 301 + RIDDOR F2508 render; daily overdue cron runs. Module is shippable on its own. | `/investigations` (Kanban), `/investigations/[id]` (5-tab detail with 5-Why builder + evidence + findings), `/capa` (5-tab list), `/capa/[id]` (detail + verify form), CAPA-create modal; `/reports` (landing), `/reports/osha-300`, `/reports/osha-300a`, `/reports/osha-301/[id]`, `/reports/riddor-f2508/[id]`, PDF/CSV exports; supervisor + EHS Manager + verifier welcome cards; help center side panel; remaining 9 regulatory tooltips; demo affordances (reset data, trigger banner, sample-data loader); sandbox auto-cleanup cron; Vercel cron for daily overdue check at site-local midnight; TRIR / DART calculator; `hse_notification_records` table + UI |
+| **3** | **Templates** — admin clones an industry preset, edits the versioned builder, publishes v1, assigns to sites. Editing publishes v2; in-flight inspections snapshot v1. | `/templates` (org-scoped library), `/templates/new` + `/templates/[id]` (versioned builder — sections, items, item types: yes-no, scale 1–5, photo, free text, signature), `/templates/[id]/assign` (per-site or "all sites"); industry presets seeded thoroughly for **manufacturing + warehouse + office**; **one placeholder template each** for healthcare / education / construction / lab; `templates`, `template_versions`, `template_assignments` tables |
+| **4** | **Inspections** — admin schedules an inspection, worker runs it on mobile, failures become findings, "Escalate to Incident" pre-fills the Phase 1 wizard. | `/inspections` (list), `/inspections/new` (one-off picker), `/inspections/scheduled` (admin recurrence config), `/inspections/[id]` (mobile-friendly runner with photo-on-each-item), `/inspections/[id]/findings/[id]` (finding detail with "Escalate to Incident" + "Attach CAPA"); `inspection_runs` (with `template_version_id` snapshot), `inspection_findings`; scheduling cron tick at site-local midnight; finding → CAPA back-link into Phase 2 |
+| **5** | **Resources — Assets + Documents.** Admin maintains asset registry per site; org-scoped document library polymorphically links from incidents / inspections / CAPAs / assets / sites; the Phase 1 thin upload upgrades to "pick from library or upload new". | `/resources/assets` (per-site registry + org roll-up), `/resources/assets/[id]` (asset detail with linked docs + last-inspected + PM dates + SDS link), `/resources/documents` (org library + search/filter), `/resources/documents/[id]` (doc detail with link list); `assets`, `documents`, `document_links` (polymorphic, typed-pair pattern) tables; reusable link-picker component used by all 5 link contexts; storage RLS path-prefix policy extended for documents bucket |
+| **6** | **Planner** — unified read-only calendar across all 5 modules. | `/planner` (month / week / day grid with site filter); aggregator (Postgres union view or app-level) over incident occurred-at, scheduled inspections, CAPA due dates, asset PM dates; click event → deep-link to source record |
+| **post-v1** | Out of v1 scope, logged so we don't relitigate | `/admin/users` (role-permission editor UI — RBAC tables shipped in Phase 0, defaults editable via DB / seed in v1), magic-link auth, real OSHA ITA API submission, dark-mode toggle UI, customisable notifications, multilingual onboarding, WCAG 2.2 AA pass, IMS_PLANNING modules from §15 we don't claim (Audit, Training, MOC, Permit, BBS, JSA, Toolbox Talks, Safety Bulletins, Emergency Mgmt, Environmental Compliance) |
 
 ---
 
@@ -802,8 +804,11 @@ Centralized so every empty state is consistent.
 
 - `docs/SPEC.md` — workflow rules, data model, regulatory triggers
 - `docs/design.md` — visual tokens, component recipes
-- `plans/00-foundation.md` — Phase 0 task list
-- `plans/01-reporting-dashboard.md` — Phase 1 (TBD; will reference §8.3–8.8 here)
-- `plans/02-investigation-capa.md` — Phase 2 (TBD; §8.9–8.12)
-- `plans/03-reports-polish.md` — Phase 3 (TBD; §8.13–8.17)
-- `PLANNING/IMS_PLANNING.md` — production-scope roadmap (22 weeks)
+- `plans/00-foundation.md` — Phase 0 task list (shipped)
+- `plans/01-incidents-capture.md` — Phase 1 task list (Incidents capture + classify + route; references §8.3–8.8)
+- `plans/02-investigation-capa-reports.md` — Phase 2 (TBD at start of phase; §8.9–8.17)
+- `plans/03-templates.md` — Phase 3 (TBD at start of phase)
+- `plans/04-inspections.md` — Phase 4 (TBD at start of phase)
+- `plans/05-resources.md` — Phase 5 (TBD at start of phase)
+- `plans/06-planner.md` — Phase 6 (TBD at start of phase)
+- `PLANNING/IMS_PLANNING.md` — production-scope roadmap (45 weeks, 15 phases)
