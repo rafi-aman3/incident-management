@@ -2,7 +2,7 @@ import { ReactNode, Suspense } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
-import { navItemsForRole, ROLE_BADGE } from "@/components/app-shell/nav-config";
+import { ROLE_BADGE } from "@/components/app-shell/nav-config";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/supabase/auth";
 
@@ -18,7 +18,6 @@ async function AppShell({ children }: { children: ReactNode }) {
   const { profile, memberships, currentMembership, currentSiteId, currentRoleKey, supabase } =
     await requireUser();
 
-  const items = navItemsForRole(currentRoleKey);
   const sites = memberships
     .map((m) =>
       m.site
@@ -42,7 +41,7 @@ async function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen>
-      <AppSidebar items={items} userLabel={fullName} roleLabel={roleLabel} />
+      <AppSidebar roleKey={currentRoleKey} userLabel={fullName} roleLabel={roleLabel} />
       <SidebarInset>
         <Topbar
           sites={sites}
