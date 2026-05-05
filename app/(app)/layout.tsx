@@ -2,9 +2,10 @@ import { ReactNode, Suspense } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
-import { ROLE_BADGE } from "@/components/app-shell/nav-config";
+import { NAV_ITEMS, ROLE_BADGE } from "@/components/app-shell/nav-config";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/supabase/auth";
+import { can } from "@/lib/auth/can";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -17,6 +18,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 async function AppShell({ children }: { children: ReactNode }) {
   const { profile, memberships, currentMembership, currentSiteId, currentRoleKey, supabase } =
     await requireUser();
+
+  // Permission-filter nav items server-side. resolvePermissions is
+  // React.cache-memoized per request, so this is one round-trip total.
+  const navChecks = await Promise.all(
+    NAV_ITEMS.map(async (item) =>
+      !item.permission || (await can(item.permission, currentSiteId))
+    )
+  );
+  const allowedHrefs = NAV_ITEMS.filter((_, i) => navChecks[i]).map((i) => i.href);
 
   const sites = memberships
     .map((m) =>
@@ -41,7 +51,7 @@ async function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen>
-      <AppSidebar roleKey={currentRoleKey} userLabel={fullName} roleLabel={roleLabel} />
+      <AppSidebar allowedHrefs={allowedHrefs} userLabel={fullName} roleLabel={roleLabel} />
       <SidebarInset>
         <Topbar
           sites={sites}

@@ -10,31 +10,35 @@ import {
   PlusCircle,
 } from "lucide-react";
 import type { RoleKey } from "@/lib/supabase/auth";
+import type { PermissionKey } from "@/lib/rbac/permissions";
 
 export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  roles: ReadonlyArray<RoleKey>;
+  /**
+   * Permission required to see this item. `undefined` means visible to any
+   * authenticated user (e.g. the dashboard). The layout filters server-side
+   * via `can(permission, currentSiteId)` and passes allowed hrefs to the
+   * client sidebar.
+   *
+   * Note: a few items are gated on a "viewer-tier" permission (e.g. /reports
+   * on `incident:read_site`) until proper read-only perms (`investigation:read_site`,
+   * `report:read_site`) are added in Phase 2. Workers don't have those
+   * perms — Phase 1 sidebar matches ui-flow §1.2 already.
+   */
+  permission?: PermissionKey;
 };
 
-const ALL: ReadonlyArray<RoleKey> = ["worker", "supervisor", "ehs_manager", "site_admin"];
-const SUPERVISOR_PLUS: ReadonlyArray<RoleKey> = ["supervisor", "ehs_manager", "site_admin"];
-const ADMIN_ONLY: ReadonlyArray<RoleKey> = ["site_admin"];
-
 export const NAV_ITEMS: ReadonlyArray<NavItem> = [
-  { href: "/dashboard",          label: "Dashboard",       icon: LayoutDashboard, roles: ALL },
-  { href: "/incidents/new/1",    label: "Report Incident", icon: PlusCircle,      roles: ALL },
-  { href: "/incidents",          label: "Incidents",       icon: AlertOctagon,    roles: ALL },
-  { href: "/investigations",     label: "Investigations",  icon: ClipboardList,   roles: SUPERVISOR_PLUS },
-  { href: "/capa",               label: "CAPA",            icon: ListChecks,      roles: ALL },
-  { href: "/reports",            label: "Reports",         icon: FileBarChart,    roles: SUPERVISOR_PLUS },
-  { href: "/admin",              label: "Admin",           icon: Settings2,       roles: ADMIN_ONLY },
+  { href: "/dashboard",       label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/incidents/new/1", label: "Report Incident", icon: PlusCircle,      permission: "incident:report" },
+  { href: "/incidents",       label: "Incidents",       icon: AlertOctagon,    permission: "incident:read_site" },
+  { href: "/investigations",  label: "Investigations",  icon: ClipboardList,   permission: "incident:read_site" },
+  { href: "/capa",            label: "CAPA",            icon: ListChecks,      permission: "capa:complete" },
+  { href: "/reports",         label: "Reports",         icon: FileBarChart,    permission: "incident:read_site" },
+  { href: "/admin",           label: "Admin",           icon: Settings2,       permission: "site:configure" },
 ];
-
-export function navItemsForRole(role: RoleKey): NavItem[] {
-  return NAV_ITEMS.filter((item) => item.roles.includes(role));
-}
 
 export const ROLE_BADGE: Record<RoleKey, { label: string; icon: LucideIcon }> = {
   worker:      { label: "Worker",       icon: ShieldCheck },

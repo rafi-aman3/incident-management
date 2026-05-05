@@ -1818,6 +1818,7 @@ export type Database = {
         Args: { e: Database["public"]["Tables"]["activity_events"]["Row"] }
         Returns: string
       }
+      resolve_permissions: { Args: { p_site_id: string }; Returns: string[] }
       seed_default_roles: { Args: { p_org_id: string }; Returns: undefined }
       user_can_access_site: { Args: { p_site_id: string }; Returns: boolean }
     }
