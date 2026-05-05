@@ -2,9 +2,11 @@
 
 **Status:** Living document
 **Source PRD:** v1.0, 2026-05-02, Rafid Fahmid (SDS Manager)
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 
 This spec is the single source of truth for what we are building. The PRD is the human-readable narrative; this document is the structured, queryable spec we work against. When the PRD and this file disagree, this file wins after we resolve the conflict here.
+
+**Companion docs:** `docs/design.md` (visual tokens, component recipes) · `docs/ui-flow.md` (page-by-page UI flow, modals, state machines, build priority) · `PLANNING/IMS_PLANNING.md` (the 22-week production roadmap; ours is its demo subset)
 
 ---
 
@@ -66,8 +68,8 @@ Three workflow modules + one continuous reporting output layer.
 - Short title (free text, ≤ 200 chars)
 - Date and time of incident
 - Site, area, specific location
-- Narrative description (voice-to-text option)
-- Attachments (drag-and-drop photos/files)
+- Narrative description (≥ 50 words; voice-to-text option deferred to v1.5)
+- Attachments (drag-and-drop photos/files; **max 25 MB per file**, common image + PDF MIME types)
 
 ### Step 2 — Details (conditional on type)
 For **Injury / Illness**:
@@ -93,6 +95,14 @@ Summary view of all entered data. On submit:
 
 **Implementation note:** Wizard uses **draft row + per-step server actions**, not client-only state. The incident row exists in DB from Step 1 with `status='draft'`; finalize on Step 3 starts the regulatory clock.
 
+### Incident detail — triage modals
+After submission, the incident detail screen surfaces three context-aware action modals:
+- **Assign** — assign a triage owner (Track B path), records who/when/why
+- **Escalate** — escalate to investigation (Track A path), creates the investigation row
+- **Close** — close as no-action (Track C path), captures reason
+
+Modal availability is severity-driven: S1/S2 surface **Escalate** by default; S3 surfaces **Assign**; S4/S5 surface **Close**. Each modal writes to `activity_events`.
+
 ---
 
 ## 5. Investigation module (Module 2)
@@ -107,11 +117,16 @@ Auto-created when incident is classified S1, S2, or S3 (Track A or B).
 4. `closed` — finalized (with or without CAPA)
 
 ### Detail view sections
-- **Incident summary** — read-only snapshot of incident data
+- **Incident summary** — read-only snapshot of incident data (frozen at investigation creation, so later edits to the incident don't silently rewrite history)
+- **Investigation team** — lead + members with role labels (see `investigation_team_members` join table in §10)
 - **Evidence** — photos, documents, maintenance logs, SDS sheets
-- **Root cause analysis** — 5-Why structured chain
+- **Root cause analysis** — 5-Why structured chain. **Why-5 is rendered with a "ROOT CAUSE" badge** to make the conclusion obvious. (`rca_method='5_why'` in v1; field is enum-extensible for Fishbone / TapRoot in v2.)
 - **Findings** — free-text narrative
 - **Activity timeline** — chronological event log
+- **OSHA 301 draft banner** — when the source incident is OSHA-recordable, the page surfaces a sticky "OSHA 301 due in N days" banner with a one-click "Open 301 form" action
+
+### Investigation `due_date`
+Investigations get an SLA: Track A → 14 days; Track B → 7 days. Stored on `investigations.due_date`. Surfaced as a yellow chip on the Kanban card when ≤ 3 days remain, red when overdue.
 
 ### Close options
 - **Close — no CAPA needed** — root cause addressed in-situ or one-off
@@ -126,11 +141,20 @@ Auto-created when incident is classified S1, S2, or S3 (Track A or B).
 - **Preventive** — prevents recurrence (update PM checklist)
 
 ### Lifecycle
-1. `created` — title, description, owner, due date, type assigned
-2. `in_progress` — owner implementing
+1. `created` — title, description, owner, verifier, due date, type assigned
+2. `in_progress` — owner implementing; updates `progress_pct` (0–100) as work proceeds
 3. `completed` — owner marks done; moves to verification queue
 4. `pending_verification` — independent verifier reviews
 5. `verified` / `closed` — verifier confirms; CAPA closed
+
+### Verification outcomes (`verification_result` enum)
+The verifier picks one of four outcomes when reviewing a completed CAPA:
+- **`effective`** — action worked. CAPA → `verified` → `closed`.
+- **`partially_effective`** — action helped but residual risk remains. CAPA closes; a new follow-up CAPA is auto-created and linked.
+- **`not_effective`** — action did not solve the problem. CAPA → back to `in_progress` with `rejection_reason` populated.
+- **`too_early_to_verify`** — implementation needs more time before effectiveness can be judged. Verifier sets `re_verify_at` (date); CAPA stays in `pending_verification`.
+
+The verifier also picks how they verified (`verification_method` enum): `inspection` / `monitoring` / `audit_trend` / `re_interview` / `document_review`.
 
 ### CRITICAL RULE
 **The CAPA owner cannot close their own CAPA.** An independent verifier must confirm the action was properly implemented.
@@ -140,16 +164,21 @@ Enforced at three layers:
 2. Server action — rejects request when `owner_id === verifier_id` or session user is owner
 3. DB CHECK constraint — `verifier_id IS NULL OR verifier_id <> owner_id`
 
+### Overdue handling
+- Daily check at **site-local midnight** (not UTC) — so an overdue CAPA in Sheffield triggers when London passes midnight, not when San Francisco does.
+- On the due date: in-app notification + email to owner.
+- After **3 calendar days late**: auto-escalate to the EHS Manager for the site.
+- Overdue CAPAs surface on the Dashboard "Overdue CAPAs" KPI tile and the Reports module.
+
 ### Card fields
 - CAPA ID (`CAPA-YYYY-NNNN`)
 - Title / description
 - Source investigation (linked)
 - Type (corrective / preventive)
-- Owner (responsible)
-- Verifier (independent)
-- Due date
-- Progress bar
+- Owner (responsible) · Verifier (independent)
+- Due date · `progress_pct` (driving the progress bar)
 - Status badge (In Progress / Pending Verification / Overdue / Closed)
+- (When applicable) `verification_result`, `verification_method`, `rejection_reason`, `re_verify_at`
 
 ---
 
@@ -182,13 +211,19 @@ Enforced at three layers:
 ### Key metrics (auto-calculated)
 - **TRIR** = (Recordable Cases × 200,000) / Total Hours Worked
 - **DART** = (DART Cases × 200,000) / Total Hours Worked
+- **Severity Rate** = (Total Lost Workdays × 200,000) / Total Hours Worked
 
-Both displayed on Dashboard and OSHA 300A.
+All three displayed on Dashboard and OSHA 300A. Calculation lives in `lib/format/kpi.ts`.
+
+### OSHA ITA submission format
+The Injury Tracking Application accepts **CSV upload, web form, or API** — NOT PDF. Our PDF exports (300A poster, 301 case form) are for paper retention; ITA submission requires us to also generate ITA-format CSV. Establishment ID + NAICS code on each `Site` are mandatory for valid submission.
 
 ### RIDDOR-specific fields captured
 - Employment status (employee / contractor / self-employed / public)
 - Dangerous occurrence type (scaffold collapse, explosion, electrical short, …)
 - HSE reference number (after submission)
+- Phone-call timestamp + caller (when initial phone notification was made)
+- Written-report submission timestamp + RIDDOR online reference
 
 ---
 
@@ -259,10 +294,23 @@ When a notification deadline is active, the system displays a prominent banner o
 | Event | Immediate action | Written report |
 |---|---|---|
 | Death | Phone HSE | F2508 within 10 days |
-| Specified injury (fracture, amputation, …) | Phone HSE | F2508 within 10 days |
+| Specified injury (see list below) | Phone HSE | F2508 within 10 days |
 | Over-7-day incapacitation | — | F2508 within 15 days of accident |
 | Occupational disease | — | F2508 on receipt of diagnosis |
 | Dangerous occurrence | Phone HSE | F2508 within 10 days |
+
+### RIDDOR specified-injury list (`lib/constants/riddor.ts`)
+Per RIDDOR 2013, "specified injuries" trigger immediate phone notification. Canonical list:
+- Fracture (other than to fingers, thumbs, toes)
+- Amputation (arm, hand, finger, thumb, leg, foot, or toe)
+- Permanent loss of sight or reduction of sight
+- Crush injury leading to internal organ damage
+- Serious burn covering more than 10% of the body, or causing damage to eyes / respiratory system / vital organs
+- Scalping requiring hospital treatment
+- Loss of consciousness caused by head injury or asphyxia
+- Any injury arising from work in an enclosed space leading to hypothermia, heat-induced illness, or requiring resuscitation / 24-hour hospital admission
+
+Stored as a `riddor_specified_injury` enum on `injured_persons` plus a boolean derived flag `riddor_reportable_specified` for routing.
 
 ---
 
@@ -270,18 +318,20 @@ When a notification deadline is active, the system displays a prominent banner o
 
 | Entity | Key fields |
 |---|---|
-| **Incident** | `id, ref_code, title, type, description, occurred_at, site_id, area, location, severity, track, status, reporter_id, osha_recordable, riddor_reportable, created_at` |
-| **Injured Person** | `incident_id, name, job_title, department, supervisor, employment_status, body_parts, injury_nature, mechanism, object_substance, treatment, days_away, days_restricted, fatality, hospitalized` |
-| **Investigation** | `id, incident_id, lead_investigator, team, status, started_at, due_date, root_cause_summary, findings, rca_method` |
-| **RCA Why** | `investigation_id, level (1–5), question, answer` |
-| **Evidence** | `investigation_id, type, storage_path, file_name, mime_type, size_bytes, uploaded_by, uploaded_at` |
-| **CAPA** | `id, ref_code, investigation_id, incident_id, type (corrective/preventive), title, description, owner_id, verifier_id (CHECK ≠ owner_id), due_date, status, progress, completed_at, verified_at` |
-| **Site** | `id, name, address, country (US/GB), region, timezone` |
+| **Incident** | `id, ref_code, title, type, description, occurred_at, site_id, area, location, severity, track, status, reporter_id, osha_recordable, riddor_reportable, classified_at, closed_at, deleted_at, created_at` |
+| **Injured Person** | `incident_id, name, job_title, department, supervisor_id, employment_status, body_parts, injury_nature, mechanism, object_substance, treatment, days_away, days_restricted, fatality, hospitalized, riddor_specified_injury (enum, nullable), date_of_death (nullable)` |
+| **Investigation** | `id, incident_id, lead_investigator, status, started_at, due_date, root_cause_summary, findings, rca_method, closed_at, deleted_at, created_at` |
+| **Investigation Team Member** | `investigation_id, profile_id, role (lead/member/observer), added_at` (join table — replaces the `team[]` array) |
+| **RCA Why** | `investigation_id, level (1–5), question, answer, is_root_cause (computed: level=5 OR explicit flag), created_at` |
+| **Evidence** | `id, investigation_id, type, storage_path, file_name, mime_type, size_bytes, uploaded_by, uploaded_at` |
+| **CAPA** | `id, ref_code, investigation_id, incident_id, type (corrective/preventive), title, description, owner_id, verifier_id (CHECK ≠ owner_id), due_date, status, progress_pct (0-100), verification_result (enum, nullable), verification_method (enum, nullable), rejection_reason (nullable), re_verify_at (date, nullable), follow_up_capa_id (nullable, set when verification_result='partially_effective'), completed_at, verified_at, closed_at, deleted_at, created_at` |
+| **Site** | `id, name, address, country (US/GB), region, timezone, osha_establishment_id (nullable), naics_code (nullable, US sites)` |
 | **User / Profile** | `id (= auth.users.id), full_name, email, role, site_id, department` |
-| **Notification** | `id, kind, incident_id, capa_id, recipient_id, site_id, title, body, deadline_at, acknowledged_at, resolved_at, created_at` |
-| **Severity Override** | `id, incident_id, original_severity, new_severity, overridden_by, reason, created_at` (immutable) |
-| **Activity Event** | `incident_id?, investigation_id?, capa_id?, actor_id, verb, payload, created_at` |
-| **Witness** | `incident_id, name, contact, statement` |
+| **Notification** | `id, kind, incident_id, capa_id, recipient_id, site_id, title, body, deadline_at, acknowledged_at, resolved_at, created_at` (append-only — UPDATE/DELETE revoked) |
+| **HSE Notification Record** | `id, incident_id, phone_called_at, phoned_by, hse_phone_reference, written_submitted_at, riddor_online_reference, created_at` (one per RIDDOR-reportable incident) |
+| **Severity Override** | `id, incident_id, original_severity, new_severity, overridden_by, reason, created_at` (immutable — UPDATE/DELETE revoked) |
+| **Activity Event** | `id, incident_id?, investigation_id?, capa_id?, actor_id, verb, payload, created_at` |
+| **Witness** | `id, incident_id, name, contact, statement` |
 
 ### Enums
 - `incident_type`: 8 values (above)
@@ -289,11 +339,30 @@ When a notification deadline is active, the system displays a prominent banner o
 - `track`: `A, B, C`
 - `incident_status`: `draft, submitted, classified, under_investigation, awaiting_capa, closed`
 - `investigation_status`: `pending_assignment, in_progress, awaiting_capa, closed`
+- `investigation_team_role`: `lead, member, observer`
 - `capa_type`: `corrective, preventive`
 - `capa_status`: `created, in_progress, completed, pending_verification, verified, closed`
-- `user_role`: `worker, supervisor, ehs_manager, site_admin`
-- `notification_kind`: `osha_8hr, osha_24hr, riddor_immediate, riddor_f2508_10d, riddor_7day, riddor_disease, capa_overdue, assigned`
+- `verification_result`: `effective, partially_effective, not_effective, too_early_to_verify`
+- `verification_method`: `inspection, monitoring, audit_trend, re_interview, document_review`
+- `user_role`: `worker, supervisor, ehs_manager, site_admin` (4 roles — see §11; "independent verifier" is a function, not a role)
+- `notification_kind`: `osha_8hr, osha_24hr, riddor_immediate, riddor_f2508_10d, riddor_7day, riddor_disease, capa_overdue, capa_escalated, assigned`
 - `body_part`: head, neck, chest, abdomen, back, left/right × {arm, hand, leg, foot, eye}, other
+- `riddor_specified_injury`: `fracture, amputation, sight_loss, crush_internal, serious_burn, scalping, loss_of_consciousness, enclosed_space_injury` (list per `lib/constants/riddor.ts`)
+- `treatment`: `none, first_aid, medical, hospitalization`
+
+### Schema constraints & invariants
+1. **CAPA owner ≠ verifier** — DB CHECK constraint: `verifier_id IS NULL OR verifier_id <> owner_id`
+2. **Severity-change audit** — DB trigger: any `UPDATE` on `incidents.severity` requires a matching row in `severity_overrides` (same transaction)
+3. **Append-only audit tables** — `severity_overrides`, `notifications`, `activity_events` have `UPDATE`/`DELETE` revoked from PUBLIC
+4. **Soft-delete** — `incidents`, `investigations`, `capas` use `deleted_at` (timestamptz nullable). All queries filter `WHERE deleted_at IS NULL` by default. Hard-delete is forbidden by retention policy (5 yr OSHA, 3 yr RIDDOR)
+5. **Three independent close events** — each entity has its own `closed_at`. Closing a parent does not cascade.
+
+### Type-specific data — design decision
+The PRD defines different field sets per incident type (injury vs environmental vs near-miss). Two approaches:
+- **(A) Sparse columns on `incidents`** — one wide table, type-irrelevant columns left NULL.
+- **(B) Child tables per type** — `injury_details`, `illness_details`, `environmental_details`, etc.
+
+**v1 demo decision:** approach (A) — sparse columns. Lower friction at demo scale. Production (v2) should migrate to (B) per IMS_PLANNING.md §12.2 — query ergonomics and reporting are noticeably better.
 
 ---
 
@@ -305,6 +374,8 @@ When a notification deadline is active, the system displays a prominent banner o
 | **Supervisor** | Reviews/overrides severity, manages team incidents within site |
 | **EHS Manager** | Leads investigations, assigns CAPA, manages regulatory reports for their site |
 | **Site Administrator** | Configures sites, users, roles, notification rules; access to everything |
+
+> **"Independent verifier" is a function, not a role** — it's not in the `user_role` enum. Any user (Supervisor, EHS Manager, even another Worker assigned for the case) can be the verifier on a CAPA, provided `verifier_id ≠ owner_id`. This keeps the org chart simple and avoids forcing companies to designate a dedicated verifier headcount. Production (v2) may add an explicit `independent_verifier` role to support sites with strict separation-of-duties policy (see IMS_PLANNING.md §17 #9 — "small sites with 2 or fewer EHS staff may need cross-site verification").
 
 ### RLS sketch (per table)
 - **`incidents` SELECT** — `site_admin` always; `ehs_manager` / `supervisor` where `site_id = current_site()`; `worker` where `reporter_id = auth.uid()`
@@ -408,6 +479,13 @@ Plus: incident detail (`/incidents/[id]`), CAPA detail (`/capa/[id]`), per-repor
 | 2026-05-04 | Workflow engine called from **Server Action**, not DB trigger | Clearer ownership of the regulatory-clock semantics |
 | 2026-05-04 | **Adopt SmartQHSE-inspired design system** | QHSE enterprise aesthetic better fits safety-critical software than the PRD's SDSM/MUI direction. Inter has tabular numerals (matters for OSHA 300 Log) and is already loaded in the scaffold. Full design spec in `docs/design.md`. Severity/track/status palettes added on top for EHS specificity. |
 | 2026-05-04 | **Brand color: purple `#735CDD`** (overrides initial teal placeholder) | User-provided brand color. Required splitting "success" off the brand into a dedicated green `#16A34A` since purple cannot carry "safe outcome" semantics. S4 (Minor severity) and Track C ("Log & close") now use success green. |
+| 2026-05-05 | **Reconciled `docs/SPEC.md` against `PLANNING/IMS_PLANNING.md`** (which was committed to main earlier) | Adopted: Severity Rate KPI, CAPA `verification_result` + `verification_method` enums, CAPA reject path with `rejection_reason` + `re_verify_at`, `progress_pct` field, soft-delete on incidents/investigations/CAPAs, `osha_establishment_id` + `naics_code` on Site, investigation `due_date`, `hse_notification_records` table, `investigation_team_members` join table, ROOT CAUSE marker on Why-5, OSHA 301 draft banner, Assign/Escalate/Close triage modals, RIDDOR specified-injury list, append-only audit constraints, severity-change DB trigger, type-tables-vs-sparse-columns decision documented (sparse for demo, tables for v2). |
+| 2026-05-05 | **Independent verifier is a function, not a 5th role** (deviates from IMS_PLANNING §3) | Keeps `user_role` enum at 4. Verification is enforced by `owner_id ≠ verifier_id` at DB + service + UI layers. v2 may add an explicit role to support strict separation-of-duties policies. |
+| 2026-05-05 | **Type-specific data: sparse columns on `incidents` for v1 demo** (defers IMS_PLANNING §12.2 child-tables recommendation to v2) | Lower friction at demo scale; production migration to per-type tables planned for v2 for query/reporting ergonomics. |
+| 2026-05-05 | **Use `severity_overrides` (incident-severity-specific) for v1**; polymorphic `override_log` is a v2 option | Severity is the only override surface in v1. Polymorphic shape is over-engineering until we add more overridable fields. |
+| 2026-05-05 | **Site names ("Houston", "Manchester") are placeholders** | Will replace with the customer's actual site names before stakeholder demo. IMS_PLANNING uses "Cleveland Plant" + "Sheffield Site" as illustrative names. Either is fine — the schema is name-agnostic. |
+| 2026-05-05 | **Production roadmap lives in `PLANNING/IMS_PLANNING.md` §16** (22 weeks, 7 phases) | Our `lets-plan-this-tidy-pillow.md` umbrella + per-phase plan files are the **stakeholder-demo roadmap** (~2 weeks, 4 phases) — a scoped subset, not a replacement. Both coexist; the demo plan trades production hardening (Phase 6 ITA submission, Phase 7 hardening/WCAG/retention) for speed. |
+| 2026-05-05 | **MUI v5 is fully removed in favor of shadcn/ui** | Reaffirms the 2026-05-04 design-system decision after IMS_PLANNING.md §4.3 + §13 still referenced MUI. IMS_PLANNING is now stale on UI/font for our build; `docs/design.md` is the canonical source. |
 
 ### Open questions
 1. **Hosting** — assume Vercel + Supabase. Confirm before Phase 0 wraps (affects cron job approach).

@@ -5,19 +5,21 @@
 **Estimated duration:** 1–2 days
 **Depends on:** nothing (greenfield)
 
+> **Relationship to `PLANNING/IMS_PLANNING.md`:** That document is the **22-week production roadmap** (7 phases, ending in OSHA ITA submission and WCAG 2.2 hardening). Our Phase 0–3 plan files describe the **stakeholder-demo subset** (~2 weeks). Phase 0 here ≈ Phase 0 there ("Foundation"), but our scope skips ISO 45001 conformance, retention/archival automation, and ITA API wiring — those wait for production. When something in this file conflicts with IMS_PLANNING.md, this file wins for the demo build.
+
 ---
 
 ## Definition of done
 
 A stakeholder dropping in unannounced after Phase 0 sees:
 
-1. The app boots at `pnpm dev` with no errors and brand color `#626DF9`, font Montserrat
+1. The app boots at `pnpm dev` with no errors and brand color `#735CDD`, font Inter
 2. `/login` accepts any of the 4 demo accounts; redirects to `/dashboard` post-login
 3. Sidebar nav shows correct items per role:
    - **Worker** → Dashboard, Report Incident
    - **Supervisor / EHS Manager** → Dashboard, Incidents, Investigations, CAPA, Reports
    - **Site Admin** → All of the above + Admin (stub)
-4. Site switcher in topbar toggles between Houston (US) and Manchester (GB), persists in cookie
+4. Site switcher in topbar toggles between two demo sites (placeholder names "Houston" US / "Manchester" GB — to be replaced with the customer's actual site names before stakeholder demo; see `docs/SPEC.md` §15 decisions log), persists in cookie
 5. Every nav link resolves to a stub `<EmptyState>` placeholder (no 404s)
 6. `pnpm db:seed` runs idempotently — second run does not duplicate users or rows
 7. `pnpm dev` console is clean (no React hydration warnings, no Next deprecation notices)
@@ -219,14 +221,36 @@ export const config = {
 ### 9. Schema migration
 
 `supabase/migrations/0001_init.sql` — full DDL per `docs/SPEC.md` §10. Includes:
-- All enums
-- All tables with FKs and indexes
+
+**Enums (12):** `incident_type, severity, track, incident_status, investigation_status, investigation_team_role, capa_type, capa_status, verification_result, verification_method, user_role, notification_kind, body_part, riddor_specified_injury, treatment`
+
+**Tables (~14):**
+- `sites` — incl. `osha_establishment_id text`, `naics_code text`, `timezone text NOT NULL`
+- `profiles` (linked to `auth.users`)
+- `incidents` — incl. `classified_at`, `closed_at`, `deleted_at` (soft-delete), all sparse type-specific columns (per the §10 sparse-column decision; child tables deferred to v2)
+- `injured_persons` — incl. `riddor_specified_injury riddor_specified_injury NULL`, `date_of_death date NULL`
+- `witnesses`
+- `severity_overrides` (immutable audit log)
+- `investigations` — incl. `due_date date`, `closed_at`, `deleted_at`
+- `investigation_team_members` (join table — replaces `team[]` array)
+- `rca_whys` — `is_root_cause boolean GENERATED ALWAYS AS (level = 5) STORED`
+- `investigation_evidence`
+- `capas` — incl. `progress_pct smallint CHECK (progress_pct BETWEEN 0 AND 100) DEFAULT 0`, `verification_result verification_result NULL`, `verification_method verification_method NULL`, `rejection_reason text NULL`, `re_verify_at date NULL`, `follow_up_capa_id uuid REFERENCES capas(id) NULL`, `closed_at`, `deleted_at`
+- `notifications` (append-only)
+- `hse_notification_records` — one per RIDDOR-reportable incident; tracks phone-call + written-submission timestamps + reference numbers
+- `activity_events` (append-only)
+
+**Constraints / triggers / immutability:**
 - `current_role()` and `current_site()` SQL helper functions
 - RLS enabled on every table + policies per role per operation
 - Storage bucket creation: `incident-attachments`, `investigation-evidence`
 - Storage RLS policies keyed on path prefix
-- Sequences/triggers for `INC-YYYY-NNNN` and `CAPA-YYYY-NNNN` ref codes
-- `REVOKE UPDATE, DELETE ON severity_overrides FROM PUBLIC` (immutability)
+- Sequences for `INC-YYYY-NNNN` and `CAPA-YYYY-NNNN` ref codes (set via `BEFORE INSERT` triggers)
+- `CHECK (verifier_id IS NULL OR verifier_id <> owner_id)` on `capas`
+- **Severity-change trigger** — `BEFORE UPDATE ON incidents` that requires a matching `severity_overrides` row in the same transaction whenever `severity` changes (rejects bare UPDATEs)
+- `REVOKE UPDATE, DELETE ON severity_overrides, notifications, activity_events FROM PUBLIC` (append-only audit)
+- All `*_status` enums and lifecycle invariants enforced via CHECK or trigger
+- Default `WHERE deleted_at IS NULL` views (`incidents_active`, `investigations_active`, `capas_active`) so the app rarely needs to filter manually
 
 ### 10. Generate TypeScript types
 
@@ -237,7 +261,7 @@ pnpm dlx supabase gen types typescript --local > lib/supabase/types.ts
 ### 11. Seed script
 
 `supabase/seed.sql` for static data:
-- 2 sites: Houston (US), Manchester (GB)
+- 2 sites: **placeholder names** "Houston" (US, OSHA jurisdiction) and "Manchester" (GB, RIDDOR jurisdiction) — to be renamed to the customer's actual sites before the stakeholder demo. The schema is name-agnostic, so renaming is a one-row UPDATE.
 - ~30 historical incidents spanning all 8 types and S1–S5 across last 12 months (for TRIR/DART math)
 - 5 investigations in different Kanban columns
 - 8 CAPAs at various lifecycle stages (1 overdue, 1 pending verification, 1 closed, others active)
