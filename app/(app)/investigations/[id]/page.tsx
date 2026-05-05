@@ -25,6 +25,20 @@ import {
   DetailModals,
   type SiteMemberOption,
 } from "@/components/investigations/detail/detail-modals";
+import {
+  FiveWhyChain,
+  type WhyRow,
+} from "@/components/investigations/detail/five-why-chain";
+import { FindingsEditor } from "@/components/investigations/detail/findings-editor";
+import { EvidenceUploader } from "@/components/investigations/detail/evidence-uploader";
+import {
+  EvidenceGrid,
+  type EvidenceItem,
+} from "@/components/investigations/detail/evidence-grid";
+import {
+  ActivityTimeline,
+  type ActivityEvent,
+} from "@/components/investigations/detail/activity-timeline";
 import type { InvestigationStatus } from "@/lib/investigations/types";
 
 type Params = Promise<{ id: string }>;
@@ -119,6 +133,71 @@ export default async function InvestigationDetailPage({
       ? (members.find((m) => m.id === removableProfileId) ?? null)
       : null;
 
+  // 6. Tab-specific data — fetched only when the tab is active so we don't
+  //    pay for evidence signed URLs / activity events on every detail load.
+  let whys: WhyRow[] = [];
+  let evidenceItems: EvidenceItem[] = [];
+  let timeline: ActivityEvent[] = [];
+
+  if (tab === "why") {
+    const { data: whyRaw } = await supabase
+      .from("rca_whys")
+      .select("level, question, answer")
+      .eq("investigation_id", inv.id)
+      .order("level", { ascending: true });
+    whys = (whyRaw ?? []).map((w) => ({
+      level: w.level,
+      question: w.question ?? "",
+      answer: w.answer ?? "",
+    }));
+  }
+
+  if (tab === "evidence") {
+    const { data: evRaw } = await supabase
+      .from("investigation_evidence")
+      .select(
+        "id, file_name, mime_type, size_bytes, storage_path, uploaded_at, uploader:uploaded_by ( full_name, email )"
+      )
+      .eq("investigation_id", inv.id)
+      .order("uploaded_at", { ascending: false });
+    const rows = evRaw ?? [];
+    const paths = rows.map((r) => r.storage_path);
+    const { data: signed } = paths.length
+      ? await supabase.storage
+          .from("investigation-evidence")
+          .createSignedUrls(paths, 60 * 60)
+      : { data: [] };
+    const signedByPath = new Map<string, string | null>();
+    (signed ?? []).forEach((s) => {
+      signedByPath.set(s.path ?? "", s.error ? null : s.signedUrl);
+    });
+    evidenceItems = rows.map((r) => ({
+      id: r.id,
+      file_name: r.file_name,
+      mime_type: r.mime_type,
+      size_bytes: r.size_bytes,
+      uploaded_at: r.uploaded_at,
+      uploaded_by_name: r.uploader?.full_name ?? r.uploader?.email ?? null,
+      signed_url: signedByPath.get(r.storage_path) ?? null,
+    }));
+  }
+
+  if (tab === "timeline") {
+    const { data: actRaw } = await supabase
+      .from("activity_events")
+      .select("id, verb, payload, created_at, actor:actor_id ( full_name, email )")
+      .or(`investigation_id.eq.${inv.id},incident_id.eq.${incident.id}`)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    timeline = (actRaw ?? []).map((e) => ({
+      id: e.id,
+      verb: e.verb,
+      payload: (e.payload ?? {}) as Record<string, unknown>,
+      created_at: e.created_at,
+      actor_name: e.actor?.full_name ?? e.actor?.email ?? null,
+    }));
+  }
+
   const summaryData: IncidentSummaryData = {
     id: incident.id,
     ref_code: incident.ref_code,
@@ -208,17 +287,34 @@ export default async function InvestigationDetailPage({
       )}
 
       {tab === "why" && (
-        <TabPlaceholder label="5-Why" body="The 5-Why builder lands in the next commit (B3)." />
+        <FiveWhyChain
+          investigationId={inv.id}
+          initialWhys={whys}
+          initialRootCause={inv.root_cause_summary ?? ""}
+          readOnly={!canEdit || isClosed}
+        />
       )}
+
       {tab === "evidence" && (
-        <TabPlaceholder label="Evidence" body="Drag-drop uploads land in the next commit (B3)." />
+        <div className="space-y-4">
+          {canEdit && !isClosed && <EvidenceUploader investigationId={inv.id} />}
+          <EvidenceGrid
+            investigationId={inv.id}
+            items={evidenceItems}
+            canDelete={canEdit && !isClosed}
+          />
+        </div>
       )}
+
       {tab === "findings" && (
-        <TabPlaceholder label="Findings" body="The autosaving findings editor lands in the next commit (B3)." />
+        <FindingsEditor
+          investigationId={inv.id}
+          initial={inv.findings ?? ""}
+          readOnly={!canEdit || isClosed}
+        />
       )}
-      {tab === "timeline" && (
-        <TabPlaceholder label="Timeline" body="Activity timeline lands in the next commit (B3)." />
-      )}
+
+      {tab === "timeline" && <ActivityTimeline events={timeline} />}
 
       <DetailModals
         investigationId={inv.id}
@@ -226,15 +322,6 @@ export default async function InvestigationDetailPage({
         members={members}
         removableMember={removableMember}
       />
-    </div>
-  );
-}
-
-function TabPlaceholder({ label, body }: { label: string; body: string }) {
-  return (
-    <div className="rounded-md border border-dashed p-12 text-center text-sm">
-      <h2 className="text-lg font-semibold">{label}</h2>
-      <p className="mt-1 text-muted-foreground">{body}</p>
     </div>
   );
 }
