@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { RiskMatrix } from "@/components/risk-matrix/risk-matrix";
 import { BodyMap, type BodyPart } from "@/components/body-map/body-map";
+import { FileUpload } from "@/components/incidents/wizard/file-upload";
 import { saveStep2 } from "@/app/(app)/incidents/new/[step]/actions";
 import { PPE_OPTIONS, type IncidentType } from "@/lib/incidents/types";
 import {
@@ -63,6 +64,7 @@ type Props = {
     quantity_unit?: string | null;
     equipment?: string | null;
     dangerous_occurrence_kind?: string | null;
+    attachments?: { id: string; file_name: string; storage_path: string }[];
   };
 };
 
@@ -356,6 +358,11 @@ export function Step2Details(props: Props) {
           />
         </section>
       )}
+
+      {/* Attachments */}
+      <section className="space-y-2">
+        <FileUpload incidentId={incidentId} initial={initial.attachments ?? []} />
+      </section>
 
       {/* Witnesses */}
       <section className="space-y-3">

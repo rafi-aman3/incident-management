@@ -74,12 +74,16 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
   if (incident.reporter_id !== user.id) notFound();
   if (incident.status !== "draft") redirect(`/incidents/${incidentId}`);
 
-  const [{ data: injured }, { data: witnesses }] = await Promise.all([
+  const [{ data: injured }, { data: witnesses }, { data: attachments }] = await Promise.all([
     supabase
       .from("injured_persons")
       .select("name, body_parts, treatment, fatality, hospitalized, riddor_specified_injury")
       .eq("incident_id", incidentId),
     supabase.from("witnesses").select("name, contact, statement").eq("incident_id", incidentId),
+    supabase
+      .from("incident_attachments")
+      .select("id, file_name, storage_path")
+      .eq("incident_id", incidentId),
   ]);
 
   return (
@@ -97,6 +101,7 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
         dangerous_occurrence_kind: incident.dangerous_occurrence_kind,
         injured_persons: injured ?? [],
         witnesses: witnesses ?? [],
+        attachments: attachments ?? [],
       }}
     />
   );

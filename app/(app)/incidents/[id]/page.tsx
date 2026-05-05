@@ -65,6 +65,13 @@ export default async function IncidentDetailPage({ params }: { params: Params })
     .is("deleted_at", null)
     .maybeSingle();
 
+  // Attachments
+  const { data: attachments } = await supabase
+    .from("incident_attachments")
+    .select("id, file_name, storage_path, mime_type, size_bytes, created_at")
+    .eq("incident_id", incident.id)
+    .order("created_at", { ascending: true });
+
   // Site members for triage modal pickers
   const { data: siteMembersRaw } = await supabase
     .from("site_members")
@@ -168,6 +175,25 @@ export default async function IncidentDetailPage({ params }: { params: Params })
                   <Row label="PPE worn" value={(incident.ppe_worn ?? []).join(", ")} />
                 )}
               </dl>
+            </Card>
+          )}
+
+          {attachments && attachments.length > 0 && (
+            <Card title="Attachments">
+              <ul className="space-y-1">
+                {attachments.map((a) => (
+                  <li key={a.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="truncate">{a.file_name}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {a.size_bytes ? `${Math.round(a.size_bytes / 1024)} KB` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Stored in incident-attachments bucket. Signed-URL download UI ships with the
+                Documents library in Phase 5.
+              </p>
             </Card>
           )}
 
