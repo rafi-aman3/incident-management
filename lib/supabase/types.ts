@@ -1805,6 +1805,16 @@ export type Database = {
       }
     }
     Functions: {
+      classify_incident_v1: {
+        Args: {
+          p_actor_id: string
+          p_deadlines: Json
+          p_incident_id: string
+          p_severity: Database["public"]["Enums"]["severity"]
+          p_track: Database["public"]["Enums"]["track"]
+        }
+        Returns: undefined
+      }
       current_org: { Args: never; Returns: string }
       has_permission: {
         Args: { p_permission: string; p_site_id: string }
