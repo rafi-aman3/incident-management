@@ -344,6 +344,61 @@ export type Database = {
           },
         ]
       }
+      incident_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          id: string
+          incident_id: string
+          mime_type: string | null
+          size_bytes: number | null
+          storage_path: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          id?: string
+          incident_id: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          storage_path: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          id?: string
+          incident_id?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          storage_path?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incident_attachments_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incident_attachments_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incident_attachments_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incidents: {
         Row: {
           area: string | null
@@ -1805,6 +1860,16 @@ export type Database = {
       }
     }
     Functions: {
+      classify_incident_v1: {
+        Args: {
+          p_actor_id: string
+          p_deadlines: Json
+          p_incident_id: string
+          p_severity: Database["public"]["Enums"]["severity"]
+          p_track: Database["public"]["Enums"]["track"]
+        }
+        Returns: undefined
+      }
       current_org: { Args: never; Returns: string }
       has_permission: {
         Args: { p_permission: string; p_site_id: string }
@@ -1818,6 +1883,7 @@ export type Database = {
         Args: { e: Database["public"]["Tables"]["activity_events"]["Row"] }
         Returns: string
       }
+      resolve_permissions: { Args: { p_site_id: string }; Returns: string[] }
       seed_default_roles: { Args: { p_org_id: string }; Returns: undefined }
       user_can_access_site: { Args: { p_site_id: string }; Returns: boolean }
     }

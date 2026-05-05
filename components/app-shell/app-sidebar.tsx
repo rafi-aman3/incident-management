@@ -14,20 +14,20 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { ShieldCheck } from "lucide-react";
-import type { RoleKey } from "@/lib/supabase/auth";
-import { navItemsForRole } from "./nav-config";
+import { NAV_ITEMS } from "./nav-config";
 
 export function AppSidebar({
-  roleKey,
+  allowedHrefs,
   userLabel,
   roleLabel,
 }: {
-  roleKey: RoleKey;
+  allowedHrefs: ReadonlyArray<string>;
   userLabel: string;
   roleLabel: string;
 }) {
   const pathname = usePathname();
-  const items = navItemsForRole(roleKey);
+  const allowed = new Set(allowedHrefs);
+  const items = NAV_ITEMS.filter((item) => allowed.has(item.href));
 
   return (
     <Sidebar collapsible="icon">
