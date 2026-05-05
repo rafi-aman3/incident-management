@@ -8,6 +8,7 @@ import { SeverityBadge, TrackBadge, StatusBadge } from "@/components/incidents/b
 import { WorkerWelcomeCard } from "@/components/onboarding/worker-welcome-card";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { trir, dart, formatKpi, isDartCase } from "@/lib/format/kpi";
 
 export default async function DashboardPage() {
   const { supabase, profile, currentSiteId, currentRoleKey } = await requireUser();
@@ -39,13 +40,81 @@ export default async function DashboardPage() {
       ).data ?? []
     : [];
 
-  // KPI placeholders for v1 — TRIR/DART need 12-month rolling hours-worked
-  // data we don't capture in Phase 1. Show a friendly "—" with a tooltip.
-  const kpiCards: { label: string; value: string; tip: "severity_codes" | null; hint: string }[] = [
-    { label: "Open incidents",  value: String(recentIncidents.filter((i) => i.status !== "closed").length), tip: null, hint: "Site-scoped count" },
-    { label: "S1 / S2 (Track A)", value: String(recentIncidents.filter((i) => i.severity === "S1" || i.severity === "S2").length), tip: "severity_codes", hint: "From the last 5 reports" },
-    { label: "TRIR (12 mo.)",   value: "—", tip: null, hint: "Needs hours-worked data — Phase 2" },
-    { label: "DART (12 mo.)",   value: "—", tip: null, hint: "Needs days-away data — Phase 2" },
+  // ----- Live KPIs (TRIR / DART) for the current calendar year -----
+  // Pulls recordable cases joined to injured_persons; reads annual hours
+  // from site_annual_hours. Returns null (rendered "—") when hours not set.
+  const year = new Date().getFullYear();
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year + 1}-01-01`;
+
+  let recordableCases = 0;
+  let dartCases = 0;
+  let hoursWorked: number | null = null;
+
+  if (canReadSite && currentSiteId) {
+    const [recordableRes, hoursRes] = await Promise.all([
+      supabase
+        .from("incidents")
+        .select(
+          "id, injured_persons(days_away, days_restricted, fatality)"
+        )
+        .eq("site_id", currentSiteId)
+        .eq("osha_recordable", true)
+        .eq("is_sandbox", false)
+        .is("deleted_at", null)
+        .gte("occurred_at", yearStart)
+        .lt("occurred_at", yearEnd),
+      supabase
+        .from("site_annual_hours")
+        .select("hours_worked")
+        .eq("site_id", currentSiteId)
+        .eq("year", year)
+        .maybeSingle(),
+    ]);
+    const incs = recordableRes.data ?? [];
+    recordableCases = incs.length;
+    dartCases = incs.filter((inc) =>
+      (inc.injured_persons ?? []).some((p) =>
+        isDartCase({ days_away: p.days_away, days_restricted: p.days_restricted })
+      )
+    ).length;
+    hoursWorked = hoursRes.data?.hours_worked ?? null;
+  }
+
+  const kpiCards: {
+    label: string;
+    value: string;
+    tip: "severity_codes" | null;
+    hint: string;
+  }[] = [
+    {
+      label: "Open incidents",
+      value: String(recentIncidents.filter((i) => i.status !== "closed").length),
+      tip: null,
+      hint: "Site-scoped count",
+    },
+    {
+      label: "S1 / S2 (Track A)",
+      value: String(
+        recentIncidents.filter((i) => i.severity === "S1" || i.severity === "S2").length
+      ),
+      tip: "severity_codes",
+      hint: "From the last 5 reports",
+    },
+    {
+      label: `TRIR (${year})`,
+      value: formatKpi(trir(recordableCases, hoursWorked)),
+      tip: null,
+      hint: hoursWorked
+        ? `${recordableCases} recordable / ${(hoursWorked / 1000).toFixed(0)}k hr`
+        : "Set annual hours on the 300A",
+    },
+    {
+      label: `DART (${year})`,
+      value: formatKpi(dart(dartCases, hoursWorked)),
+      tip: null,
+      hint: hoursWorked ? `${dartCases} DART case${dartCases === 1 ? "" : "s"}` : "Set annual hours on the 300A",
+    },
   ];
 
   const showWelcome = profile.seen_welcome === false && currentRoleKey === "worker";
