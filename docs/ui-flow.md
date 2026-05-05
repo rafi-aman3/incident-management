@@ -740,6 +740,8 @@ flowchart LR
 
 ## 13. Build priority (page-by-page)
 
+> ⚠️ **Pending revision (2026-05-05).** This table predates the v1-scope expansion to all 5 modules (Incidents, Templates, Inspections, Resources, Planner) — see `docs/SPEC.md` §15 entry "V1 demo scope expanded to all 5 modules". Pages for Templates / Inspections / Resources / Planner are not yet slotted; the P1–P4 split below is stale and will be re-cut once we agree the new phase order. Treat **P0 (Phase 0, shipped)** as the only locked row; everything else is the prior plan, kept for reference until the rewrite lands.
+
 | Priority | Pages | Phase |
 |---|---|---|
 | **P0** | Auth shell: `/login`, `/auth/callback`, `app/(app)/layout.tsx`, route stubs for all named routes; **onboarding scaffolding** (welcome card component, schema delta — see `docs/onboarding.md` §15) | Phase 0 |
@@ -747,6 +749,7 @@ flowchart LR
 | **P2** | `/investigations` (Kanban), `/investigations/[id]` (5-tab detail), `/capa` (5-tab list), `/capa/[id]` (detail + verify form), CAPA-create modal; **supervisor + EHS Manager + verifier welcomes**, **first-action pointers**, **help center side panel** | Phase 2 |
 | **P3** | `/reports` (landing), `/reports/osha-300`, `/reports/osha-300a`, `/reports/osha-301/[id]`, `/reports/riddor-f2508/[id]`, PDF/CSV exports; **admin 7-step Site Setup Wizard** (`/admin/site-setup/[1..7]`), **`/settings`** page, **demo affordances** (reset data, trigger banner, sample-data load), **sandbox auto-cleanup cron**, **proactive nudges**, **remaining 9 tooltips** | Phase 3 |
 | **P4** | `/admin/*` (users mgmt), magic-link auth, real ITA API submission, dark-mode toggle UI, customisable notifications, **re-onboarding (new feature cards, SOP-change forced ack)** | Post-demo |
+| **TBD** | Templates module (org-scoped library, industry presets, versioned builder, per-site assignment); Inspections module (run a template, scheduled + one-off, findings → CAPA, manual escalation to incident); Resources module (Assets registry per-site + Documents library polymorphic linking); Planner module (unified read-only calendar across all modules) — pages, routes, and access matrix to be specified during the phase rewrite | Pending split |
 
 ---
 

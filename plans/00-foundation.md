@@ -15,7 +15,7 @@
 - Seed consolidated into `scripts/seed.ts` (no separate `seed.sql`) — sidesteps the chicken-and-egg with auth user IDs.
 - `.gitignore` extended with `!.env*.example` so `.env.local.example` ships, and `supabase/.temp/` so the CLI cache stays local.
 
-> **Relationship to `PLANNING/IMS_PLANNING.md`:** That document is the **22-week production roadmap** (7 phases, ending in OSHA ITA submission and WCAG 2.2 hardening). Our Phase 0–3 plan files describe the **stakeholder-demo subset** (~2 weeks). Phase 0 here ≈ Phase 0 there ("Foundation"), but our scope skips ISO 45001 conformance, retention/archival automation, and ITA API wiring — those wait for production. When something in this file conflicts with IMS_PLANNING.md, this file wins for the demo build.
+> **Relationship to `PLANNING/IMS_PLANNING.md`:** That document is the **45-week, 15-phase production roadmap** (full QMS + EHS scope, ending in WCAG 2.2 hardening and a real submission cycle). Our per-phase plan files describe the **v1 build** that ships all five modules in CLAUDE.md (Incidents, Templates, Inspections, Resources, Planner) — a scoped subset of IMS_PLANNING, not a replacement. Phase 0 here ≈ IMS_PLANNING Phase 0 ("Foundation"); Phases 1+ are being re-cut to cover all five modules per the SPEC §15 entry dated 2026-05-05 ("V1 demo scope expanded to all 5 modules"). When something in this file conflicts with IMS_PLANNING.md, this file wins for the v1 build; divergences are logged in SPEC §15.
 
 ---
 
