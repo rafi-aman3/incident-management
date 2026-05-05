@@ -39,7 +39,7 @@ Stakeholder demos are milestones inside the build, not a separate deliverable. `
 3. `docs/ui-flow.md` — page-by-page contract: every route, permission gates, modals, state machines, URL conventions, build priority
 4. `docs/onboarding.md` — slim onboarding (signup → org → site → invite → pathway → guided dashboard); welcome cards; tooltip inventory
 5. `docs/design.md` — visual tokens (OKLch palette, brand purple), typography, component recipes (5×5 risk matrix, body map, 5-Why chain, regulatory banner, template builder, inspection runner, calendar grid), dark mode
-6. `plans/00-foundation.md` — Phase 0 execution detail; per-phase plans for 01–07 written at the start of each phase
+6. `plans/00-foundation.md` (shipped) and `plans/01-incidents-capture.md` (shipped) — execution detail for Phases 0 and 1; per-phase plans for 02–06 written at the start of each phase
 7. `PLANNING/IMS_PLANNING.md` — reference production roadmap; honor as default direction unless we've logged a divergence in SPEC §15
 
 ## Tech stack (locked)
@@ -73,7 +73,8 @@ Stakeholder demos are milestones inside the build, not a separate deliverable. `
 
 - Branch naming + commit conventions: `.claude/rules/github-workflow.md`. Commits use Conventional Commits prefix (`feat:`, `fix:`, `docs:`, `chore:`).
 - All commits include the `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer per the bash tool guidance.
-- **Phase 0 merged 2026-05-05 (PR #1)** — code-implementation has begun. Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+- **Build status:** Phase 0 merged 2026-05-05 (PR #1). **Phase 1 merged 2026-05-06 (PR #2)** — Incidents capture/classify/route, 7-step Site Setup Wizard, RBAC `can()` resolver, severity/routing/notification engines + `classify_incident_v1` atomic RPC, dashboard, regulatory banner, worker welcome card, top-8 regulatory tooltips, sandbox visibility hardening, thin file upload. Phase 2 next: investigation Kanban + 5-Why + CAPA lifecycle + OSHA/RIDDOR PDF reports. Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+- **Database workflow:** `pnpm db:push` (apply migrations) and `pnpm db:types` (regen TS types) both load `SUPABASE_ACCESS_TOKEN` + `SUPABASE_DB_PASSWORD` from `.env.local` via `scripts/with-env-file.mjs` — no interactive `supabase login` needed. New migrations follow Supabase CLI's required `YYYYMMDDhhmmss_<name>.sql` timestamp prefix.
 - **Industry types** seeded for v1: `healthcare`, `education`, `manufacturing`, `warehouse`, `office`, `construction`, `lab`. Drives template presets. Extensible by `site_admin`.
 - **Pathways** offered at onboarding: `report_incidents`, `run_inspections`, `manage_assets`, `compliance_reports`, `manage_documents`. Personalize the dashboard; do NOT gate modules — every org gets every module.
 - **Seed structure:** one org "UCB" with two top-level sites Houston (US) + Manchester (GB) plus 1–2 child sites under each to exercise hierarchy + include-children. All names are placeholders (see memory: `project_site_names.md`).
