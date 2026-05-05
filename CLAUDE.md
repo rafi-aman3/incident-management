@@ -73,7 +73,7 @@ Stakeholder demos are milestones inside the build, not a separate deliverable. `
 
 - Branch naming + commit conventions: `.claude/rules/github-workflow.md`. Commits use Conventional Commits prefix (`feat:`, `fix:`, `docs:`, `chore:`).
 - All commits include the `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer per the bash tool guidance.
-- During the **planning phase** (where we currently are), direct commits + push to `main` are acceptable. Once **code-implementation phasing** starts (any change that affects runtime behavior), switch to feature branches and PRs per the workflow rules.
+- **Phase 0 merged 2026-05-05 (PR #1)** — code-implementation has begun. Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
 - **Industry types** seeded for v1: `healthcare`, `education`, `manufacturing`, `warehouse`, `office`, `construction`, `lab`. Drives template presets. Extensible by `site_admin`.
 - **Pathways** offered at onboarding: `report_incidents`, `run_inspections`, `manage_assets`, `compliance_reports`, `manage_documents`. Personalize the dashboard; do NOT gate modules — every org gets every module.
 - **Seed structure:** one org "UCB" with two top-level sites Houston (US) + Manchester (GB) plus 1–2 child sites under each to exercise hierarchy + include-children. All names are placeholders (see memory: `project_site_names.md`).
