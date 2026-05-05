@@ -6,7 +6,7 @@
 
 This spec is the single source of truth for what we are building. The PRD is the human-readable narrative; this document is the structured, queryable spec we work against. When the PRD and this file disagree, this file wins after we resolve the conflict here.
 
-**Companion docs:** `docs/design.md` (visual tokens, component recipes) · `docs/ui-flow.md` (page-by-page UI flow, modals, state machines, build priority) · `PLANNING/IMS_PLANNING.md` (the 22-week production roadmap; ours is its demo subset)
+**Companion docs:** `docs/design.md` (visual tokens, component recipes) · `docs/ui-flow.md` (page-by-page UI flow, modals, state machines, build priority) · `docs/onboarding.md` (per-role first-run flows, admin setup wizard, sandbox mode, tooltip inventory) · `PLANNING/IMS_PLANNING.md` (the 22-week production roadmap; ours is its demo subset)
 
 ---
 
@@ -318,16 +318,17 @@ Stored as a `riddor_specified_injury` enum on `injured_persons` plus a boolean d
 
 | Entity | Key fields |
 |---|---|
-| **Incident** | `id, ref_code, title, type, description, occurred_at, site_id, area, location, severity, track, status, reporter_id, osha_recordable, riddor_reportable, classified_at, closed_at, deleted_at, created_at` |
+| **Incident** | `id, ref_code, title, type, description, occurred_at, site_id, area, location, severity, track, status, reporter_id, osha_recordable, riddor_reportable, is_sandbox boolean, classified_at, closed_at, deleted_at, created_at` |
 | **Injured Person** | `incident_id, name, job_title, department, supervisor_id, employment_status, body_parts, injury_nature, mechanism, object_substance, treatment, days_away, days_restricted, fatality, hospitalized, riddor_specified_injury (enum, nullable), date_of_death (nullable)` |
 | **Investigation** | `id, incident_id, lead_investigator, status, started_at, due_date, root_cause_summary, findings, rca_method, closed_at, deleted_at, created_at` |
 | **Investigation Team Member** | `investigation_id, profile_id, role (lead/member/observer), added_at` (join table — replaces the `team[]` array) |
 | **RCA Why** | `investigation_id, level (1–5), question, answer, is_root_cause (computed: level=5 OR explicit flag), created_at` |
 | **Evidence** | `id, investigation_id, type, storage_path, file_name, mime_type, size_bytes, uploaded_by, uploaded_at` |
 | **CAPA** | `id, ref_code, investigation_id, incident_id, type (corrective/preventive), title, description, owner_id, verifier_id (CHECK ≠ owner_id), due_date, status, progress_pct (0-100), verification_result (enum, nullable), verification_method (enum, nullable), rejection_reason (nullable), re_verify_at (date, nullable), follow_up_capa_id (nullable, set when verification_result='partially_effective'), completed_at, verified_at, closed_at, deleted_at, created_at` |
-| **Site** | `id, name, address, country (US/GB), region, timezone, osha_establishment_id (nullable), naics_code (nullable, US sites)` |
-| **User / Profile** | `id (= auth.users.id), full_name, email, role, site_id, department` |
+| **Site** | `id, name, address, country (US/GB), region, timezone, osha_establishment_id (nullable), naics_code (nullable, US sites), setup_completed_at (nullable), setup_progress jsonb` |
+| **User / Profile** | `id (= auth.users.id), full_name, email, role, site_id, department, seen_welcome boolean DEFAULT false` |
 | **Notification** | `id, kind, incident_id, capa_id, recipient_id, site_id, title, body, deadline_at, acknowledged_at, resolved_at, created_at` (append-only — UPDATE/DELETE revoked) |
+| **Notification Recipient** | `id, site_id, notification_kind, recipient_profile_id (nullable), external_email (nullable), CHECK (one of recipient_profile_id or external_email NOT NULL)` (configured in admin Site Setup Wizard Step 6 — see `docs/onboarding.md` §5.7) |
 | **HSE Notification Record** | `id, incident_id, phone_called_at, phoned_by, hse_phone_reference, written_submitted_at, riddor_online_reference, created_at` (one per RIDDOR-reportable incident) |
 | **Severity Override** | `id, incident_id, original_severity, new_severity, overridden_by, reason, created_at` (immutable — UPDATE/DELETE revoked) |
 | **Activity Event** | `id, incident_id?, investigation_id?, capa_id?, actor_id, verb, payload, created_at` |
@@ -486,6 +487,10 @@ Plus: incident detail (`/incidents/[id]`), CAPA detail (`/capa/[id]`), per-repor
 | 2026-05-05 | **Site names ("Houston", "Manchester") are placeholders** | Will replace with the customer's actual site names before stakeholder demo. IMS_PLANNING uses "Cleveland Plant" + "Sheffield Site" as illustrative names. Either is fine — the schema is name-agnostic. |
 | 2026-05-05 | **Production roadmap lives in `PLANNING/IMS_PLANNING.md` §16** (22 weeks, 7 phases) | Our `lets-plan-this-tidy-pillow.md` umbrella + per-phase plan files are the **stakeholder-demo roadmap** (~2 weeks, 4 phases) — a scoped subset, not a replacement. Both coexist; the demo plan trades production hardening (Phase 6 ITA submission, Phase 7 hardening/WCAG/retention) for speed. |
 | 2026-05-05 | **MUI v5 is fully removed in favor of shadcn/ui** | Reaffirms the 2026-05-04 design-system decision after IMS_PLANNING.md §4.3 + §13 still referenced MUI. IMS_PLANNING is now stale on UI/font for our build; `docs/design.md` is the canonical source. |
+| 2026-05-05 | **Onboarding spec adopted** — see `docs/onboarding.md` | Two patterns: (1) one-time welcome card per role on first login; (2) always-on help (tooltips, empty states, help drawer). Plus the 7-step Site Setup Wizard for admin (real wizard, not tour overlays). Sandbox mode on Report Wizard. Demo-mode "Reset" affordances. Schema delta: `profiles.seen_welcome`, `sites.setup_completed_at`, `sites.setup_progress`, `incidents.is_sandbox`, new table `notification_recipients`. |
+| 2026-05-05 | **No tour-overlay library** (rejected react-joyride / shepherd / intro.js) | Tour overlays get skipped instantly and feel condescending. The UI must be self-explanatory via labels, tooltips, useful empty states, and the help drawer. Setup work goes through real multi-step **wizards** (Site Setup, Report Wizard) with dedicated routes, not floating cards on top of the dashboard. |
+| 2026-05-05 | **Sandbox incidents (`is_sandbox=true`) are excluded from KPIs, dashboards, reports, investigations, CAPAs** | Lets workers/stakeholders practice the wizard without polluting the demo dataset. Engine layers (severity, routing, notifications) all skip sandbox rows. Auto-deleted after 7 days via cron. RLS update: sandbox rows visible only to reporter + site_admin. |
+| 2026-05-05 | **Demo file storage stays on Supabase Storage** | IMS_PLANNING.md §15.3 now specifies "v1 stores files on local disk, no cloud bucket" — that's the production v1, not our demo. Our demo uses Supabase Storage with private buckets + path-prefix RLS. Migration to local-disk-with-stable-URL pattern deferred to v2. |
 
 ### Open questions
 1. **Hosting** — assume Vercel + Supabase. Confirm before Phase 0 wraps (affects cron job approach).

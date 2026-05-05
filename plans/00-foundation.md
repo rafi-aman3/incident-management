@@ -224,10 +224,11 @@ export const config = {
 
 **Enums (12):** `incident_type, severity, track, incident_status, investigation_status, investigation_team_role, capa_type, capa_status, verification_result, verification_method, user_role, notification_kind, body_part, riddor_specified_injury, treatment`
 
-**Tables (~14):**
-- `sites` — incl. `osha_establishment_id text`, `naics_code text`, `timezone text NOT NULL`
-- `profiles` (linked to `auth.users`)
-- `incidents` — incl. `classified_at`, `closed_at`, `deleted_at` (soft-delete), all sparse type-specific columns (per the §10 sparse-column decision; child tables deferred to v2)
+**Tables (~15):**
+- `sites` — incl. `osha_establishment_id text`, `naics_code text`, `timezone text NOT NULL`, `setup_completed_at timestamptz`, `setup_progress jsonb DEFAULT '{}'`
+- `profiles` (linked to `auth.users`) — incl. `seen_welcome boolean DEFAULT false`
+- `incidents` — incl. `classified_at`, `closed_at`, `deleted_at` (soft-delete), `is_sandbox boolean DEFAULT false`, all sparse type-specific columns (per the §10 sparse-column decision; child tables deferred to v2)
+- `notification_recipients` — site-scoped per-kind picker (configured in admin setup wizard step 6); `(recipient_profile_id IS NOT NULL OR external_email IS NOT NULL)` CHECK
 - `injured_persons` — incl. `riddor_specified_injury riddor_specified_injury NULL`, `date_of_death date NULL`
 - `witnesses`
 - `severity_overrides` (immutable audit log)

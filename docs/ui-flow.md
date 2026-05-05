@@ -1,7 +1,7 @@
 # EHS Incident Management — UI Flow & Page Specification
 
 **Status:** Living document
-**Companion docs:** `docs/SPEC.md` (data model, workflow rules) · `docs/design.md` (visual tokens, component recipes)
+**Companion docs:** `docs/SPEC.md` (data model, workflow rules) · `docs/design.md` (visual tokens, component recipes) · `docs/onboarding.md` (per-role first-run flows, admin setup wizard, sandbox mode, tooltip inventory)
 **Last updated:** 2026-05-05
 
 This is the **page-by-page contract**: every route, what it shows, what the user can do, where each action takes them, and how state flows. Read this alongside `docs/SPEC.md` (the **what**) and `docs/design.md` (the **look**). This file is the **how** — the user's journey and the application's structure.
@@ -31,7 +31,10 @@ This is the **page-by-page contract**: every route, what it shows, what the user
 /reports/osha-300a                      EHS Manager+ · OSHA 300A annual summary
 /reports/osha-301/[incidentId]          EHS Manager+ · Per-incident 301 form
 /reports/riddor-f2508/[incidentId]      EHS Manager+ · UK F2508 form
-/admin/* (stub)                         Site Admin · Sites, users, roles (deferred)
+/admin/site-setup                       Site Admin · 7-step wizard (see docs/onboarding.md §5)
+/admin/site-setup/[step]                Site Admin · Wizard steps 1–7
+/settings                               Site Admin · Site settings page (post-setup)
+/admin/* (stub)                         Site Admin · Users, roles (deferred to P3+)
 ```
 
 Modals are URL-driven where it matters (deep-linkable, refresh-safe) via `?action=...`. Pure UI concerns (confirms) are local state.
@@ -94,6 +97,8 @@ Modals are URL-driven where it matters (deep-linkable, refresh-safe) via `?actio
 ### 2.4 First-time login
 - For demo: the 4 seeded accounts already exist (`worker@demo.local`, `supervisor@demo.local`, `ehs@demo.local`, `admin@demo.local`); password `Demo!2026`
 - For production: invite-via-email flow (deferred to v1.5+)
+- **First-run welcome and tour** — every role gets a one-time welcome card + tour cards on first dashboard visit (state on `profiles.seen_welcome` + `profiles.tour_completed`). See **`docs/onboarding.md`** for full per-role flows, copy, and time-to-success targets.
+- **Site admin special case** — if site has `setup_completed_at IS NULL`, admin is routed to `/admin/site-setup` instead of `/dashboard`. See `docs/onboarding.md` §5.
 
 ### 2.5 Demo affordances on the login page
 A small "**Demo accounts**" panel below the form shows the 4 demo emails as click-to-fill chips. **Hidden in production** via `process.env.NODE_ENV === 'development'` or a `DEMO_MODE` env flag.
@@ -737,11 +742,11 @@ flowchart LR
 
 | Priority | Pages | Phase |
 |---|---|---|
-| **P0** | Auth shell: `/login`, `/auth/callback`, `app/(app)/layout.tsx`, route stubs for all named routes | Phase 0 |
-| **P1** | `/dashboard` (basic), `/incidents` (list), `/incidents/new/[1,2,3]` (wizard), `/incidents/[id]` (detail + 4 triage modals) | Phase 1 |
-| **P2** | `/investigations` (Kanban), `/investigations/[id]` (5-tab detail), `/capa` (5-tab list), `/capa/[id]` (detail + verify form), CAPA-create modal | Phase 2 |
-| **P3** | `/reports` (landing), `/reports/osha-300`, `/reports/osha-300a`, `/reports/osha-301/[id]`, `/reports/riddor-f2508/[id]`, PDF/CSV exports | Phase 3 |
-| **P4** | `/admin/*`, magic-link auth, real ITA API submission, dark-mode toggle UI, customisable notifications | Post-demo |
+| **P0** | Auth shell: `/login`, `/auth/callback`, `app/(app)/layout.tsx`, route stubs for all named routes; **onboarding scaffolding** (welcome card component, schema delta — see `docs/onboarding.md` §15) | Phase 0 |
+| **P1** | `/dashboard` (basic), `/incidents` (list), `/incidents/new/[1,2,3]` (wizard with sandbox banner), `/incidents/[id]` (detail + 4 triage modals); **worker welcome + tour cards**, **top-8 regulatory tooltips** | Phase 1 |
+| **P2** | `/investigations` (Kanban), `/investigations/[id]` (5-tab detail), `/capa` (5-tab list), `/capa/[id]` (detail + verify form), CAPA-create modal; **supervisor + EHS Manager + verifier welcomes**, **first-action pointers**, **help center side panel** | Phase 2 |
+| **P3** | `/reports` (landing), `/reports/osha-300`, `/reports/osha-300a`, `/reports/osha-301/[id]`, `/reports/riddor-f2508/[id]`, PDF/CSV exports; **admin 7-step Site Setup Wizard** (`/admin/site-setup/[1..7]`), **`/settings`** page, **demo affordances** (reset data, trigger banner, sample-data load), **sandbox auto-cleanup cron**, **proactive nudges**, **remaining 9 tooltips** | Phase 3 |
+| **P4** | `/admin/*` (users mgmt), magic-link auth, real ITA API submission, dark-mode toggle UI, customisable notifications, **re-onboarding (new feature cards, SOP-change forced ack)** | Post-demo |
 
 ---
 
