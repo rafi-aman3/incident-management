@@ -15,6 +15,10 @@ const CLOSED_ENUM = CLOSED_STATUSES as ReadonlyArray<CapaStatus>;
 import { CapaKpiStrip, type CapaKpiCounts } from "@/components/capa/capa-kpi-strip";
 import { CapaTabs } from "@/components/capa/capa-tabs";
 import { CapaList, type CapaRow } from "@/components/capa/capa-list";
+import {
+  CapaCreateModal,
+  type CapaCreateMember,
+} from "@/components/capa/capa-create-modal";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const VALID_TABS: ReadonlyArray<CapaTabKey> = CAPA_TABS.map((t) => t.key);
@@ -46,6 +50,21 @@ export default async function CapaPage({
   let tabCounts: Partial<Record<CapaTabKey, number>> = {};
   let rows: CapaRow[] = [];
   let queryError: string | null = null;
+  let members: CapaCreateMember[] = [];
+
+  if (canCreate && currentSiteId) {
+    const { data: siteMembersRaw } = await supabase
+      .from("site_members")
+      .select("profile:profiles ( id, full_name, email )")
+      .eq("site_id", currentSiteId);
+    members = (siteMembersRaw ?? [])
+      .filter((m) => m.profile)
+      .map((m) => ({
+        id: m.profile!.id,
+        full_name: m.profile!.full_name,
+        email: m.profile!.email,
+      }));
+  }
 
   if (canRead && currentSiteId) {
     // KPI counts (head-only) + tab counts
@@ -191,6 +210,10 @@ export default async function CapaPage({
       {queryError && <p className="text-sm text-destructive">{queryError}</p>}
 
       {canRead && !queryError && <CapaList rows={rows} />}
+
+      {canCreate && (
+        <CapaCreateModal members={members} context={{ kind: "standalone" }} />
+      )}
     </div>
   );
 }

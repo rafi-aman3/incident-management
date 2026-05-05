@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, ArrowLeft } from "lucide-react";
+import { CheckCircle2, ArrowLeft, ListChecks } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import {
@@ -39,6 +39,7 @@ import {
   ActivityTimeline,
   type ActivityEvent,
 } from "@/components/investigations/detail/activity-timeline";
+import { CapaCreateModal } from "@/components/capa/capa-create-modal";
 import type { InvestigationStatus } from "@/lib/investigations/types";
 
 type Params = Promise<{ id: string }>;
@@ -86,12 +87,13 @@ export default async function InvestigationDetailPage({
   const isClosed = status === "closed";
 
   // 2. Permissions
-  const [canEdit, canReassignLead] = currentSiteId
+  const [canEdit, canReassignLead, canCreateCapa] = currentSiteId
     ? await Promise.all([
         can("investigation:edit", currentSiteId),
         can("investigation:lead", currentSiteId),
+        can("capa:create", currentSiteId),
       ])
-    : [false, false];
+    : [false, false, false];
 
   // 3. Team (joined to profiles)
   const { data: teamRaw } = await supabase
@@ -245,13 +247,25 @@ export default async function InvestigationDetailPage({
           </div>
         </div>
 
-        {!isClosed && canEdit && (
-          <Link
-            href={`${basePath}?action=close-no-capa`}
-            className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
-          >
-            <CheckCircle2 className="h-4 w-4" /> Close — no CAPA
-          </Link>
+        {!isClosed && (canEdit || canCreateCapa) && (
+          <div className="flex items-center gap-2">
+            {canCreateCapa && (
+              <Link
+                href={`${basePath}?action=create-capa`}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+              >
+                <ListChecks className="h-4 w-4" /> Assign CAPA
+              </Link>
+            )}
+            {canEdit && (
+              <Link
+                href={`${basePath}?action=close-no-capa`}
+                className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                <CheckCircle2 className="h-4 w-4" /> Close — no CAPA
+              </Link>
+            )}
+          </div>
         )}
       </div>
 
@@ -322,6 +336,17 @@ export default async function InvestigationDetailPage({
         members={members}
         removableMember={removableMember}
       />
+
+      {canCreateCapa && (
+        <CapaCreateModal
+          members={members}
+          context={{
+            kind: "investigation",
+            investigationId: inv.id,
+            defaultOwnerId: inv.lead_investigator_id ?? null,
+          }}
+        />
+      )}
     </div>
   );
 }
