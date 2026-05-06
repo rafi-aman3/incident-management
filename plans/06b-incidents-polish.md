@@ -1,139 +1,252 @@
-# Phase 6b — Incidents polish
+# Phase 6b — Incidents redesign + polish
 
-**Status:** drafted 2026-05-06 (Phase 6 module 2 of 10) · audit refreshed 2026-05-07 against shipped code
-**Goal:** The incident capture flow is V1's marquee feature — Report Wizard is what's demoed first. Every step lands cleanly, draft state survives a refresh, the regulatory clock fires at exactly the right moment, and the detail page surfaces every linked artifact (witnesses, attachments, asset, severity overrides) without clutter.
-**Branch:** `feat/phase-6-incidents-polish`
+**Status:** drafted 2026-05-06; audit refreshed 2026-05-07; **expanded 2026-05-07** to include `/incidents` redesign per stakeholder mock + prompt
+**Goal:** Replace `/incidents` with the rich Incident-Management layout from `assets/incident-management.png` (KPIs + 12-month trend + breakdowns sit on top of the existing search/filter/table). Polish the 3-step wizard visually + functionally without restructuring it. Polish the detail page.
+**Branch:** `feat/phase-6-incidents-polish` (in flight; current commit `96cf900` carries the refreshed audit plan)
 **PR target:** `main`
-**Pages covered:** `/incidents`, `/incidents/new/[step]`, `/incidents/[id]`
+**Pages affected:** `/incidents` (redesign), `/incidents/new/[step]` (visual + UX polish), `/incidents/[id]` (polish)
 
 > **What this PR ships:**
-> - Audit fixes per the 10-item checklist for all three pages (filled in below from a real code audit, not TBDs).
-> - Hardened wizard transitions: future-date validation, **save-and-exit** affordance on Step 3, finalize-button copy + explainer, notification-recipient preview.
-> - Detail-page Suspense boundaries for each card section + parallelized queries.
-> - Soft-deleted-incident routes to a "deleted notice" card, not a 404.
-> - Severity-override audit history (full reverse-chrono list, not just latest).
-> - Sandbox toggle gated by `site:configure`.
-> - Dark-mode token sweep on severity badges + linked-asset card + status badges.
->
-> **Not in this PR:**
-> - No new incident type. The 8 types are locked.
-> - No new severity matrix dimensions. 5×5 is locked.
-> - No new tracks. A/B/C is locked.
-> - No new fields on `incidents` (sparse-column model is locked for v1).
-> - No new schema, no new RPCs, no new perm keys (consistent with `plans/06-frontend-polish.md`).
-> - **OSHA 301 sticky banner stays on `/investigations/[id]` only** (where it shipped in Phase 2). Surfacing it on the incident detail page would duplicate the cue — incident detail already shows finalized state and the regulatory clock. Logged as a v2 consideration if stakeholders ask for it.
+> - **`/incidents` redesign** per `assets/incident-management.png` + the prompt: header band → 4-tile KPI row (Total / High-Critical / Under Investigation / This Month-with-trend-pill) → 3-or-4-tile rate row (Days Since Last + per-site-rate-selection: TRIR/DART for US, LTIFR/TRIFR for GB, all-three when "All sites") → 12-month area trend chart → 4 breakdown cards (By Type · By Severity donut · By Track · Top Sites) → existing search + filter chips + table at the bottom, polished alongside.
+> - **Wizard visual polish** matching `assets/incident-reporting{,-2,-3}.png`: header treatment (icon + title + subtitle + breadcrumb), tab-pill style for the step indicator, "Saved Xh ago" right-rail indicator, "All changes saved" footer, witness card layout (relationship-to-incident dropdown + accuracy checkbox).
+> - **Wizard UX polish** (from the 6b audit): save-and-exit on Step 3, future-date validation on Step 1, "Finalize report" copy + explainer with notification recipient list, witness-carryover helper text under the Witnesses block.
+> - **Detail polish** (from the 6b audit): Suspense boundaries + parallelized queries, soft-deleted incident → "deleted notice" card (not 404), full severity-override audit history (not just latest), dark-mode token sweep on `badges.tsx` + linked-asset card + `StatusBadge`.
+> - **Cross-cutting**: copy standardization across the three surfaces ("Report incident" → wizard "Finalize report" → modal "Override severity"); sandbox toggle on `/incidents` gated by `can("site:configure")`.
+> - No new schema, no new RPCs, no new perm keys.
+
+> **Not in this PR (deferred to specific phases):**
+> - **No "Generate with Argus" button** on `/incidents` or in the wizard. Argus = our equivalent of the references' ARIA, planned as **Phase 09** (`plans/09-argus-ai-assistant.md` — stub dropped alongside this plan).
+> - **No Safety Bulletin step** in the wizard (the references' Step 3). It's a real feature — bulletin metadata, alert categorization, distribution list, ideally PDF render. Planned as **Phase 10** (no plan file yet).
+> - **No 3→4 step wizard restructure**. Without Safety Bulletin the references' Step 3 has no anchor (Witnesses → ??? → Photos doesn't justify itself). Restructure rides on top of Phase 10 once the bulletin lands; until then 3 steps is the right structure and the "Review and finalize" Step 3 stays — its severity / track / notification preview is a UX win the references lose.
+> - **No status pipeline cards** (Reported / Investigating / Action Required / Closed with progress bars from the bottom of the reference image). Judgment call: defer — the trend chart + breakdowns already convey throughput, and our status enum doesn't map cleanly onto the reference's stages. Reconsider in Phase 6c (Investigations) if needed.
+> - **No CSV export button** in the list filter bar. The list is already URL-shareable; CSV export is its own affordance, logged as v2.
+> - **No approval tabs** (Draft / Under Review / Approved / Rejected) — our state machine doesn't have an approval workflow; status is exposed via the existing status filter chips.
+> - **No live-data realtime push** on the KPI tiles (Supabase Realtime channels). Server-rendered numbers + on-navigation refresh is sufficient for v1.
 
 ---
 
-## Audit summary (from real code, 2026-05-07)
+## Why this scope
 
-**15 gaps total — 3 broken, 12 minor.** Concrete findings below; tiering at the end.
+Phase 6 is "polish" but the user's reference + prompt for `/incidents` is a redesign — keeping the rest of the polish work moving forward inside the same PR is cheaper than splitting branches because (a) most of the original list-page audit findings (Suspense, sm-breakpoint card-list, sandbox gate, copy) get **superseded** when we rewrite the page from scratch, and (b) the wizard + detail polish are independent of the list rebuild and ride alongside without coupling. One review window, one branch, one merge.
 
-### 1. `/incidents` (list) — `app/(app)/incidents/page.tsx`
-
-| # | Dimension | Status | Finding | Fix |
-|---|---|---|---|---|
-| 1 | Visual fidelity | ✅ Pass | Severity tokens via `bg-sev-*` (`badges.tsx:4–9`) | — |
-| 2 | Empty state | ✅ Pass | Card with "Report your first incident" CTA (`page.tsx:78–91`) | — |
-| 3 | Loading state | ❌ Broken | No Suspense; sequential `await` blocks render (`page.tsx:51`) | Wrap table in `<Suspense fallback={<TableSkeleton/>}>` |
-| 4 | Error state | ⚠️ Gap | Raw `error.message` shown (`page.tsx:75`); RLS vs network indistinguishable | Branded error card; map `PGRST*` codes to "Access denied" copy |
-| 5 | Responsive (sm) | ❌ Broken | Table only wraps `overflow-x-auto`; no card-list collapse on sm | `md:table-cell` on detail columns + `md:hidden` vertical card list |
-| 6 | A11y / keyboard | ✅ Pass | `aria-pressed` on filter chips (`page.tsx:217–228`); rows are `<TableRow>` links | — |
-| 7 | Form-error UX | n/a | URL-driven filters | — |
-| 8 | Copy | ⚠️ Gap | "Report incident" (top), "Save override" (modal), "Submit incident" (wizard) — verb tense inconsistent | Standardize: top "Report incident" → wizard "Finalize report" → modal "Override severity" |
-| 9 | Dark mode | ⚠️ Gap | StatusBadge raw `dark:bg-amber-950` (`badges.tsx:68`); S1–S5 use `text-white` without dark variant | Replace raw colors with tokens; add `dark:` overrides on sev-* |
-| 10 | Cache Components | ✅ Pass | Per-site RLS-bound; correctly dynamic | — |
-
-**Specific calls:** Filter chips URL-driven ✅. Default sort `occurred_at desc` ✅. Soft-deleted excluded via `.is("deleted_at", null)` ✅. **Sandbox toggle visible to all users — should gate by `can("site:configure")`.**
-
-### 2. `/incidents/new/[step]` (3-step Wizard)
-
-#### Step 1 — `components/incidents/wizard/step-1-what-happened.tsx`
-
-| # | Dimension | Status | Finding | Fix |
-|---|---|---|---|---|
-| 1, 5, 8, 9 | All | ✅ Pass | Type-card grid 2-col → 4-col (`step-1:43`); tokens used; copy clear | — |
-| 6 | A11y / keyboard | ❌ Broken | Type cards are `<button aria-pressed>` but **no arrow-key nav** between them | Add `onKeyDown` cycling through 8-card array; Enter selects |
-| 7 | Form-error UX | ⚠️ Gap | **Future-date validation missing** — user can pick tomorrow as `occurred_at` | Zod `.refine((v) => new Date(v) <= new Date(), "Cannot report future events")` |
-
-**Specific calls:** AssetTypeaheadField correctly conditional on `property_damage`/`unsafe_condition`/`dangerous_occurrence` (`step-2:114–115`) ✅.
-
-#### Step 2 — `components/incidents/wizard/step-2-details.tsx`
-
-| # | Dimension | Status | Finding | Fix |
-|---|---|---|---|---|
-| 1, 3, 5, 9 | All | ✅ Pass | Injured-person repeats; risk matrix; tokens | — |
-| 6 | A11y / keyboard | ⚠️ Gap | BodyMap has `role="group"` but no arrow-key nav between regions; Tab traverses all 16 buttons (`body-map.tsx:43+`) | Add arrow-key handler mapping column/row indices |
-| 8 | Copy | ⚠️ Gap | Witnesses block at `step-2:409` has no helper "Statements will be available to the assigned investigator" | Add helper text under the block heading |
-
-#### Step 3 — `components/incidents/wizard/step-3-review.tsx`
-
-| # | Dimension | Status | Finding | Fix |
-|---|---|---|---|---|
-| 1, 3, 4, 9 | All | ✅ Pass | Severity + track preview correct; no exception leak | — |
-| 7 | Form-error UX | ✅ Pass | `disabled={isPending}` (`step-3:133`) + idempotent server action | — |
-| 8 | Copy | ⚠️ Gap | Submit reads "Submit incident"; no explainer of what finalize means | "Finalize report" + helper "Starts the regulatory clock and notifies <N> people" |
-| n/a | UX gap | ❌ Broken | **No save-and-exit affordance.** Footer has only `← Back` + Submit (`step-3:124–138`); user can't escape draft mode without finalizing or backtracking | Add `Save draft & exit` link → `/incidents` (draft already persisted) |
-| n/a | UX gap | ⚠️ Gap | Notification preview missing — Step 3 explainer should list "Filing will notify: [names]" before submit | Pass `notificationRecipients: string[]` from server; render under "What the system will do" (`step-3:91–118`) |
-
-### 3. `/incidents/[id]` (detail) — `app/(app)/incidents/[id]/page.tsx`
-
-| # | Dimension | Status | Finding | Fix |
-|---|---|---|---|---|
-| 1, 5, 7 | All | ✅ Pass | Severity + status + track badges; lg→sm collapse works; override-modal returns `{ ok }` cleanly | — |
-| 2 | Empty state | ✅ Pass | Witnesses + attachments sections render only when populated | — |
-| 3 | Loading state | ❌ Broken | Sequential `await` for incident + overrides + witnesses + attachments + linked-asset (`detail:19–75`) | `Promise.all()` + Suspense around aside cards |
-| 4 | Error state | ⚠️ Gap | Soft-deleted hits 404 — no "deleted notice" card | If `error?.code === "PGRST116"` → "Access denied"; if no row but `deleted_at IS NOT NULL` lookup → "This incident was deleted by an admin" |
-| 6 | A11y / keyboard | ⚠️ Gap | Severity-override modal (`triage-modals.tsx:105–148`) — verify Radix `Dialog` traps focus + ESC closes | Audit + add tests via keyboard walkthrough |
-| 8 | Copy | ⚠️ Gap | Latest override shown (`detail:54–59`); full audit trail hidden | Render full reverse-chrono list (collapsible past 3 entries) |
-| 9 | Dark mode | ⚠️ Gap | Linked-asset card `bg-muted/30` (`detail:187`) + severity badge raw `text-white` | Replace with `dark:`-aware tokens |
-| 10 | Cache Components | ✅ Pass | Server component, RLS-bound per incident | — |
-
-**Specific calls:** Linked-asset card jumps to `/resources/assets/[id]` ✅. **OSHA 301 banner — by design lives on `/investigations/[id]` only; not duplicated here.**
+The wizard and detail pages **stay structurally as they are** — only visuals + UX gaps change. Restructure is a Phase 10+ concern once Safety Bulletin gives Step 3 a reason to exist.
 
 ---
 
-## Cross-cutting findings
+## Audit findings carried over (from `96cf900`)
 
-- **`text-white` literals** in `badges.tsx:5–9` and `wizard/wizard-progress.tsx:21` need dark-mode variants.
-- **No Suspense boundaries** on list + detail pages — fix together with parallelized queries.
-- **Copy verb-tense inconsistency** — "Report" / "Submit" / "Save" all used for the same act. Standardize across the three pages.
-- **Sandbox toggle** on the list page should gate by `can("site:configure")` — not a new perm, just a missing check.
+The 2026-05-07 audit identified 15 gaps. **5 are obsoleted by the `/incidents` redesign** (no Suspense on list — fixed by `loading.tsx`; no sm card-list collapse — fixed by new layout; copy inconsistency on list — fixed by header rewrite; raw `error.message` on list — fixed by branded error card; sandbox toggle visibility — fixed by gate). **10 remain as polish work in this PR**:
 
----
+| Surface | Gap | Fix |
+|---|---|---|
+| Wizard Step 1 | No future-date validation | Zod `.refine((v) => new Date(v) <= new Date(), "Cannot report future events")` |
+| Wizard Step 2 | Witnesses block has no carryover helper | Helper text under the Witnesses heading: "Statements will be available to the assigned investigator." |
+| Wizard Step 3 | **No save-and-exit affordance** | `Save draft & exit` link → `/incidents` (draft already persisted) |
+| Wizard Step 3 | "Submit incident" → no explainer | Rename to "Finalize report" + helper "Starts the regulatory clock and notifies <N> people" + recipient list |
+| Wizard (all) | Header is plain; no draft-saved indicator; no "All changes saved" footer | Match reference treatment in `wizard-shell.tsx` |
+| Detail | Sequential `await` blocks render | `Promise.all()` + Suspense around aside cards |
+| Detail | Soft-deleted hits 404 with no notice | Branch on `error?.code === "PGRST116"` → "Access denied"; on `deleted_at IS NOT NULL` → "This incident was deleted by an admin." |
+| Detail | Severity-override audit shows only latest | Render full reverse-chrono list (collapsible past 3 entries) |
+| Detail | Dark-mode literals (`text-white`, raw `dark:bg-amber-950`) | Replace with tokens; verify badge contrast in dark mode |
+| Detail | Override modal focus-trap untested | Audit Radix Dialog + ESC behavior |
 
-## Proposed scope (please confirm before I execute)
-
-**Tier A — must fix (the polish bar)**: 1, 2, 3, 4, 5, 6, 7
-**Tier B — nice to have**: 8, 9
-**Tier C — judgment call (flag here, decide before I touch)**: 10
-
-| # | Fix | Tier | Est. effort |
-|---|---|---|---|
-| 1 | Wizard Step 3 **save-and-exit** + finalize copy + explainer | A | M |
-| 2 | Wizard Step 1 **future-date validation** | A | S |
-| 3 | List + Detail Suspense boundaries + parallelized detail queries | A | M |
-| 4 | Soft-deleted incident → "deleted notice" card (not 404) | A | S |
-| 5 | Sandbox toggle gated by `site:configure` | A | S |
-| 6 | Severity-override **full audit history** on detail | A | S |
-| 7 | Copy standardization across the 3 surfaces ("Report incident" / "Finalize report" / "Override severity") | A | S |
-| 8 | Dark-mode token sweep on `badges.tsx` + linked-asset card + StatusBadge raw colors | B | S |
-| 9 | List page sm-breakpoint card-list collapse | B | M |
-| 10 | Type-card + BodyMap arrow-key nav + Step-3 notification preview + Witness carryover helper | C | M-L |
-
-**Why C is a judgment call:** Arrow-key nav across the 8 type cards is real polish but is the kind of thing every keyboard-only user benefits from once and a pointer user never notices — easy to defer if scope is tight. Same with the "Filing will notify: [names]" preview — useful but requires a server-side recipient lookup that doesn't exist yet (would need a new helper in `lib/workflow/notifications.ts` that returns a recipient list without dispatching). Witness carryover helper is one line of copy — that's free; pull it into B if you want.
-
-**Recommendation:** Ship **Tier A + B** in this PR (9 items, all small/medium). Defer C unless you specifically want the keyboard-nav polish or the notification preview now. The save-and-exit affordance + soft-deleted notice + suspense are the real demo-facing wins.
+The **C-tier items from the original audit** (type-card arrow-key nav, body-map arrow-key nav) are **dropped from this PR** — keyboard-power-user polish that's better addressed in a dedicated a11y pass. Logged for v2.
 
 ---
 
-## Definition of done
+## `/incidents` redesign spec
 
-1. The chosen tier(s) above are implemented and the audit table updates from ⚠️/❌ to ✅.
-2. Wizard refresh-survives at every step (kill the tab on Step 2, reopen, land on Step 2 with state intact).
-3. Wizard finalize is idempotent (double-click → one report, not two).
-4. Save-and-exit from Step 3 lands on `/incidents` with draft visible (sandbox toggle off).
-5. Soft-deleted incident routes to a deleted-notice card, not a 404 / RLS error.
-6. List page is filterable + URL-shareable; sandbox toggle hidden for users without `site:configure`.
-7. Smoke-test (`docs/smoke-test-phase2.md` capture section) re-runs green.
-8. PR description includes before/after screenshots for any visual swap.
+### Layout (desktop ≥ 1280px)
+
+```
+┌── Header band ─────────────────────────────────────────────────┐
+│ Home > Incidents          [destructive icon] Incidents   [Report incident →] │
+│                            ISO 45001 · ISO 45002 · RIDDOR · Near Miss        │
+└────────────────────────────────────────────────────────────────┘
+┌── KPI row 1 (4 tiles, 16px gap) ───────────────────────────────┐
+│ Total Incidents │ High / Critical │ Under Investigation │ This Month (trend) │
+└────────────────────────────────────────────────────────────────┘
+┌── KPI row 2 (3 or 4 tiles depending on site scope) ────────────┐
+│ Days Since Last │ TRIR │ DART  (single US site)                 │
+│ Days Since Last │ LTIFR │ TRIFR (single GB site)                │
+│ Days Since Last │ TRIR │ LTIFR │ TRIFR  (all sites)             │
+└────────────────────────────────────────────────────────────────┘
+┌── Trend chart ─────────────────────────────────────────────────┐
+│ INCIDENTS OVER TIME · Monthly count — last 12 months           │
+│                                                                 │
+│         ╱╲                                                      │
+│        ╱  ╲___╱╲___╱─────                                       │
+└────────────────────────────────────────────────────────────────┘
+┌── Breakdown row (4 cards) ─────────────────────────────────────┐
+│ By Type   │ By Severity (donut) │ By Track   │ Top Sites        │
+└────────────────────────────────────────────────────────────────┘
+┌── Existing list surface (search + filter chips + table) ───────┐
+│ search… │ All Categories ▾ │ All Severities ▾ │ All Statuses ▾ │
+│ chip chip chip                                                 │
+│ ┌─Table───────────────────────────────────────────────────────┐ │
+│ │ ref · type · severity · status · track · occurred_at · …    │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Mobile collapse**: KPI rows → 2-col below `md`, 1-col below `sm`. Trend chart full-width always (recharts handles its own width). Breakdown cards → 2-col below `md`, 1-col below `sm`. Search + filters wrap.
+
+### New components
+
+All under `components/incidents/list/`:
+
+- **`page-header.tsx`** — breadcrumb + title + subtitle + Report-incident CTA. Server component.
+- **`kpi-card.tsx`** — primitive matching the prompt's spec: 4px colored left border, uppercase tracking-wide label, big tabular value, sub-line, optional formula line, optional trend pill, right-aligned color-tinted icon. Accent prop `'destructive' | 'warning' | 'amber' | 'brand' | 'success' | 'info'` maps to `{ borderLeftColor, iconBg (8% alpha tint), iconFg, valueFg }` — all OKLch tokens from `docs/design.md`, no hex literals. Server component (no client logic).
+- **`trend-pill.tsx`** — small bottom-right badge: `↗ N vs last mo` / `↘ N vs last mo` / `— same vs last mo`. Tone is `destructive` if direction `up` (more incidents = bad), `success` if down, `muted` if flat. Server component.
+- **`incidents-over-time.tsx`** — recharts `<AreaChart>`, 12 month buckets (`MMM YY`), single destructive-colored area + gradient fill from 25% to transparent, integer y-ticks starting at 0, max = `ceil(maxCount × 1.2)`, hover tooltip month + count, empty months = 0. Client component (recharts).
+- **`breakdown-card.tsx`** — list-style: header (uppercase label + optional "top N"), then horizontal bar list. Used for By Type, By Track, Top Sites. Empty state copy "No incidents yet." or equivalent. Server component (CSS-only bars).
+- **`donut-breakdown.tsx`** — recharts donut for By Severity, color per `docs/design.md` §13 severity palette, center label = total count, legend below. Client component.
+
+### New queries
+
+`lib/queries/incidents-list.ts` — typed functions, all RLS-bound (no service-role), return serializable shapes:
+
+- `getKpiCounts(scope: SiteScope) → { total, highCritical, underInvestigation, thisMonth, prevMonth, daysSinceLast }`
+- `getFrequencyRates(scope) → { trir, dart, ltifr, trifr, hours, countersByKind }` — pulls per-site `site_annual_hours` for the current year; returns `null` rates when hours not set.
+- `getMonthlyTrend(scope) → Array<{ bucket: Date, count: number }>` (12 entries; left-join against generated 12-month series so missing months = 0)
+- `getBreakdowns(scope) → { byType, bySeverity, byTrack, topSites }`
+
+`SiteScope = { kind: 'single', siteId: string } | { kind: 'all', siteIds: string[] }`. Read from session — default = all sites the user can see (RLS); URL param `?site=<id>` narrows to one site.
+
+### Format helpers
+
+`lib/format/kpi.ts` extends with **`ltifr(numerator, hours)`** and **`trifr(numerator, hours)`** matching the existing `trir` / `dart` signatures. Multiplier is `1_000_000` (vs `200_000` for OSHA rates). Same zero-hours guard (`return 0` not `NaN`/`Infinity`). Tests in `lib/format/kpi.test.ts` cover: zero hours, normal case, very small denominator. New tests added next to existing trir/dart tests.
+
+### Per-site rate selection logic
+
+In `getFrequencyRates`, branch on the scope's site countries:
+- `single US site` → return `{ trir, dart }`, omit ltifr/trifr
+- `single GB site` → return `{ ltifr, trifr }`, omit trir/dart
+- `all sites` → return `{ trir, ltifr, trifr }` (skip DART because it's US-only and the all-sites view shouldn't claim a US metric across all rows)
+
+Page reads which fields are present and renders the matching tile set (3 or 4 tiles in row 2).
+
+### Empty state
+
+If `total === 0` for the current scope, **still render every tile and chart** but each shows its own empty state ("—", "No incidents yet."). Don't fold the page to a single "no data" card — the layout itself is the demo.
+
+### `loading.tsx`
+
+`app/(app)/incidents/loading.tsx` (NEW) renders skeletons matching the post-load layout exactly: 7 KPI tile skeletons, 360px chart skeleton, 4 breakdown skeletons, search bar skeleton, table skeleton with ~5 rows. Uses shadcn `Skeleton` with widths matching the real cards.
+
+### Page rewrite
+
+`app/(app)/incidents/page.tsx` becomes a server component with one `Promise.all` batch at the top hitting all four query functions, then renders `<PageHeader/>`, `<KpiRow1/>`, `<KpiRow2/>`, `<IncidentsOverTime/>`, `<BreakdownRow/>`, `<ListSurface/>` (the existing search + filter + table, extracted into a client component). Existing URL-driven filter logic (`?type=...`, `?severity=...`, etc.) is preserved verbatim — no breaking change to bookmarked URLs.
+
+---
+
+## Wizard visual + UX polish
+
+### `components/incidents/wizard/wizard-shell.tsx` (new or rework existing layout)
+
+- Header: destructive-tinted icon + "Report Incident" title + subtitle "Complete all three steps to create a full investigation package" + breadcrumb above.
+- Right rail: "Saved Xh ago" indicator (computed from `incidents.updated_at` of the draft row).
+- Footer: left = ← Back / right = Next or Submit / right of right = "All changes saved" green-dot indicator.
+- Tab pills: matching reference's green-bordered active pill style, gray-bordered inactive pills.
+
+### `components/incidents/wizard/step-1-what-happened.tsx`
+
+- Add Zod `.refine((v) => new Date(v) <= new Date(), "Cannot report future events")` on `occurred_at`.
+- Visual touches: cleaner card borders, type-card icons sized consistently.
+
+### `components/incidents/wizard/step-2-details.tsx`
+
+- Witnesses block: add helper text below heading ("Statements will be available to the assigned investigator.").
+- Witness card layout match: relationship-to-incident dropdown (already a field; just visual), accuracy checkbox at the bottom of each witness card ("Witness has confirmed this statement is accurate to the best of their knowledge").
+
+### `components/incidents/wizard/step-3-review.tsx`
+
+- Footer changes: add a third element — `Save draft & exit` link routed to `/incidents` (draft already persisted; no save-action call needed).
+- Submit button: rename to **"Finalize report"**.
+- Add explainer below button: "Starts the regulatory clock and notifies <N> people: <names…>". Recipient list comes from a new `getNotificationRecipients(incidentDraftId)` helper in `lib/workflow/notifications.ts` that returns the same list the engine *would* dispatch on finalize, **without** dispatching. Just a server query — no schema change.
+
+---
+
+## Detail page polish
+
+`app/(app)/incidents/[id]/page.tsx`:
+
+- Wrap each aside card in `<Suspense fallback={<CardSkeleton />}>`.
+- Convert sequential `await` chain (lines 19–75) into `Promise.all`.
+- Branch on no-row case: if Supabase returned `error?.code === "PGRST116"` → render "Access denied" card; else if `deleted_at IS NOT NULL` lookup matches → render "This incident was deleted by an admin." card.
+- Severity-override card: render full reverse-chrono list. Collapse past 3 entries behind a "Show all (N)" toggle. Each row: previous severity → new severity, reason, by-whom, at-when.
+- Severity-override modal (`components/incidents/triage-modals.tsx`): keyboard walkthrough — verify Radix Dialog focus trap holds, ESC closes, focus returns to trigger.
+- Dark mode: replace `text-white` literals in `components/incidents/badges.tsx` (lines 5–9) with `dark:text-foreground` or token-aware contrast; replace raw `dark:bg-amber-950` in `StatusBadge` (line 68) with a token; linked-asset card `bg-muted/30` already token-based but verify in dark mode.
+
+---
+
+## Acceptance criteria
+
+1. `/incidents` renders with all KPI tiles, trend chart, and breakdowns at desktop ≥ 1280px matching the prompt's structure.
+2. With seed data the page lights up real numbers; with empty data each tile shows its empty-state copy and the page still renders without errors.
+3. Per-site rate selection works: switch site in topbar → rate row reflects US (TRIR/DART), GB (LTIFR/TRIFR), or all-sites (3-rate row).
+4. `loading.tsx` renders skeletons matching the post-load layout — no layout shift on hydration.
+5. Mobile collapses cleanly to 1-col below `sm`, 2-col between `sm` and `md`.
+6. No hex literals in any new component; all colors via tokens.
+7. Wizard: Save-and-exit from Step 3 lands on `/incidents` with draft visible. Future-date rejected on Step 1. "Finalize report" button shows recipient names below it.
+8. Wizard refresh-survives between steps (kill tab on Step 2, reopen, land on Step 2 with state intact).
+9. Wizard finalize is idempotent (double-click → one report).
+10. Detail: soft-deleted incident → notice card, not 404. Override audit shows full reverse-chrono history. Dark mode passes spot check on every badge.
+11. Sandbox toggle hidden for users without `site:configure`.
+12. Smoke test (`docs/smoke-test-phase2.md` capture section) re-runs green.
+13. PR description includes before/after screenshots for `/incidents` redesign + wizard header treatment + detail dark mode.
+
+---
+
+## Smoke test additions (will draft `docs/smoke-test-phase6b.md` during execution)
+
+- Sign in as site_admin → `/incidents` → confirm 7 tiles + trend + 4 breakdowns + list table render.
+- Switch site to GB → row 2 changes to LTIFR/TRIFR (no DART tile).
+- Switch site to "All sites" → row 2 expands to 4 tiles.
+- Set `site_annual_hours = 0` in seed → rates render `0.00` not NaN/Infinity.
+- Sign in as worker → `/incidents` → page renders with same tiles (RLS-bound). Sandbox toggle hidden.
+- Click "Report incident" → wizard Step 1 → fill → "← Back" → returns to `/incidents` → Save-and-exit on Step 3 round-trip works.
+- Pick tomorrow as `occurred_at` → Step 1 rejects with field error.
+- Submit a draft → notification recipient list rendered before submit. After submit → land on detail page.
+- Detail page: soft-delete an incident via SQL → visit `/incidents/<id>` → "deleted" notice card.
+- Toggle `class="dark"` on `<html>` → spot-check every badge + linked-asset card.
+
+---
+
+## File list
+
+**New:**
+- `app/(app)/incidents/loading.tsx`
+- `components/incidents/list/page-header.tsx`
+- `components/incidents/list/kpi-card.tsx`
+- `components/incidents/list/trend-pill.tsx`
+- `components/incidents/list/incidents-over-time.tsx`
+- `components/incidents/list/breakdown-card.tsx`
+- `components/incidents/list/donut-breakdown.tsx`
+- `components/incidents/wizard/wizard-shell.tsx` (or extend the existing layout if one exists; verify during execution)
+- `lib/queries/incidents-list.ts`
+- `docs/smoke-test-phase6b.md`
+
+**Rewritten:**
+- `app/(app)/incidents/page.tsx`
+
+**Edited:**
+- `app/(app)/incidents/[id]/page.tsx`
+- `components/incidents/wizard/step-1-what-happened.tsx`
+- `components/incidents/wizard/step-2-details.tsx`
+- `components/incidents/wizard/step-3-review.tsx`
+- `components/incidents/wizard/wizard-progress.tsx` (tab pill style)
+- `components/incidents/badges.tsx` (dark-mode tokens)
+- `components/incidents/triage-modals.tsx` (focus-trap audit; likely no code change)
+- `lib/format/kpi.ts` (extend with `ltifr`, `trifr`)
+- `lib/format/kpi.test.ts` (extend tests)
+- `lib/workflow/notifications.ts` (add `getNotificationRecipients` query helper, no dispatch)
+
+---
+
+## Open questions to resolve before execution starts
+
+1. **Status pipeline cards** (Reported / Investigating / Action Required / Closed with progress bars) — image shows them between the breakdowns and the list. Currently called out as deferred. **Confirm or override.**
+2. **Where does "Days Since Last Incident" thresholds break?** Prompt says: ≤7 → "Recent — under review", ≤30 → "Watching", else "Sustained". Confirm thresholds are correct for our regulatory cadence (OSHA 8h/24h/7d don't map onto these directly; this is a UX cadence, not a regulatory one).
+3. **`SiteScope` resolution from session** — confirm: default = all sites the user has membership on (per `site_members` + `include_children` BFS, same logic Planner uses); `?site=<id>` URL param narrows to one site. Same model as Planner.
+4. **KPICard `accent` prop tokens** — prompt names `'destructive' | 'warning' | 'amber' | 'brand' | 'success' | 'info'`. Our `docs/design.md` palette has destructive / warning / brand-purple / success-green / info-blue. **`amber` is new** — propose mapping it to severity-S3 amber (`#F59E0B`-equivalent OKLch token from `docs/design.md` §2). Confirm or pick a different token.
