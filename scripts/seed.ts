@@ -129,11 +129,23 @@ async function ensureSites(orgId: string) {
 async function upsertSite(orgId: string, seed: SiteSeed, parentId: string | undefined) {
   const { data: existing } = await sb
     .from("sites")
-    .select("id")
+    .select("id, setup_completed_at")
     .eq("org_id", orgId)
     .eq("name", seed.name)
     .maybeSingle();
-  if (existing) return existing.id as string;
+  if (existing) {
+    // Backfill setup_completed_at on already-seeded rows so re-running the
+    // seed against an older db marks the demo sites as "ready" — the
+    // dashboard auto-redirect uses this flag to gate the wizard.
+    if (!existing.setup_completed_at) {
+      await sb
+        .from("sites")
+        .update({ setup_completed_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      log("site marked setup-complete:", seed.name);
+    }
+    return existing.id as string;
+  }
 
   const { data, error } = await sb
     .from("sites")
@@ -146,6 +158,9 @@ async function upsertSite(orgId: string, seed: SiteSeed, parentId: string | unde
       timezone: seed.timezone,
       naics_code: seed.naics,
       osha_establishment_id: seed.osha,
+      // Demo sites are pre-configured — skip the wizard so users land
+      // straight on the dashboard with the seeded data already populated.
+      setup_completed_at: new Date().toISOString(),
     })
     .select("id")
     .single();

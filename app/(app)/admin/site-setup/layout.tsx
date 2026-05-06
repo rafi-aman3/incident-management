@@ -1,7 +1,8 @@
-import { ReactNode } from "react";
+import { ReactNode, Suspense } from "react";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { SiteCreatedToast } from "@/components/app-shell/site-created-toast";
 
 /**
  * Wizard layout. Gates the entire `/admin/site-setup/*` tree on the
@@ -16,5 +17,12 @@ export default async function SiteSetupLayout({ children }: { children: ReactNod
   const allowed = await can("site:configure", currentSiteId);
   if (!allowed) redirect("/dashboard");
 
-  return <div className="mx-auto w-full max-w-5xl">{children}</div>;
+  return (
+    <div className="mx-auto w-full max-w-5xl">
+      <Suspense fallback={null}>
+        <SiteCreatedToast />
+      </Suspense>
+      {children}
+    </div>
+  );
 }

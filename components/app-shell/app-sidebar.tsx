@@ -38,7 +38,7 @@ export function AppSidebar({
           </div>
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-semibold">EHS Platform</span>
-            <span className="text-xs text-muted-foreground">v0.1 · Phase 0</span>
+            <span className="text-xs text-muted-foreground">v1.0</span>
           </div>
         </div>
       </SidebarHeader>

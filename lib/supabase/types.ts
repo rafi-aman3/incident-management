@@ -2903,6 +2903,17 @@ export type Database = {
         Args: { p_inspection_id: string }
         Returns: undefined
       }
+      create_site_v1: {
+        Args: {
+          p_address?: string
+          p_country: string
+          p_naics_code?: string
+          p_name: string
+          p_parent_site_id?: string
+          p_timezone?: string
+        }
+        Returns: string
+      }
       current_org: { Args: never; Returns: string }
       escalate_finding_to_incident_v1: {
         Args: { p_finding_id: string }

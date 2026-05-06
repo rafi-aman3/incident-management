@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:push": "node --env-file=.env.local scripts/with-env-file.mjs pnpm dlx supabase db push",
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "db:check": "tsx --env-file=.env.local scripts/check-demo-state.ts",
     "db:types": "node --env-file=.env.local scripts/with-env-file.mjs pnpm dlx supabase gen types typescript --linked > lib/supabase/types.ts"
   },
   "dependencies": {

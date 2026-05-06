@@ -1,8 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Building2 } from "lucide-react";
+import { Check, ChevronDown, Building2, Plus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,9 +24,11 @@ export type SwitcherSite = {
 export function SiteSwitcher({
   sites,
   currentSiteId,
+  canCreateSite,
 }: {
   sites: SwitcherSite[];
   currentSiteId: string | null;
+  canCreateSite: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -33,29 +36,31 @@ export function SiteSwitcher({
 
   if (!current) {
     return (
-      <span className="text-xs text-muted-foreground">No site assigned</span>
+      <Button asChild variant="outline" size="sm" className="gap-1.5">
+        <Link href="/admin/sites/new">
+          <Plus className="h-3.5 w-3.5" />
+          <span>Create a site</span>
+        </Link>
+      </Button>
     );
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-2"
-          disabled={pending || sites.length <= 1}
-        >
+        <Button variant="ghost" size="sm" className="gap-2" disabled={pending}>
           <Building2 className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium">{current.name}</span>
           <span className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
             {current.country}
           </span>
-          {sites.length > 1 ? <ChevronDown className="h-4 w-4 opacity-60" /> : null}
+          <ChevronDown className="h-4 w-4 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuLabel>Switch site</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          Your sites ({sites.length})
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {sites.map((s) => (
           <DropdownMenuItem
@@ -78,6 +83,17 @@ export function SiteSwitcher({
             {s.id === current.id ? <Check className="h-4 w-4" /> : null}
           </DropdownMenuItem>
         ))}
+        {canCreateSite && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/admin/sites/new" className="flex items-center gap-2">
+                <Plus className="h-4 w-4 text-muted-foreground" />
+                <span>Create new site</span>
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

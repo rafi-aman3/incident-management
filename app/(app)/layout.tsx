@@ -38,6 +38,35 @@ async function AppShell({ children }: { children: ReactNode }) {
     )
     .filter((s): s is { id: string; name: string; country: "US" | "GB" } => s !== null);
 
+  // Mirror create_site_v1's gating: bootstrap (zero memberships) OR holds
+  // site_admin somewhere. Keeps the "Create new site" affordance off the
+  // dropdown for users who'd just bounce off the destination.
+  const canCreateSite =
+    memberships.length === 0 ||
+    memberships.some((m) => m.role?.key === "site_admin");
+
+  // Raw site_members read (bypasses the membership join's RLS-on-sites
+  // filter) so we can tell whether memberships are truly absent vs. being
+  // hidden because the embedded sites read failed.
+  const { data: rawMembers, error: rawErr } = await supabase
+    .from("site_members")
+    .select("site_id, role_id")
+    .eq("profile_id", profile.id);
+
+  console.log("[AppShell]", {
+    auth_uid: profile.id,
+    profile_email: profile.email,
+    profile_org_id: profile.org_id,
+    memberships_via_join: memberships.length,
+    raw_site_members_for_this_uid: rawMembers?.length ?? 0,
+    raw_query_error: rawErr?.message ?? null,
+    sites_visible_in_switcher: sites.length,
+    sites: sites.map((s) => `${s.name} (${s.country})`),
+    current_site_id: currentSiteId,
+    current_role: currentRoleKey,
+    can_create_site: canCreateSite,
+  });
+
   let notifications: NotificationItem[] = [];
   if (currentSiteId) {
     // Bell shows: site-wide regulatory deadlines (recipient_id NULL) +
@@ -73,6 +102,7 @@ async function AppShell({ children }: { children: ReactNode }) {
         <Topbar
           sites={sites}
           currentSiteId={currentSiteId}
+          canCreateSite={canCreateSite}
           notifications={notifications}
           fullName={fullName}
           email={profile.email}
