@@ -943,6 +943,7 @@ export type Database = {
           created_at: string
           id: string
           industry: Database["public"]["Enums"]["industry_type"] | null
+          is_demo: boolean
           name: string
           slug: string
           updated_at: string
@@ -951,6 +952,7 @@ export type Database = {
           created_at?: string
           id?: string
           industry?: Database["public"]["Enums"]["industry_type"] | null
+          is_demo?: boolean
           name: string
           slug: string
           updated_at?: string
@@ -959,6 +961,7 @@ export type Database = {
           created_at?: string
           id?: string
           industry?: Database["public"]["Enums"]["industry_type"] | null
+          is_demo?: boolean
           name?: string
           slug?: string
           updated_at?: string
@@ -1183,6 +1186,45 @@ export type Database = {
           {
             foreignKeyName: "severity_overrides_overridden_by_fkey"
             columns: ["overridden_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_annual_hours: {
+        Row: {
+          hours_worked: number
+          site_id: string
+          updated_at: string
+          updated_by: string | null
+          year: number
+        }
+        Insert: {
+          hours_worked: number
+          site_id: string
+          updated_at?: string
+          updated_by?: string | null
+          year: number
+        }
+        Update: {
+          hours_worked?: number
+          site_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_annual_hours_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_annual_hours_updated_by_fkey"
+            columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1860,6 +1902,19 @@ export type Database = {
       }
     }
     Functions: {
+      assign_capa_from_investigation_v1: {
+        Args: {
+          p_actor_id: string
+          p_description: string
+          p_due_date: string
+          p_investigation_id: string
+          p_owner_id: string
+          p_title: string
+          p_type: Database["public"]["Enums"]["capa_type"]
+          p_verifier_id: string
+        }
+        Returns: string
+      }
       classify_incident_v1: {
         Args: {
           p_actor_id: string
@@ -1875,6 +1930,10 @@ export type Database = {
         Args: { p_permission: string; p_site_id: string }
         Returns: boolean
       }
+      load_sample_chain_v1: {
+        Args: { p_actor_id: string; p_site_id: string; p_verifier_id: string }
+        Returns: string
+      }
       next_ref_code: {
         Args: { p_prefix: string; p_seq: string }
         Returns: string
@@ -1883,9 +1942,21 @@ export type Database = {
         Args: { e: Database["public"]["Tables"]["activity_events"]["Row"] }
         Returns: string
       }
+      reset_demo_data_v1: { Args: { p_org_id: string }; Returns: undefined }
       resolve_permissions: { Args: { p_site_id: string }; Returns: string[] }
       seed_default_roles: { Args: { p_org_id: string }; Returns: undefined }
       user_can_access_site: { Args: { p_site_id: string }; Returns: boolean }
+      verify_capa_v1: {
+        Args: {
+          p_actor_id: string
+          p_capa_id: string
+          p_method: Database["public"]["Enums"]["verification_method"]
+          p_notes: string
+          p_re_verify_at: string
+          p_result: Database["public"]["Enums"]["verification_result"]
+        }
+        Returns: string
+      }
     }
     Enums: {
       body_part:
