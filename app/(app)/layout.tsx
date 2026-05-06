@@ -1,6 +1,7 @@
 import { ReactNode, Suspense } from "react";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-shell/app-sidebar";
+import { cookies } from "next/headers";
+import { SidebarShell } from "@/components/app-shell/sidebar-shell";
+import { SIDEBAR_PINNED_COOKIE } from "@/components/app-shell/sidebar-cookie";
 import { Topbar } from "@/components/app-shell/topbar";
 import { RegulatoryBanner } from "@/components/app-shell/regulatory-banner";
 import { NAV_ITEMS, ROLE_BADGE } from "@/components/app-shell/nav-config";
@@ -95,10 +96,16 @@ async function AppShell({ children }: { children: ReactNode }) {
   const fullName = profile.full_name ?? profile.email;
   const roleLabel = ROLE_BADGE[currentRoleKey].label;
 
+  const cookieStore = await cookies();
+  const sidebarPinned = cookieStore.get(SIDEBAR_PINNED_COOKIE)?.value === "true";
+
   return (
-    <SidebarProvider defaultOpen>
-      <AppSidebar allowedHrefs={allowedHrefs} userLabel={fullName} roleLabel={roleLabel} />
-      <SidebarInset>
+    <SidebarShell
+      defaultPinned={sidebarPinned}
+      allowedHrefs={allowedHrefs}
+      userLabel={fullName}
+      roleLabel={roleLabel}
+      topbar={
         <Topbar
           sites={sites}
           currentSiteId={currentSiteId}
@@ -110,21 +117,22 @@ async function AppShell({ children }: { children: ReactNode }) {
           roleKey={currentRoleKey}
           currentSiteName={currentMembership?.site?.name ?? null}
         />
-        <RegulatoryBanner deadlines={notifications} />
-        <main className="flex-1 px-6 py-6">{children}</main>
-      </SidebarInset>
-    </SidebarProvider>
+      }
+      banner={<RegulatoryBanner deadlines={notifications} />}
+    >
+      {children}
+    </SidebarShell>
   );
 }
 
 function AppShellFallback() {
   return (
     <div className="flex min-h-screen w-full">
-      <aside className="hidden w-64 shrink-0 border-r bg-sidebar p-4 md:block">
-        <Skeleton className="mb-6 h-8 w-32" />
+      <aside className="hidden w-[60px] shrink-0 border-r bg-sidebar p-2 md:block">
+        <Skeleton className="mx-auto mb-4 h-8 w-8 rounded-lg" />
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-8 w-full" />
+            <Skeleton key={i} className="mx-auto h-8 w-8 rounded-md" />
           ))}
         </div>
       </aside>
