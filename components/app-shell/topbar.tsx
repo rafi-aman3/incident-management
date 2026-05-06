@@ -1,10 +1,10 @@
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SiteSwitcher, type SwitcherSite } from "./site-switcher";
 import { NotificationBell, type NotificationItem } from "./notification-bell";
 import { HelpDrawer } from "./help-drawer";
 import { UserMenu } from "./user-menu";
 import { SearchTrigger } from "./search-trigger";
+import { MobileMenuButton } from "./mobile-menu-button";
 import type { RoleKey } from "@/lib/supabase/auth";
 
 export function Topbar({
@@ -30,9 +30,9 @@ export function Topbar({
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      {/* Hamburger: only shown below lg, where shadcn sidebar primitive is in
-          Sheet mode. Above lg, the 6k pin/hover-drawer rail handles toggling. */}
-      <SidebarTrigger className="-ml-1 lg:hidden" />
+      {/* Hamburger: only shown below lg, where the shadcn sidebar primitive is
+          in Sheet mode. Above lg, the 6k pin/hover-drawer rail handles toggling. */}
+      <MobileMenuButton className="-ml-1 lg:hidden" />
       <Separator orientation="vertical" className="mx-1 h-5 lg:hidden" />
       <SiteSwitcher sites={sites} currentSiteId={currentSiteId} canCreateSite={canCreateSite} />
       <div className="mx-auto hidden flex-1 justify-center px-4 md:flex">
