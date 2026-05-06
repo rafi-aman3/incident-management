@@ -50,10 +50,15 @@ const CreateTemplateSchema = z.object({
   description: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 
-export async function createTemplate(
+// useActionState-compatible variant — accepts the previous state as first arg.
+export async function createTemplateForForm(
   _prev: ActionResult | null,
   fd: FormData
 ): Promise<ActionResult> {
+  return createTemplate(fd);
+}
+
+export async function createTemplate(fd: FormData): Promise<ActionResult> {
   const parsed = CreateTemplateSchema.safeParse({
     name: fd.get("name"),
     industry: fd.get("industry"),
