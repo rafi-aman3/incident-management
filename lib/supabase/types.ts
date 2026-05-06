@@ -2865,6 +2865,10 @@ export type Database = {
       }
     }
     Functions: {
+      archive_document_v1: {
+        Args: { p_document_id: string; p_force?: boolean; p_reason?: string }
+        Returns: undefined
+      }
       assign_capa_from_investigation_v1: {
         Args: {
           p_actor_id: string
@@ -2877,6 +2881,13 @@ export type Database = {
           p_verifier_id: string
         }
         Returns: string
+      }
+      can_edit_parent: {
+        Args: {
+          p_parent_id: string
+          p_parent_type: Database["public"]["Enums"]["document_link_parent"]
+        }
+        Returns: boolean
       }
       classify_incident_v1: {
         Args: {
@@ -2906,6 +2917,15 @@ export type Database = {
         Args: { p_preset_id: string }
         Returns: string
       }
+      link_document_v1: {
+        Args: {
+          p_document_id: string
+          p_link_role?: string
+          p_parent_id: string
+          p_parent_type: Database["public"]["Enums"]["document_link_parent"]
+        }
+        Returns: string
+      }
       load_sample_chain_v1: {
         Args: { p_actor_id: string; p_site_id: string; p_verifier_id: string }
         Returns: string
@@ -2928,10 +2948,21 @@ export type Database = {
         Returns: undefined
       }
       regenerate_item_ids: { Args: { p_items: Json }; Returns: Json }
+      replace_document_file_v1: {
+        Args: {
+          p_document_id: string
+          p_file_name: string
+          p_mime_type: string
+          p_size_bytes: number
+          p_storage_path: string
+        }
+        Returns: undefined
+      }
       reset_demo_data_v1: { Args: { p_org_id: string }; Returns: undefined }
       resolve_org_permissions: { Args: never; Returns: string[] }
       resolve_permissions: { Args: { p_site_id: string }; Returns: string[] }
       seed_default_roles: { Args: { p_org_id: string }; Returns: undefined }
+      unlink_document_v1: { Args: { p_link_id: string }; Returns: undefined }
       user_can_access_site: { Args: { p_site_id: string }; Returns: boolean }
       verify_capa_v1: {
         Args: {
