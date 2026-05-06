@@ -6,12 +6,12 @@ import {
   Bell,
   AlertOctagon,
   AlertTriangle,
-  Clock,
   ListChecks,
   Flag,
   Stethoscope,
   CalendarClock,
   CheckCircle2,
+  Check,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -166,7 +166,7 @@ function Row({ notification }: { notification: NotificationItem }) {
             disabled={isPending}
             className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
           >
-            <Clock className="mr-0.5 inline h-3 w-3" /> Mark resolved
+            <Check className="mr-0.5 inline h-3 w-3" /> Mark resolved
           </button>
         </form>
       </div>

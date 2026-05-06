@@ -12,6 +12,7 @@ import {
 } from "@/components/onboarding/role-welcome-card";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
+import type { TooltipKey } from "@/lib/constants/tooltips";
 import { trir, dart, formatKpi, isDartCase } from "@/lib/format/kpi";
 
 export default async function DashboardPage() {
@@ -30,38 +31,58 @@ export default async function DashboardPage() {
   const canReportIncident = currentSiteId ? await can("incident:report", currentSiteId) : false;
   const canReadSite = currentSiteId ? await can("incident:read_site", currentSiteId) : false;
 
-  // Recent incidents (sandbox excluded)
-  const recentIncidents = canReadSite
-    ? (
-        await supabase
-          .from("incidents")
-          .select("id, ref_code, type, title, severity, track, status, occurred_at")
-          .eq("site_id", currentSiteId!)
-          .eq("is_sandbox", false)
-          .is("deleted_at", null)
-          .order("occurred_at", { ascending: false })
-          .limit(5)
-      ).data ?? []
-    : [];
-
-  // ----- Live KPIs (TRIR / DART) for the current calendar year -----
-  // Pulls recordable cases joined to injured_persons; reads annual hours
-  // from site_annual_hours. Returns null (rendered "—") when hours not set.
+  // ----- Live KPIs for the current calendar year -----
+  // Open / S1+S2 are true site-wide counts via head:true count queries;
+  // TRIR / DART pull recordable cases joined to injured_persons + reads
+  // site_annual_hours. Returns null (rendered "—") when hours not set.
   const year = new Date().getFullYear();
   const yearStart = `${year}-01-01`;
   const yearEnd = `${year + 1}-01-01`;
 
+  let recentIncidents: Array<{
+    id: string;
+    ref_code: string | null;
+    type: string;
+    title: string | null;
+    severity: string | null;
+    track: string | null;
+    status: string | null;
+    occurred_at: string | null;
+  }> = [];
+  let openCount = 0;
+  let s1s2Count = 0;
   let recordableCases = 0;
   let dartCases = 0;
   let hoursWorked: number | null = null;
 
   if (canReadSite && currentSiteId) {
-    const [recordableRes, hoursRes] = await Promise.all([
+    const [recentRes, openRes, s1s2Res, recordableRes, hoursRes] = await Promise.all([
       supabase
         .from("incidents")
-        .select(
-          "id, injured_persons(days_away, days_restricted, fatality)"
-        )
+        .select("id, ref_code, type, title, severity, track, status, occurred_at")
+        .eq("site_id", currentSiteId)
+        .eq("is_sandbox", false)
+        .is("deleted_at", null)
+        .order("occurred_at", { ascending: false })
+        .limit(5),
+      supabase
+        .from("incidents")
+        .select("id", { count: "exact", head: true })
+        .eq("site_id", currentSiteId)
+        .eq("is_sandbox", false)
+        .is("deleted_at", null)
+        .neq("status", "closed"),
+      supabase
+        .from("incidents")
+        .select("id", { count: "exact", head: true })
+        .eq("site_id", currentSiteId)
+        .eq("is_sandbox", false)
+        .is("deleted_at", null)
+        .in("severity", ["S1", "S2"])
+        .neq("status", "closed"),
+      supabase
+        .from("incidents")
+        .select("id, injured_persons(days_away, days_restricted, fatality)")
         .eq("site_id", currentSiteId)
         .eq("osha_recordable", true)
         .eq("is_sandbox", false)
@@ -75,6 +96,9 @@ export default async function DashboardPage() {
         .eq("year", year)
         .maybeSingle(),
     ]);
+    recentIncidents = recentRes.data ?? [];
+    openCount = openRes.count ?? 0;
+    s1s2Count = s1s2Res.count ?? 0;
     const incs = recordableRes.data ?? [];
     recordableCases = incs.length;
     dartCases = incs.filter((inc) =>
@@ -85,30 +109,28 @@ export default async function DashboardPage() {
     hoursWorked = hoursRes.data?.hours_worked ?? null;
   }
 
-  const kpiCards: {
+  const kpiCards: Array<{
     label: string;
     value: string;
-    tip: "severity_codes" | null;
+    tip: TooltipKey | null;
     hint: string;
-  }[] = [
+  }> = [
     {
       label: "Open incidents",
-      value: String(recentIncidents.filter((i) => i.status !== "closed").length),
+      value: String(openCount),
       tip: null,
-      hint: "Site-scoped count",
+      hint: "Not yet closed",
     },
     {
-      label: "S1 / S2 (Track A)",
-      value: String(
-        recentIncidents.filter((i) => i.severity === "S1" || i.severity === "S2").length
-      ),
+      label: "S1 / S2 open",
+      value: String(s1s2Count),
       tip: "severity_codes",
-      hint: "From the last 5 reports",
+      hint: "Track A — full investigation",
     },
     {
       label: `TRIR (${year})`,
       value: formatKpi(trir(recordableCases, hoursWorked)),
-      tip: null,
+      tip: "trir_dart_formula",
       hint: hoursWorked
         ? `${recordableCases} recordable / ${(hoursWorked / 1000).toFixed(0)}k hr`
         : "Set annual hours on the 300A",
@@ -116,13 +138,14 @@ export default async function DashboardPage() {
     {
       label: `DART (${year})`,
       value: formatKpi(dart(dartCases, hoursWorked)),
-      tip: null,
+      tip: "trir_dart_formula",
       hint: hoursWorked ? `${dartCases} DART case${dartCases === 1 ? "" : "s"}` : "Set annual hours on the 300A",
     },
   ];
 
   const showWelcome = profile.seen_welcome === false;
-  const firstName = profile.full_name?.split(" ")[0] ?? "there";
+  const firstName =
+    profile.full_name?.split(" ")[0] ?? profile.email.split("@")[0] ?? "there";
 
   return (
     <TooltipProvider>
@@ -130,9 +153,7 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Dashboard</p>
-            <h1 className="text-2xl font-semibold">
-              Hi, {profile.full_name?.split(" ")[0] ?? profile.email}
-            </h1>
+            <h1 className="text-2xl font-semibold">Hi, {firstName}</h1>
             <p className="text-sm text-muted-foreground">
               Site-scoped activity, regulatory clocks, and quick actions.
             </p>
@@ -172,8 +193,18 @@ export default async function DashboardPage() {
               </Link>
             </div>
             {recentIncidents.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">
-                No incidents yet — when reports come in, they show up here.
+              <div className="flex flex-col items-center gap-3 p-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No incidents yet — when reports come in, they show up here.
+                </p>
+                {canReportIncident && (
+                  <Link
+                    href="/incidents/new/1"
+                    className="inline-flex items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent"
+                  >
+                    <Plus className="h-3 w-3" /> Report your first incident
+                  </Link>
+                )}
               </div>
             ) : (
               <ul className="divide-y">
@@ -219,6 +250,15 @@ export default async function DashboardPage() {
             >
               <Plus className="h-4 w-4" /> Start a report
             </Link>
+          </section>
+        )}
+
+        {!currentSiteId && (
+          <section className="rounded-md border border-dashed p-8 text-center">
+            <h2 className="text-base font-semibold">No site selected</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pick a site from the switcher in the top bar to see activity, KPIs, and reports.
+            </p>
           </section>
         )}
 

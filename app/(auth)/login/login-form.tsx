@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const initialState: LoginState | null = null;
+const DEMO_PASSWORD = "Demo!2026";
 
 export function LoginForm({
   next,
@@ -16,8 +17,9 @@ export function LoginForm({
   demoAccounts: { label: string; email: string }[];
 }) {
   const [state, formAction, pending] = useActionState(signIn, initialState);
+  const showDemo = demoAccounts.length > 0;
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("Demo!2026");
+  const [password, setPassword] = useState(showDemo ? DEMO_PASSWORD : "");
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -50,24 +52,29 @@ export function LoginForm({
       </div>
 
       {state && !state.ok ? (
-        <p className="text-sm text-destructive">{state.error}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {state.error}
+        </p>
       ) : null}
 
       <Button type="submit" disabled={pending} className="w-full">
         {pending ? "Signing in…" : "Sign in"}
       </Button>
 
-      {demoAccounts.length > 0 ? (
+      {showDemo ? (
         <div className="rounded-lg border bg-muted/50 p-3">
           <p className="text-xs font-medium text-muted-foreground">
-            Demo accounts (password <code className="font-mono">Demo!2026</code>)
+            Demo accounts (password <code className="font-mono">{DEMO_PASSWORD}</code>)
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {demoAccounts.map((a) => (
               <button
                 key={a.email}
                 type="button"
-                onClick={() => setEmail(a.email)}
+                onClick={() => {
+                  setEmail(a.email);
+                  setPassword(DEMO_PASSWORD);
+                }}
                 className="rounded-full border bg-background px-2.5 py-1 text-xs hover:bg-accent"
               >
                 {a.label}
