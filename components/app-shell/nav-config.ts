@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   AlertOctagon,
   Boxes,
+  CalendarDays,
   ClipboardCheck,
   ClipboardList,
   ClipboardSignature,
@@ -51,6 +52,7 @@ export const NAV_ITEMS: ReadonlyArray<NavItem> = [
   // because the perms are granted to the user's role at every site.
   { href: "/resources/assets",    label: "Assets",     icon: Boxes,         permission: "asset:read_site" },
   { href: "/resources/documents", label: "Documents",  icon: Files,         permission: "document:read_org" },
+  { href: "/planner",         label: "Planner",         icon: CalendarDays,       permission: "planner:read" },
   { href: "/reports",         label: "Reports",         icon: FileBarChart,       permission: "incident:read_site" },
   { href: "/admin",           label: "Admin",           icon: Settings2,          permission: "site:configure" },
 ];

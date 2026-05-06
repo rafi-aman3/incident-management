@@ -58,6 +58,7 @@ export const PERMISSIONS = [
   "document:archive",
   "document_link:create",
   "document_link:remove",
+  "planner:read",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];

@@ -36,7 +36,10 @@ export type TooltipKey =
   | "asset_unsafe_condition"
   | "document_expiry_retention"
   | "library_link_reuse"
-  | "sds_auto_attach_intent";
+  | "sds_auto_attach_intent"
+  // Phase 5 — Planner
+  | "planner_aggregation_rule"
+  | "planner_url_share";
 
 export const REG_TOOLTIPS: Record<TooltipKey, { term: string; copy: string }> = {
   osha_recordable: {
@@ -177,5 +180,17 @@ export const REG_TOOLTIPS: Record<TooltipKey, { term: string; copy: string }> = 
     term: "SDS auto-attach (v2)",
     copy:
       "When a chemical is named on an incident, the platform should pre-attach its Safety Data Sheet from the SDS Manager library. v1 surfaces the link picker so it's a one-click attach; the SDS Manager API integration that auto-suggests the SDS lands in v2.",
+  },
+
+  // ---- Phase 5 ----
+  planner_aggregation_rule: {
+    term: "How the planner aggregates",
+    copy:
+      "Planner aggregates every dated event across modules — it's read-only. Edit each event from its source record (incident, inspection, CAPA, asset, investigation, or regulatory notification).",
+  },
+  planner_url_share: {
+    term: "Planner URLs are shareable",
+    copy:
+      "Click any event to jump to its source record. The URL captures the current view, date, site, and event-type filters — copy it to share a specific calendar window with a teammate.",
   },
 };
