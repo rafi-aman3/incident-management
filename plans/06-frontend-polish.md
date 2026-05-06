@@ -85,6 +85,7 @@ The order ships modules in the order a stakeholder would actually click through 
 | 8 | Resources | [06h-resources-polish.md](06h-resources-polish.md) | `/resources/assets/{,new,[id],[id]/edit}`, `/resources/documents/{,new,[id]}` | medium |
 | 9 | Planner | [06i-planner-polish.md](06i-planner-polish.md) | `/planner` | small-medium |
 | 10 | Admin | [06j-admin-polish.md](06j-admin-polish.md) | `/admin`, `/admin/demo`, `/admin/site-setup/[step]` | small-medium |
+| 11 | Sidebar (global) | [06k-sidebar-polish.md](06k-sidebar-polish.md) | App shell sidebar — pin/hover-drawer behavior across every app page | small-medium |
 
 **Branching:** one branch per module, `feat/phase-6-<module>-polish` (e.g. `feat/phase-6-incidents-polish`), branched off `main`. Each PR uses the project's standard PR template + a fresh "What changed" gallery for visual diffs (before/after screenshots for any swap that's not just a token).
 
