@@ -24,7 +24,14 @@ export type TooltipKey =
   | "riddor_deadlines"
   | "dangerous_occurrence"
   | "body_map_guidance"
-  | "trir_dart_formula";
+  | "trir_dart_formula"
+  // Phase 3 — Templates + Inspections
+  | "template_import_clones"
+  | "template_publish_immutable"
+  | "template_versions_audit"
+  | "all_sites_assignment"
+  | "flagged_response_finding"
+  | "finding_escalation";
 
 export const REG_TOOLTIPS: Record<TooltipKey, { term: string; copy: string }> = {
   osha_recordable: {
@@ -113,5 +120,37 @@ export const REG_TOOLTIPS: Record<TooltipKey, { term: string; copy: string }> = 
     term: "TRIR / DART formula",
     copy:
       "TRIR = (recordable cases × 200,000) / hours worked. DART = (cases with days away or restricted × 200,000) / hours worked. The 200,000 multiplier represents 100 workers × 40 hr × 50 weeks — OSHA's standard exposure window.",
+  },
+
+  // ---- Phase 3 ----
+  template_import_clones: {
+    term: "Importing a preset",
+    copy:
+      "Imports copy the items into your org so you can edit and publish your own version. The preset itself stays untouched — re-importing creates a separate copy.",
+  },
+  template_publish_immutable: {
+    term: "Publishing creates a new version",
+    copy:
+      "Each publish creates an immutable template_versions row. In-flight inspections continue running against the version they were started with — even if you re-edit and publish v3 mid-cycle, an inspector on v2 finishes on v2.",
+  },
+  template_versions_audit: {
+    term: "Why versions are immutable",
+    copy:
+      "Once published, a version's items can never change. That's how the runner can promise inspectors and auditors that the checklist they're filling out won't get rewritten under them mid-shift.",
+  },
+  all_sites_assignment: {
+    term: "Assigning to all sites",
+    copy:
+      "Assigns the active version to every site you have template:assign on. For child sites: they only inherit when 'include children' is checked on the parent here. Otherwise child-site members see the template only if they're directly added below.",
+  },
+  flagged_response_finding: {
+    term: "Failed responses become findings",
+    copy:
+      "Any answer marked as 'failed' in its answer set creates an inspection_findings row on submit. The EHS team can review, mark resolved with notes, or escalate to an incident — which pre-fills the Report Wizard with the finding context.",
+  },
+  finding_escalation: {
+    term: "Escalating a finding",
+    copy:
+      "Creates a draft incident pre-filled from the finding (item label + comment as description). The new incident shows up under the same site and tracks back to this finding via escalated_incident_id — so reporting can audit the chain.",
   },
 };

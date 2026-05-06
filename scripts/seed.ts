@@ -8,6 +8,13 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { PRESETS } from "../lib/templates/presets/preset-data";
+import { walkAnswerable } from "../lib/templates/items";
+import type {
+  TemplateNodeItem,
+  TemplateData,
+  InspectionAnswer,
+} from "../lib/templates/types";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -886,6 +893,380 @@ async function seedNotifications(
 }
 
 // ---------------------------------------------------------------------------
+// 14. Phase 3 — Templates: system-preset library + UCB clones + assignments +
+//     simulated in-progress / completed inspections so /inspections lands
+//     on populated state.
+// ---------------------------------------------------------------------------
+
+async function ensureSystemPresets(): Promise<Map<string, string>> {
+  // Returns slug → template_id for each system preset (re-using existing
+  // rows where possible).
+  const out = new Map<string, string>();
+  for (const preset of PRESETS) {
+    const { data: existing } = await sb
+      .from("templates")
+      .select("id, current_version_id")
+      .eq("slug", preset.slug)
+      .eq("is_system_preset", true)
+      .maybeSingle();
+
+    let templateId: string;
+    let versionId: string | null = null;
+
+    if (existing) {
+      templateId = existing.id;
+      versionId = existing.current_version_id;
+    } else {
+      const { data: t, error: tErr } = await sb
+        .from("templates")
+        .insert({
+          org_id: null,
+          slug: preset.slug,
+          name: preset.name,
+          description: preset.description,
+          industry: preset.industry,
+          status: "published",
+          is_system_preset: true,
+          is_featured: preset.is_featured,
+          is_imported: false,
+          logo_url: preset.logo_url ?? null,
+        })
+        .select("id")
+        .single();
+      if (tErr || !t) throw tErr ?? new Error("preset insert failed");
+      templateId = t.id;
+    }
+
+    // Always overwrite content if no version exists yet — lets us iterate
+    // on preset content without manual cleanup. Once seeded, we leave
+    // versions alone so demo edits aren't blown away.
+    if (!versionId) {
+      const { data: v, error: vErr } = await sb
+        .from("template_versions")
+        .insert({
+          template_id: templateId,
+          version_number: 1,
+          status: "published",
+          change_summary: "Seeded from preset library",
+          published_at: new Date().toISOString(),
+          header: preset.header as unknown as object,
+          items: preset.items as unknown as object,
+          template_data: preset.template_data as unknown as object,
+        })
+        .select("id")
+        .single();
+      if (vErr || !v) throw vErr ?? new Error("preset version insert failed");
+      versionId = v.id;
+
+      const { error: linkErr } = await sb
+        .from("templates")
+        .update({ current_version_id: versionId })
+        .eq("id", templateId);
+      if (linkErr) throw linkErr;
+    }
+
+    out.set(preset.slug, templateId);
+  }
+  log(`system-preset library: ${out.size} presets ensured`);
+  return out;
+}
+
+async function ensureClonedTemplates(
+  orgId: string,
+  presetIds: Map<string, string>,
+  users: Map<string, string>
+): Promise<Map<string, { templateId: string; versionId: string; preset: typeof PRESETS[number] }>> {
+  // Clone two presets into UCB and publish v1 — one for Houston (mfg-leaning)
+  // and one for Manchester (office-leaning), per the seed's existing site
+  // characterization in project_site_names.md.
+  const TARGETS = [
+    { presetSlug: "forklift-pre-use-inspection", localName: "UCB Forklift Pre-Use" },
+    { presetSlug: "office-ergonomic-workstation", localName: "UCB Office Ergonomic Check" },
+  ];
+  const ehs = users.get("ehs@demo.local");
+  const out = new Map<
+    string,
+    { templateId: string; versionId: string; preset: typeof PRESETS[number] }
+  >();
+
+  for (const target of TARGETS) {
+    const presetId = presetIds.get(target.presetSlug);
+    if (!presetId) continue;
+    const preset = PRESETS.find((p) => p.slug === target.presetSlug)!;
+
+    // Idempotency: a UCB template with the same source_preset_id is the seeded clone
+    const { data: existing } = await sb
+      .from("templates")
+      .select("id, current_version_id")
+      .eq("org_id", orgId)
+      .eq("source_preset_id", presetId)
+      .maybeSingle();
+
+    let templateId: string;
+    let versionId: string | null = null;
+
+    if (existing) {
+      templateId = existing.id;
+      versionId = existing.current_version_id;
+    } else {
+      const { data: t, error: tErr } = await sb
+        .from("templates")
+        .insert({
+          org_id: orgId,
+          name: target.localName,
+          description: preset.description,
+          industry: preset.industry,
+          status: "published",
+          is_system_preset: false,
+          is_imported: true,
+          source_preset_id: presetId,
+          created_by: ehs ?? null,
+        })
+        .select("id")
+        .single();
+      if (tErr || !t) throw tErr ?? new Error("clone insert failed");
+      templateId = t.id;
+    }
+
+    if (!versionId) {
+      // Reuse the preset's items as v1 content (regenerating UUIDs is the
+      // RPC's job; for the seed we accept identical IDs since the demo
+      // never imports the same preset twice into the same org)
+      const { data: v, error: vErr } = await sb
+        .from("template_versions")
+        .insert({
+          template_id: templateId,
+          version_number: 1,
+          status: "published",
+          change_summary: "Seeded clone — initial publish",
+          published_at: new Date().toISOString(),
+          published_by: ehs ?? null,
+          header: preset.header as unknown as object,
+          items: preset.items as unknown as object,
+          template_data: preset.template_data as unknown as object,
+        })
+        .select("id")
+        .single();
+      if (vErr || !v) throw vErr ?? new Error("clone version insert failed");
+      versionId = v.id;
+
+      await sb.from("templates").update({ current_version_id: versionId }).eq("id", templateId);
+    }
+
+    out.set(target.presetSlug, { templateId, versionId: versionId!, preset });
+  }
+  log(`UCB cloned templates: ${out.size}`);
+  return out;
+}
+
+async function ensureTemplateAssignments(
+  cloned: Map<string, { templateId: string; versionId: string; preset: typeof PRESETS[number] }>,
+  sites: Map<string, string>,
+  users: Map<string, string>
+) {
+  const houston = sites.get("houston");
+  const manchester = sites.get("manchester");
+  const ehs = users.get("ehs@demo.local");
+  if (!houston || !manchester) return;
+
+  const desired: Array<{
+    presetSlug: string;
+    siteId: string;
+    schedule_kind: "daily" | "weekly" | "monthly" | "custom" | "on_demand";
+    start_time_local?: string;
+  }> = [
+    {
+      presetSlug: "forklift-pre-use-inspection",
+      siteId: houston,
+      schedule_kind: "daily",
+      start_time_local: "06:00",
+    },
+    {
+      presetSlug: "office-ergonomic-workstation",
+      siteId: manchester,
+      schedule_kind: "weekly",
+      start_time_local: "09:00",
+    },
+  ];
+
+  for (const d of desired) {
+    const c = cloned.get(d.presetSlug);
+    if (!c) continue;
+
+    const { data: existing } = await sb
+      .from("template_assignments")
+      .select("id")
+      .eq("template_id", c.templateId)
+      .eq("site_id", d.siteId)
+      .is("unassigned_at", null)
+      .maybeSingle();
+    if (existing) continue;
+
+    const { error } = await sb.from("template_assignments").insert({
+      template_id: c.templateId,
+      template_version_id: c.versionId,
+      site_id: d.siteId,
+      include_children: true,
+      schedule_kind: d.schedule_kind,
+      start_time_local: d.start_time_local ?? null,
+      assigned_by: ehs ?? null,
+    });
+    if (error) throw error;
+  }
+  log("template assignments seeded for Houston + Manchester");
+}
+
+// Build a denormalized question-answer payload (matches the runner's
+// buildQuestionAnswer helper) without dragging React imports in.
+function buildSeedQuestionAnswer(
+  templateData: TemplateData,
+  answerSetId: string,
+  responseId: string,
+  notes?: string
+): InspectionAnswer {
+  const set = templateData.answer_sets[answerSetId];
+  const r = set?.responses.find((x) => x.id === responseId);
+  const max = set?.responses.reduce(
+    (m, x) => Math.max(m, x.enable_score && typeof x.score === "number" ? x.score : 0),
+    0
+  );
+  return {
+    selected_option_id: responseId,
+    selected_option_failed: r?.failed ?? false,
+    selected_option_score: r?.enable_score && typeof r.score === "number" ? r.score : 0,
+    selected_option_max: max ?? 0,
+    selected_option_label: r?.label ?? "",
+    notes,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function ensureSimulatedInspections(
+  orgId: string,
+  cloned: Map<string, { templateId: string; versionId: string; preset: typeof PRESETS[number] }>,
+  sites: Map<string, string>,
+  users: Map<string, string>
+) {
+  // Only seed if we don't already have any inspections in this org.
+  // (Tracks whether the demo has been run — keeps re-runs idempotent.)
+  const { count } = await sb
+    .from("inspections")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId);
+  if ((count ?? 0) > 0) {
+    log("inspections already present — skipping simulation");
+    return;
+  }
+
+  const houston = sites.get("houston");
+  const worker = users.get("worker@demo.local");
+  const ehs = users.get("ehs@demo.local");
+  const forklift = cloned.get("forklift-pre-use-inspection");
+  if (!houston || !worker || !ehs || !forklift) return;
+
+  const items = forklift.preset.items;
+  const td = forklift.preset.template_data;
+  const compliantId = "as-passfail-p";
+  const failedId = "as-passfail-f";
+
+  // ---- 1. In-progress inspection (started this morning, ~30% answered)
+  const answerable = [...walkAnswerable(items)].filter((it) => it.type === "question");
+  const inProgressAnswers: Record<string, InspectionAnswer> = {};
+  for (let i = 0; i < Math.min(3, answerable.length); i++) {
+    const it = answerable[i];
+    const setId = (it.options?.answer_set as string) ?? "as-passfail";
+    inProgressAnswers[it.item_id] = buildSeedQuestionAnswer(td, setId, compliantId);
+  }
+
+  const { error: ipErr } = await sb.from("inspections").insert({
+    org_id: orgId,
+    template_id: forklift.templateId,
+    template_version_id: forklift.versionId,
+    site_id: houston,
+    title: "Forklift FL-12 — morning check (in progress)",
+    inspector_id: worker,
+    status: "in_progress",
+    started_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+    conducted_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+    answers: inProgressAnswers as unknown as object,
+  });
+  if (ipErr) throw ipErr;
+
+  // ---- 2. Completed inspection (yesterday, 1 failed item -> finding)
+  const completedAnswers: Record<string, InspectionAnswer> = {};
+  let failedItem: TemplateNodeItem | null = null;
+  for (let i = 0; i < answerable.length; i++) {
+    const it = answerable[i];
+    const setId = (it.options?.answer_set as string) ?? "as-passfail";
+    if (i === 1 && it.label?.toLowerCase().includes("hose")) {
+      // Fail the hydraulic-hoses item if present
+      completedAnswers[it.item_id] = buildSeedQuestionAnswer(
+        td,
+        setId,
+        failedId,
+        "Slight leak at the rear coupler. Bench tagged out for service."
+      );
+      failedItem = it;
+    } else {
+      completedAnswers[it.item_id] = buildSeedQuestionAnswer(td, setId, compliantId);
+    }
+  }
+  // If we didn't find a hose item, flag the second answerable as the demo failure
+  if (!failedItem && answerable[1]) {
+    failedItem = answerable[1];
+    const setId = (failedItem.options?.answer_set as string) ?? "as-passfail";
+    completedAnswers[failedItem.item_id] = buildSeedQuestionAnswer(
+      td,
+      setId,
+      failedId,
+      "Issue noted during check; tagged out for follow-up."
+    );
+  }
+
+  const yesterday = new Date(Date.now() - 26 * 3_600_000);
+  const { data: completed, error: cErr } = await sb
+    .from("inspections")
+    .insert({
+      org_id: orgId,
+      template_id: forklift.templateId,
+      template_version_id: forklift.versionId,
+      site_id: houston,
+      title: "Forklift FL-12 — yesterday",
+      inspector_id: worker,
+      status: "completed",
+      started_at: yesterday.toISOString(),
+      conducted_at: yesterday.toISOString(),
+      completed_at: new Date(yesterday.getTime() + 18 * 60_000).toISOString(),
+      answers: completedAnswers as unknown as object,
+      score_total: answerable.length - 1,
+      score_max: answerable.length,
+      is_failed: !!failedItem,
+    })
+    .select("id")
+    .single();
+  if (cErr || !completed) throw cErr ?? new Error("completed inspection failed");
+
+  // Create the corresponding finding row (the RPC normally does this on
+  // complete; for the seed we write it directly so the demo lands on a
+  // populated findings list)
+  if (failedItem) {
+    const { error: fErr } = await sb.from("inspection_findings").insert({
+      inspection_id: completed.id,
+      org_id: orgId,
+      site_id: houston,
+      item_id: failedItem.item_id,
+      item_label: failedItem.label ?? "(unlabeled)",
+      failed_response_label: "Fail",
+      comment: "Slight leak at the rear coupler. Bench tagged out for service.",
+      status: "open",
+    });
+    if (fErr) throw fErr;
+  }
+
+  log("simulated inspections + 1 finding inserted");
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
@@ -902,6 +1283,11 @@ async function main() {
   await ensureRcaWhys(orgId);
   await ensureHseRecord(orgId, users);
   await seedNotifications(orgId, sites, users);
+  // ---- Phase 3: Templates + Inspections ----
+  const presets = await ensureSystemPresets();
+  const cloned = await ensureClonedTemplates(orgId, presets, users);
+  await ensureTemplateAssignments(cloned, sites, users);
+  await ensureSimulatedInspections(orgId, cloned, sites, users);
   log("done.");
 }
 

@@ -44,30 +44,39 @@ export type Database = {
           actor_id: string | null
           capa_id: string | null
           created_at: string
+          finding_id: string | null
           id: string
           incident_id: string | null
+          inspection_id: string | null
           investigation_id: string | null
           payload: Json
+          template_id: string | null
           verb: string
         }
         Insert: {
           actor_id?: string | null
           capa_id?: string | null
           created_at?: string
+          finding_id?: string | null
           id?: string
           incident_id?: string | null
+          inspection_id?: string | null
           investigation_id?: string | null
           payload?: Json
+          template_id?: string | null
           verb: string
         }
         Update: {
           actor_id?: string | null
           capa_id?: string | null
           created_at?: string
+          finding_id?: string | null
           id?: string
           incident_id?: string | null
+          inspection_id?: string | null
           investigation_id?: string | null
           payload?: Json
+          template_id?: string | null
           verb?: string
         }
         Relationships: [
@@ -93,6 +102,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "activity_events_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "inspection_findings"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "activity_events_incident_id_fkey"
             columns: ["incident_id"]
             isOneToOne: false
@@ -107,6 +123,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "activity_events_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_events_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections_active"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "activity_events_investigation_id_fkey"
             columns: ["investigation_id"]
             isOneToOne: false
@@ -118,6 +148,13 @@ export type Database = {
             columns: ["investigation_id"]
             isOneToOne: false
             referencedRelation: "investigations_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_events_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
             referencedColumns: ["id"]
           },
         ]
@@ -610,6 +647,335 @@ export type Database = {
             columns: ["supervisor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inspection_assignees: {
+        Row: {
+          assigned_at: string
+          inspection_id: string
+          profile_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          inspection_id: string
+          profile_id: string
+        }
+        Update: {
+          assigned_at?: string
+          inspection_id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspection_assignees_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_assignees_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_assignees_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inspection_findings: {
+        Row: {
+          comment: string | null
+          created_at: string
+          escalated_incident_id: string | null
+          failed_response_label: string | null
+          id: string
+          inspection_id: string
+          item_id: string
+          item_label: string
+          org_id: string
+          photo_paths: string[]
+          ref_code: string
+          resolved_at: string | null
+          resolved_by: string | null
+          site_id: string
+          status: Database["public"]["Enums"]["finding_status"]
+          updated_at: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          escalated_incident_id?: string | null
+          failed_response_label?: string | null
+          id?: string
+          inspection_id: string
+          item_id: string
+          item_label: string
+          org_id: string
+          photo_paths?: string[]
+          ref_code?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          site_id: string
+          status?: Database["public"]["Enums"]["finding_status"]
+          updated_at?: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          escalated_incident_id?: string | null
+          failed_response_label?: string | null
+          id?: string
+          inspection_id?: string
+          item_id?: string
+          item_label?: string
+          org_id?: string
+          photo_paths?: string[]
+          ref_code?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          site_id?: string
+          status?: Database["public"]["Enums"]["finding_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspection_findings_escalated_incident_id_fkey"
+            columns: ["escalated_incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_findings_escalated_incident_id_fkey"
+            columns: ["escalated_incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_findings_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_findings_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_findings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_findings_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_findings_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inspection_uploads: {
+        Row: {
+          deleted_at: string | null
+          file_name: string
+          id: string
+          inspection_id: string
+          item_id: string
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          deleted_at?: string | null
+          file_name: string
+          id?: string
+          inspection_id: string
+          item_id: string
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          deleted_at?: string | null
+          file_name?: string
+          id?: string
+          inspection_id?: string
+          item_id?: string
+          mime_type?: string
+          size_bytes?: number
+          storage_path?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspection_uploads_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_uploads_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_uploads_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inspections: {
+        Row: {
+          abandon_reason: string | null
+          abandoned_at: string | null
+          answers: Json
+          assignment_id: string | null
+          completed_at: string | null
+          conducted_at: string | null
+          created_at: string
+          deleted_at: string | null
+          header_responses: Json
+          id: string
+          inspector_id: string | null
+          is_failed: boolean
+          org_id: string
+          ref_code: string
+          score_max: number | null
+          score_total: number | null
+          site_id: string
+          started_at: string
+          status: Database["public"]["Enums"]["inspection_status"]
+          template_id: string
+          template_version_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          abandon_reason?: string | null
+          abandoned_at?: string | null
+          answers?: Json
+          assignment_id?: string | null
+          completed_at?: string | null
+          conducted_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          header_responses?: Json
+          id?: string
+          inspector_id?: string | null
+          is_failed?: boolean
+          org_id: string
+          ref_code?: string
+          score_max?: number | null
+          score_total?: number | null
+          site_id: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["inspection_status"]
+          template_id: string
+          template_version_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          abandon_reason?: string | null
+          abandoned_at?: string | null
+          answers?: Json
+          assignment_id?: string | null
+          completed_at?: string | null
+          conducted_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          header_responses?: Json
+          id?: string
+          inspector_id?: string | null
+          is_failed?: boolean
+          org_id?: string
+          ref_code?: string
+          score_max?: number | null
+          score_total?: number | null
+          site_id?: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["inspection_status"]
+          template_id?: string
+          template_version_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspections_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "template_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_inspector_id_fkey"
+            columns: ["inspector_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_template_version_id_fkey"
+            columns: ["template_version_id"]
+            isOneToOne: false
+            referencedRelation: "template_versions"
             referencedColumns: ["id"]
           },
         ]
@@ -1481,6 +1847,226 @@ export type Database = {
           },
         ]
       }
+      template_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          id: string
+          include_children: boolean
+          schedule_cron: string | null
+          schedule_kind: Database["public"]["Enums"]["template_schedule_kind"]
+          site_id: string
+          start_time_local: string | null
+          template_id: string
+          template_version_id: string
+          unassigned_at: string | null
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          include_children?: boolean
+          schedule_cron?: string | null
+          schedule_kind: Database["public"]["Enums"]["template_schedule_kind"]
+          site_id: string
+          start_time_local?: string | null
+          template_id: string
+          template_version_id: string
+          unassigned_at?: string | null
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          include_children?: boolean
+          schedule_cron?: string | null
+          schedule_kind?: Database["public"]["Enums"]["template_schedule_kind"]
+          site_id?: string
+          start_time_local?: string | null
+          template_id?: string
+          template_version_id?: string
+          unassigned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_assignments_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_assignments_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_assignments_template_version_id_fkey"
+            columns: ["template_version_id"]
+            isOneToOne: false
+            referencedRelation: "template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      template_versions: {
+        Row: {
+          change_summary: string | null
+          created_at: string
+          header: Json
+          id: string
+          items: Json
+          published_at: string | null
+          published_by: string | null
+          status: Database["public"]["Enums"]["template_status"]
+          template_data: Json
+          template_id: string
+          updated_at: string
+          version_number: number
+        }
+        Insert: {
+          change_summary?: string | null
+          created_at?: string
+          header?: Json
+          id?: string
+          items?: Json
+          published_at?: string | null
+          published_by?: string | null
+          status?: Database["public"]["Enums"]["template_status"]
+          template_data?: Json
+          template_id: string
+          updated_at?: string
+          version_number: number
+        }
+        Update: {
+          change_summary?: string | null
+          created_at?: string
+          header?: Json
+          id?: string
+          items?: Json
+          published_at?: string | null
+          published_by?: string | null
+          status?: Database["public"]["Enums"]["template_status"]
+          template_data?: Json
+          template_id?: string
+          updated_at?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_versions_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_versions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      templates: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          current_version_id: string | null
+          description: string | null
+          id: string
+          industry: Database["public"]["Enums"]["industry_type"]
+          is_featured: boolean
+          is_imported: boolean
+          is_system_preset: boolean
+          logo_url: string | null
+          name: string
+          org_id: string | null
+          slug: string | null
+          source_preset_id: string | null
+          status: Database["public"]["Enums"]["template_status"]
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_version_id?: string | null
+          description?: string | null
+          id?: string
+          industry: Database["public"]["Enums"]["industry_type"]
+          is_featured?: boolean
+          is_imported?: boolean
+          is_system_preset?: boolean
+          logo_url?: string | null
+          name: string
+          org_id?: string | null
+          slug?: string | null
+          source_preset_id?: string | null
+          status?: Database["public"]["Enums"]["template_status"]
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_version_id?: string | null
+          description?: string | null
+          id?: string
+          industry?: Database["public"]["Enums"]["industry_type"]
+          is_featured?: boolean
+          is_imported?: boolean
+          is_system_preset?: boolean
+          logo_url?: string | null
+          name?: string
+          org_id?: string | null
+          slug?: string | null
+          source_preset_id?: string | null
+          status?: Database["public"]["Enums"]["template_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "templates_current_version_fk"
+            columns: ["current_version_id"]
+            isOneToOne: false
+            referencedRelation: "template_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "templates_source_preset_id_fkey"
+            columns: ["source_preset_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       witnesses: {
         Row: {
           contact: string | null
@@ -1807,6 +2393,127 @@ export type Database = {
           },
         ]
       }
+      inspections_active: {
+        Row: {
+          abandon_reason: string | null
+          abandoned_at: string | null
+          answers: Json | null
+          assignment_id: string | null
+          completed_at: string | null
+          conducted_at: string | null
+          created_at: string | null
+          deleted_at: string | null
+          header_responses: Json | null
+          id: string | null
+          inspector_id: string | null
+          is_failed: boolean | null
+          org_id: string | null
+          ref_code: string | null
+          score_max: number | null
+          score_total: number | null
+          site_id: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["inspection_status"] | null
+          template_id: string | null
+          template_version_id: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          abandon_reason?: string | null
+          abandoned_at?: string | null
+          answers?: Json | null
+          assignment_id?: string | null
+          completed_at?: string | null
+          conducted_at?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          header_responses?: Json | null
+          id?: string | null
+          inspector_id?: string | null
+          is_failed?: boolean | null
+          org_id?: string | null
+          ref_code?: string | null
+          score_max?: number | null
+          score_total?: number | null
+          site_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["inspection_status"] | null
+          template_id?: string | null
+          template_version_id?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          abandon_reason?: string | null
+          abandoned_at?: string | null
+          answers?: Json | null
+          assignment_id?: string | null
+          completed_at?: string | null
+          conducted_at?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          header_responses?: Json | null
+          id?: string | null
+          inspector_id?: string | null
+          is_failed?: boolean | null
+          org_id?: string | null
+          ref_code?: string | null
+          score_max?: number | null
+          score_total?: number | null
+          site_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["inspection_status"] | null
+          template_id?: string | null
+          template_version_id?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspections_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "template_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_inspector_id_fkey"
+            columns: ["inspector_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_template_version_id_fkey"
+            columns: ["template_version_id"]
+            isOneToOne: false
+            referencedRelation: "template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       investigations_active: {
         Row: {
           closed_at: string | null
@@ -1925,10 +2632,23 @@ export type Database = {
         }
         Returns: undefined
       }
+      complete_inspection_v1: {
+        Args: { p_inspection_id: string }
+        Returns: undefined
+      }
       current_org: { Args: never; Returns: string }
+      escalate_finding_to_incident_v1: {
+        Args: { p_finding_id: string }
+        Returns: string
+      }
+      has_org_permission: { Args: { p_permission: string }; Returns: boolean }
       has_permission: {
         Args: { p_permission: string; p_site_id: string }
         Returns: boolean
+      }
+      import_preset_to_org_v1: {
+        Args: { p_preset_id: string }
+        Returns: string
       }
       load_sample_chain_v1: {
         Args: { p_actor_id: string; p_site_id: string; p_verifier_id: string }
@@ -1942,7 +2662,18 @@ export type Database = {
         Args: { e: Database["public"]["Tables"]["activity_events"]["Row"] }
         Returns: string
       }
+      publish_template_version_v1: {
+        Args: {
+          p_actor_id: string
+          p_change_summary: string
+          p_draft_version_id: string
+          p_template_id: string
+        }
+        Returns: undefined
+      }
+      regenerate_item_ids: { Args: { p_items: Json }; Returns: Json }
       reset_demo_data_v1: { Args: { p_org_id: string }; Returns: undefined }
+      resolve_org_permissions: { Args: never; Returns: string[] }
       resolve_permissions: { Args: { p_site_id: string }; Returns: string[] }
       seed_default_roles: { Args: { p_org_id: string }; Returns: undefined }
       user_can_access_site: { Args: { p_site_id: string }; Returns: boolean }
@@ -1985,6 +2716,11 @@ export type Database = {
         | "closed"
       capa_type: "corrective" | "preventive"
       employment_status: "employee" | "contractor" | "visitor" | "agency"
+      finding_status:
+        | "open"
+        | "in_progress"
+        | "resolved"
+        | "escalated_to_incident"
       incident_status:
         | "draft"
         | "submitted"
@@ -2009,6 +2745,7 @@ export type Database = {
         | "office"
         | "construction"
         | "lab"
+      inspection_status: "draft" | "in_progress" | "completed" | "abandoned"
       investigation_status:
         | "pending_assignment"
         | "in_progress"
@@ -2035,6 +2772,13 @@ export type Database = {
         | "loss_of_consciousness"
         | "enclosed_space_injury"
       severity: "S1" | "S2" | "S3" | "S4" | "S5"
+      template_schedule_kind:
+        | "daily"
+        | "weekly"
+        | "monthly"
+        | "custom"
+        | "on_demand"
+      template_status: "draft" | "published" | "archived"
       track: "A" | "B" | "C"
       treatment: "none" | "first_aid" | "medical" | "hospitalization"
       verification_method:
@@ -2206,6 +2950,12 @@ export const Constants = {
       ],
       capa_type: ["corrective", "preventive"],
       employment_status: ["employee", "contractor", "visitor", "agency"],
+      finding_status: [
+        "open",
+        "in_progress",
+        "resolved",
+        "escalated_to_incident",
+      ],
       incident_status: [
         "draft",
         "submitted",
@@ -2233,6 +2983,7 @@ export const Constants = {
         "construction",
         "lab",
       ],
+      inspection_status: ["draft", "in_progress", "completed", "abandoned"],
       investigation_status: [
         "pending_assignment",
         "in_progress",
@@ -2262,6 +3013,14 @@ export const Constants = {
         "enclosed_space_injury",
       ],
       severity: ["S1", "S2", "S3", "S4", "S5"],
+      template_schedule_kind: [
+        "daily",
+        "weekly",
+        "monthly",
+        "custom",
+        "on_demand",
+      ],
+      template_status: ["draft", "published", "archived"],
       track: ["A", "B", "C"],
       treatment: ["none", "first_aid", "medical", "hospitalization"],
       verification_method: [
