@@ -45,6 +45,16 @@ async function AppShell({ children }: { children: ReactNode }) {
     memberships.length === 0 ||
     memberships.some((m) => m.role?.key === "site_admin");
 
+  console.log("[AppShell]", {
+    user: profile.email,
+    memberships_count: memberships.length,
+    sites_visible_in_switcher: sites.length,
+    sites: sites.map((s) => `${s.name} (${s.country})`),
+    current_site_id: currentSiteId,
+    current_role: currentRoleKey,
+    can_create_site: canCreateSite,
+  });
+
   let notifications: NotificationItem[] = [];
   if (currentSiteId) {
     // Bell shows: site-wide regulatory deadlines (recipient_id NULL) +

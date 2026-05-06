@@ -48,6 +48,15 @@ export async function createSite(
   }
 
   const supabase = await createClient();
+  console.log("[createSite] calling RPC with", {
+    name: parsed.data.name,
+    country: parsed.data.country,
+    timezone: parsed.data.timezone,
+    has_address: !!parsed.data.address,
+    has_naics: !!parsed.data.naics_code,
+    has_parent: !!parsed.data.parent_site_id,
+  });
+
   const { data: siteId, error } = await supabase.rpc("create_site_v1", {
     p_name: parsed.data.name,
     p_country: parsed.data.country,
@@ -58,7 +67,32 @@ export async function createSite(
   });
 
   if (error || !siteId) {
+    console.error("[createSite] RPC failed", { error, siteId });
     return { ok: false, error: error?.message ?? "Failed to create site" };
+  }
+
+  console.log("[createSite] RPC ok — new site_id =", siteId);
+
+  // Verify the membership row landed (sanity check; helps when debugging
+  // RLS issues where the SECURITY DEFINER insert succeeded but the
+  // session can't read it back).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const { data: mem } = await supabase
+      .from("site_members")
+      .select("site_id, role:roles(key)")
+      .eq("profile_id", user.id);
+    console.log(
+      "[createSite] post-insert memberships for user",
+      user.id,
+      "=>",
+      (mem ?? []).map((m) => ({
+        site_id: m.site_id,
+        role: m.role?.key ?? null,
+      })),
+    );
   }
 
   const store = await cookies();
@@ -68,6 +102,11 @@ export async function createSite(
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
   });
+  console.log("[createSite] cookie set, redirecting to /admin/site-setup");
 
-  redirect("/admin/site-setup");
+  // Redirect straight to step 1 so we keep the ?created param — the
+  // /admin/site-setup index does its own redirect and drops query strings.
+  redirect(
+    `/admin/site-setup/1?created=${encodeURIComponent(parsed.data.name)}`,
+  );
 }
