@@ -1,4 +1,3 @@
-import { Separator } from "@/components/ui/separator";
 import { SiteSwitcher, type SwitcherSite } from "./site-switcher";
 import { NotificationBell, type NotificationItem } from "./notification-bell";
 import { HelpDrawer } from "./help-drawer";
@@ -33,7 +32,6 @@ export function Topbar({
       {/* Hamburger: only shown below lg, where the shadcn sidebar primitive is
           in Sheet mode. Above lg, the 6k pin/hover-drawer rail handles toggling. */}
       <MobileMenuButton className="-ml-1 lg:hidden" />
-      <Separator orientation="vertical" className="mx-1 h-5 lg:hidden" />
       <SiteSwitcher sites={sites} currentSiteId={currentSiteId} canCreateSite={canCreateSite} />
       <div className="mx-auto hidden flex-1 justify-center px-4 md:flex">
         <SearchTrigger variant="input" />
