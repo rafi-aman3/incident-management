@@ -321,6 +321,48 @@ export async function createAssetAction(
 }
 
 // ---------------------------------------------------------------------------
+// searchAssets — typeahead lookup for the wizard's equipment_asset_id field.
+// Returns active assets at the named site (or accessible-by-RLS subset)
+// matching the query against name / ref_code / location.
+// ---------------------------------------------------------------------------
+export type AssetSearchResult = {
+  id: string;
+  ref_code: string;
+  name: string;
+  kind: string;
+  condition: string;
+  location: string | null;
+};
+
+export async function searchAssets(input: {
+  site_id?: string | null;
+  q?: string;
+  limit?: number;
+}): Promise<ActionResult<AssetSearchResult[]>> {
+  const { supabase, profile } = await requireUser();
+  let query = supabase
+    .from("assets")
+    .select("id, ref_code, name, kind, condition, location")
+    .eq("org_id", profile.org_id)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .order("name", { ascending: true })
+    .limit(input.limit ?? 20);
+
+  if (input.site_id) query = query.eq("site_id", input.site_id);
+  if (input.q && input.q.trim()) {
+    const safe = input.q.replace(/[%_]/g, "");
+    query = query.or(
+      `name.ilike.%${safe}%,ref_code.ilike.%${safe}%,location.ilike.%${safe}%`,
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: (data ?? []) as AssetSearchResult[] };
+}
+
+// ---------------------------------------------------------------------------
 // guardCanCreateAsset — page-side helper for the new-asset route.
 // Throws if the user has no asset:create grant on ANY of their sites.
 // ---------------------------------------------------------------------------

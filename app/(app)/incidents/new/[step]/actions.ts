@@ -90,6 +90,7 @@ export async function saveStep2(_prev: ActionResult | null, fd: FormData): Promi
     quantity_value: fd.get("quantity_value") ?? null,
     quantity_unit: fd.get("quantity_unit") ?? "",
     equipment: fd.get("equipment") ?? "",
+    equipment_asset_id: (fd.get("equipment_asset_id") as string) || null,
     dangerous_occurrence_kind: fd.get("dangerous_occurrence_kind") ?? "",
     injured_persons: injuredPersons,
     witnesses,
@@ -109,6 +110,7 @@ export async function saveStep2(_prev: ActionResult | null, fd: FormData): Promi
       quantity_value: v.quantity_value ?? null,
       quantity_unit: v.quantity_unit || null,
       equipment: v.equipment || null,
+      equipment_asset_id: v.equipment_asset_id ?? null,
       dangerous_occurrence_kind: v.dangerous_occurrence_kind || null,
     })
     .eq("id", incidentId);

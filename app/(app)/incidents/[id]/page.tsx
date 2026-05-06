@@ -8,12 +8,13 @@ import { INCIDENT_TYPE_META, type IncidentType } from "@/lib/incidents/types";
 import { SeverityBadge, TrackBadge, StatusBadge } from "@/components/incidents/badges";
 import { BodyMap, BODY_PART_LABELS, type BodyPart } from "@/components/body-map/body-map";
 import { TriageModals, type SiteMemberOption } from "@/components/incidents/triage-modals";
+import { LinkedDocumentsSection } from "@/components/documents/linked-documents-section";
 
 type Params = Promise<{ id: string }>;
 
 export default async function IncidentDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const { supabase, currentSiteId } = await requireUser();
+  const { supabase, profile, currentSiteId } = await requireUser();
 
   const { data: incident, error } = await supabase
     .from("incidents")
@@ -22,7 +23,8 @@ export default async function IncidentDetailPage({ params }: { params: Params })
       id, ref_code, type, title, description, occurred_at, area, location,
       severity, track, status, classified_at, closed_at, is_sandbox,
       reporter_id, ppe_worn, substance, quantity_value, quantity_unit,
-      equipment, dangerous_occurrence_kind, site_id,
+      equipment, dangerous_occurrence_kind, site_id, equipment_asset_id,
+      asset:equipment_asset_id(id, ref_code, name, kind, condition),
       reporter:reporter_id(full_name, email),
       injured_persons(name, body_parts, treatment, fatality, hospitalized, riddor_specified_injury),
       witnesses(name, contact, statement)
@@ -178,6 +180,26 @@ export default async function IncidentDetailPage({ params }: { params: Params })
             </Card>
           )}
 
+          {incident.asset && (
+            <Card title="Linked asset">
+              <Link
+                href={`/resources/assets/${incident.asset.id}`}
+                className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm hover:bg-accent"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{incident.asset.name}</p>
+                  <p className="font-mono text-[10px] text-muted-foreground">
+                    {incident.asset.ref_code}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {String(incident.asset.kind).replace(/_/g, " ")} ·{" "}
+                  {incident.asset.condition}
+                </span>
+              </Link>
+            </Card>
+          )}
+
           {attachments && attachments.length > 0 && (
             <Card title="Attachments">
               <ul className="space-y-1">
@@ -191,11 +213,21 @@ export default async function IncidentDetailPage({ params }: { params: Params })
                 ))}
               </ul>
               <p className="mt-2 text-xs text-muted-foreground">
-                Stored in incident-attachments bucket. Signed-URL download UI ships with the
-                Documents library in Phase 5.
+                Direct uploads from the Report Wizard (incident-attachments bucket).
               </p>
             </Card>
           )}
+
+          <Card title="Linked library documents">
+            <LinkedDocumentsSection
+              parentType="incident"
+              parentId={incident.id}
+              orgId={profile.org_id}
+              defaultLinkRole="attachment"
+              title=""
+              emptyHint="No library documents linked. Use Add document to attach a SDS, SOP, or evidence file from the org library."
+            />
+          </Card>
 
           {incident.witnesses && incident.witnesses.length > 0 && (
             <Card title="Witnesses">

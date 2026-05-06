@@ -11,6 +11,7 @@ import { OwnerVerifierCard } from "@/components/capa/detail/owner-verifier-card"
 import { SourceInvestigationLink } from "@/components/capa/detail/source-investigation-link";
 import { CompleteCapaButton } from "@/components/capa/detail/complete-capa-button";
 import { VerificationForm } from "@/components/capa/detail/verification-form";
+import { LinkedDocumentsSection } from "@/components/documents/linked-documents-section";
 import { CapaModals, type CapaSiteMember } from "@/components/capa/detail/capa-modals";
 import { VerifierWelcomeCard } from "@/components/onboarding/verifier-welcome-card";
 import {
@@ -23,7 +24,7 @@ type Params = Promise<{ id: string }>;
 
 export default async function CapaDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const { supabase, user, currentSiteId } = await requireUser();
+  const { supabase, user, profile, currentSiteId } = await requireUser();
 
   const { data: capa, error: readErr } = await supabase
     .from("capas")
@@ -185,6 +186,24 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
             )}
 
           {showVerificationForm && <VerificationForm capaId={capa.id} />}
+
+          <div className="rounded-md border bg-card p-4">
+            <LinkedDocumentsSection
+              parentType="capa"
+              parentId={capa.id}
+              orgId={profile.org_id}
+              defaultLinkRole={
+                status === "pending_verification" || status === "verified" || status === "closed"
+                  ? "verification_evidence"
+                  : "evidence"
+              }
+              defaultTypeFilter="evidence"
+              canLink={status !== "closed"}
+              canUnlink={status !== "closed"}
+              title="Evidence & references"
+              emptyHint="Attach SOPs, training certificates, audit reports, or photos that support this CAPA."
+            />
+          </div>
 
           {status === "pending_verification" && isOwner && (
             <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">

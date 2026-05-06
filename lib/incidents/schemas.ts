@@ -56,6 +56,10 @@ export const Step2Schema = z.object({
   quantity_unit: z.string().trim().max(20).optional().or(z.literal("")),
   // Equipment (property damage / dangerous occurrence)
   equipment: z.string().trim().max(200).optional().or(z.literal("")),
+  // Optional FK to a registered asset (Phase 4) — surfaced in the wizard
+  // for property_damage / unsafe_condition. Sparse: null for incidents
+  // whose type doesn't pin to a specific asset.
+  equipment_asset_id: z.string().uuid().nullable().optional(),
   // Dangerous occurrence kind
   dangerous_occurrence_kind: z.string().trim().max(120).optional().or(z.literal("")),
   // Injured persons (injury / illness)
