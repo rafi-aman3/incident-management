@@ -6,6 +6,10 @@ import { can } from "@/lib/auth/can";
 import { INCIDENT_TYPE_META, type IncidentType } from "@/lib/incidents/types";
 import { SeverityBadge, TrackBadge, StatusBadge } from "@/components/incidents/badges";
 import { WorkerWelcomeCard } from "@/components/onboarding/worker-welcome-card";
+import {
+  RoleWelcomeCard,
+  ROLE_WELCOME_CONTENT,
+} from "@/components/onboarding/role-welcome-card";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { trir, dart, formatKpi, isDartCase } from "@/lib/format/kpi";
@@ -117,7 +121,8 @@ export default async function DashboardPage() {
     },
   ];
 
-  const showWelcome = profile.seen_welcome === false && currentRoleKey === "worker";
+  const showWelcome = profile.seen_welcome === false;
+  const firstName = profile.full_name?.split(" ")[0] ?? "there";
 
   return (
     <TooltipProvider>
@@ -217,9 +222,13 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {showWelcome && (
-          <WorkerWelcomeCard
-            firstName={profile.full_name?.split(" ")[0] ?? "there"}
+        {showWelcome && currentRoleKey === "worker" && (
+          <WorkerWelcomeCard firstName={firstName} />
+        )}
+        {showWelcome && currentRoleKey !== "worker" && (
+          <RoleWelcomeCard
+            firstName={firstName}
+            content={ROLE_WELCOME_CONTENT[currentRoleKey]}
           />
         )}
       </div>

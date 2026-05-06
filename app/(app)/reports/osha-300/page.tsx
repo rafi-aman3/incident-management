@@ -15,6 +15,8 @@ import {
   classificationLabel,
   type Osha300SourceRow,
 } from "@/lib/format/osha300";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -121,6 +123,7 @@ export default async function Osha300Page({
     `/api/reports/osha-300/csv?year=${year}` + (month !== null ? `&month=${month}` : "");
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       <div>
         <Link
@@ -129,7 +132,10 @@ export default async function Osha300Page({
         >
           <ArrowLeft className="h-3 w-3" /> Reports
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">OSHA 300 Log — {year}</h1>
+        <h1 className="mt-1 flex items-center text-2xl font-semibold">
+          OSHA 300 Log — {year}
+          <InfoTooltip tip="osha_300_vs_301" />
+        </h1>
         <p className="text-sm text-muted-foreground">
           Running log of recordable injuries and illnesses. Sandbox rows excluded.
         </p>
@@ -234,6 +240,7 @@ export default async function Osha300Page({
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }
 

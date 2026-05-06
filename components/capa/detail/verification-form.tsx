@@ -16,6 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { verifyCapa } from "@/app/(app)/capa/[id]/actions";
 import type { ActionResult } from "@/lib/incidents/schemas";
 
@@ -93,15 +95,19 @@ export function VerificationForm({ capaId }: { capaId: string }) {
   const isDeferred = result === "too_early_to_verify";
 
   return (
-    <form
-      action={formAction}
-      className="space-y-4 rounded-lg border-2 border-primary/30 bg-primary/5 p-4"
-    >
+    <TooltipProvider>
+      <form
+        action={formAction}
+        className="space-y-4 rounded-lg border-2 border-primary/30 bg-primary/5 p-4"
+      >
       <input type="hidden" name="capa_id" value={capaId} />
 
       <div className="flex items-center gap-2">
         <RefreshCcw className="h-4 w-4 text-primary" />
-        <h2 className="text-base font-semibold">Verify CAPA closure</h2>
+        <h2 className="flex items-center text-base font-semibold">
+          Verify CAPA closure
+          <InfoTooltip tip="capa_verifier_independence" />
+        </h2>
       </div>
       <p className="text-xs text-muted-foreground">
         You&apos;re the independent verifier. Pick how you verified, then the
@@ -152,7 +158,12 @@ export function VerificationForm({ capaId }: { capaId: string }) {
                 />
                 <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div>
-                  <span className="text-sm font-medium">{opt.label}</span>
+                  <span className="text-sm font-medium">
+                    {opt.label}
+                    {opt.value === "partially_effective" && (
+                      <InfoTooltip tip="capa_partial_effective" />
+                    )}
+                  </span>
                   <p className="text-[11px] text-muted-foreground">{opt.hint}</p>
                 </div>
               </Label>
@@ -201,6 +212,7 @@ export function VerificationForm({ capaId }: { capaId: string }) {
           {isPending ? "Submitting…" : "Submit verification"}
         </Button>
       </div>
-    </form>
+      </form>
+    </TooltipProvider>
   );
 }

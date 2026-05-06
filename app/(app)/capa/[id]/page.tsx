@@ -12,6 +12,7 @@ import { SourceInvestigationLink } from "@/components/capa/detail/source-investi
 import { CompleteCapaButton } from "@/components/capa/detail/complete-capa-button";
 import { VerificationForm } from "@/components/capa/detail/verification-form";
 import { CapaModals, type CapaSiteMember } from "@/components/capa/detail/capa-modals";
+import { VerifierWelcomeCard } from "@/components/onboarding/verifier-welcome-card";
 import {
   ActivityTimeline,
   type ActivityEvent,
@@ -218,6 +219,8 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
       </div>
 
       <CapaModals capaId={capa.id} ownerId={capa.owner_id} members={members} />
+
+      {showVerificationForm && <VerifierWelcomeCard capaTitle={capa.title} />}
     </div>
   );
 }

@@ -24,6 +24,8 @@ import {
 } from "@/lib/constants/riddor";
 import type { ActionResult } from "@/lib/incidents/schemas";
 import type { MatrixCoord } from "@/lib/workflow/severity";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { SandboxBanner } from "./wizard-progress";
 
 type InjuredDraft = {
@@ -108,6 +110,7 @@ export function Step2Details(props: Props) {
     setPpe((prev) => (prev.includes(item) ? prev.filter((p) => p !== item) : [...prev, item]));
 
   return (
+    <TooltipProvider>
     <form action={formAction} className="space-y-6">
       {isSandbox && <SandboxBanner />}
 
@@ -191,7 +194,10 @@ export function Step2Details(props: Props) {
 
                 {type === "injury" && (
                   <div className="space-y-2">
-                    <Label>Body parts affected</Label>
+                    <Label className="flex items-center">
+                      Body parts affected
+                      <InfoTooltip tip="body_map_guidance" />
+                    </Label>
                     <BodyMap
                       value={p.body_parts}
                       onChange={(parts) =>
@@ -446,5 +452,6 @@ export function Step2Details(props: Props) {
         </button>
       </div>
     </form>
+    </TooltipProvider>
   );
 }

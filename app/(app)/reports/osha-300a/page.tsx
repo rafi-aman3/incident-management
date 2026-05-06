@@ -6,6 +6,8 @@ import { trir, dart, severityRate, formatKpi, isDartCase } from "@/lib/format/kp
 import { deriveOsha300Row, type Osha300SourceRow } from "@/lib/format/osha300";
 import { AnnualHoursForm } from "@/components/reports/annual-hours-form";
 import { PrintButton } from "@/components/reports/print-button";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -115,6 +117,7 @@ export default async function Osha300APage({
   const severityValue = severityRate(totalDaysAway + totalDaysRestricted, hoursWorked);
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -124,12 +127,14 @@ export default async function Osha300APage({
           >
             <ArrowLeft className="h-3 w-3" /> Reports
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold">
+          <h1 className="mt-1 flex items-center text-2xl font-semibold">
             OSHA 300A Annual Summary — {year}
+            <InfoTooltip tip="osha_300a_posting" />
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="flex flex-wrap items-center text-sm text-muted-foreground">
             Posting period: Feb 1 – Apr 30 the following year. ITA submission
             deadline: March 2.
+            <InfoTooltip tip="ita_deadline" />
           </p>
         </div>
         <PrintButton />
@@ -197,6 +202,10 @@ export default async function Osha300APage({
       )}
 
       {/* Computed KPIs */}
+      <p className="flex items-center text-xs uppercase tracking-wide text-muted-foreground">
+        Computed KPIs
+        <InfoTooltip tip="trir_dart_formula" />
+      </p>
       <div className="grid gap-3 sm:grid-cols-3">
         <KpiCard
           label="TRIR"
@@ -246,6 +255,7 @@ export default async function Osha300APage({
         </p>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 

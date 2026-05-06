@@ -10,6 +10,8 @@ import type { ActionResult } from "@/lib/incidents/schemas";
 import { createDraft } from "@/app/(app)/incidents/new/[step]/actions";
 import { SandboxBanner } from "./wizard-progress";
 import { cn } from "@/lib/utils";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 const nowLocal = () => {
   const d = new Date();
@@ -28,11 +30,15 @@ export function Step1WhatHappened({ initialSandbox = false }: { initialSandbox?:
   const fieldErr = (k: string) => state?.ok === false ? state.fieldErrors?.[k]?.[0] : undefined;
 
   return (
+    <TooltipProvider>
     <form action={formAction} className="space-y-6">
       {sandbox && <SandboxBanner />}
 
       <div className="space-y-2">
-        <Label>What kind of event are you reporting?</Label>
+        <Label className="flex items-center">
+          What kind of event are you reporting?
+          <InfoTooltip tip="dangerous_occurrence" />
+        </Label>
         <p className="text-xs text-muted-foreground">Pick one — you can add more detail in the next step.</p>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {INCIDENT_TYPES.map((t) => {
@@ -123,6 +129,7 @@ export function Step1WhatHappened({ initialSandbox = false }: { initialSandbox?:
         </button>
       </div>
     </form>
+    </TooltipProvider>
   );
 }
 

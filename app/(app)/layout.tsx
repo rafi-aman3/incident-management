@@ -72,6 +72,7 @@ async function AppShell({ children }: { children: ReactNode }) {
           fullName={fullName}
           email={profile.email}
           roleLabel={roleLabel}
+          roleKey={currentRoleKey}
           currentSiteName={currentMembership?.site?.name ?? null}
         />
         <RegulatoryBanner deadlines={notifications} />

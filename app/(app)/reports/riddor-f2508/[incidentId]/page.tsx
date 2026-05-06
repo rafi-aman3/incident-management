@@ -13,6 +13,8 @@ import {
   HseRecordCard,
   type HseRecord,
 } from "@/components/reports/hse-record-card";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 type Params = Promise<{ incidentId: string }>;
 
@@ -103,6 +105,7 @@ export default async function RiddorF2508Page({ params }: { params: Params }) {
     : null;
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 print:hidden">
         <div>
@@ -114,6 +117,7 @@ export default async function RiddorF2508Page({ params }: { params: Params }) {
           </Link>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold">
             <Flag className="h-5 w-5 text-primary" /> RIDDOR F2508
+            <InfoTooltip tip="riddor_deadlines" />
           </h1>
           <p className="text-sm text-muted-foreground">
             UK Reporting of Injuries, Diseases and Dangerous Occurrences (RIDDOR)
@@ -173,6 +177,7 @@ export default async function RiddorF2508Page({ params }: { params: Params }) {
         canEdit={canEditRecord}
       />
     </div>
+    </TooltipProvider>
   );
 }
 
