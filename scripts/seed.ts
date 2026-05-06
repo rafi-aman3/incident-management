@@ -30,18 +30,26 @@ const log = (...args: unknown[]) => console.log("[seed]", ...args);
 async function ensureOrg() {
   const { data: existing } = await sb
     .from("orgs")
-    .select("id, slug")
+    .select("id, slug, is_demo")
     .eq("slug", "ucb")
     .maybeSingle();
 
   if (existing) {
     log("org ucb exists:", existing.id);
+    // Re-running the seed flips is_demo on so demo affordances (reset /
+    // sample-load / trigger-banner) work out of the box. The destructive
+    // RPCs guard on this flag.
+    if (!existing.is_demo) {
+      const { error } = await sb.from("orgs").update({ is_demo: true }).eq("id", existing.id);
+      if (error) throw error;
+      log("org ucb flagged is_demo=true");
+    }
     return existing.id as string;
   }
 
   const { data, error } = await sb
     .from("orgs")
-    .insert({ name: "UCB", slug: "ucb", industry: "manufacturing" })
+    .insert({ name: "UCB", slug: "ucb", industry: "manufacturing", is_demo: true })
     .select("id")
     .single();
   if (error) throw error;
@@ -308,16 +316,263 @@ async function ensureIncidents(orgId: string, sites: Map<string, string>, users:
     };
   });
 
-  const { data, error } = await sb.from("incidents").insert(rows).select("id, ref_code, type, severity, site_id, status");
+  const { data, error } = await sb
+    .from("incidents")
+    .insert(rows)
+    .select(
+      "id, ref_code, type, title, severity, site_id, status, osha_recordable, riddor_reportable, occurred_at"
+    );
   if (error) throw error;
   log(`incidents inserted: ${data.length}`);
   return data;
 }
 
 // ---------------------------------------------------------------------------
-// 5. Investigations (5 across Kanban statuses) + sample CAPAs
+// 4b. Injured persons — drive OSHA 300 / 300A / 301 + RIDDOR F2508 paperwork.
+// One injured_person per injury/illness incident; specials (fracture, heat-
+// stress, dermatitis cluster, hand laceration) get realistic days_away /
+// days_restricted / riddor_specified_injury so reports actually populate.
 // ---------------------------------------------------------------------------
 type IncidentRow = NonNullable<Awaited<ReturnType<typeof ensureIncidents>>>[number];
+
+async function ensureInjuredPersons(orgId: string) {
+  const { data: incidents } = await sb
+    .from("incidents")
+    .select("id, type, title, severity, site_id, status, osha_recordable, riddor_reportable, occurred_at, ref_code")
+    .eq("org_id", orgId)
+    .in("type", ["injury", "illness"]);
+  if (!incidents || incidents.length === 0) return;
+
+  const { count } = await sb
+    .from("injured_persons")
+    .select("id", { count: "exact", head: true })
+    .in(
+      "incident_id",
+      incidents.map((i) => i.id)
+    );
+  if ((count ?? 0) > 0) {
+    log("injured_persons already seeded — skipping");
+    return;
+  }
+
+  type Person = Record<string, unknown>;
+  const rows: Person[] = [];
+
+  for (const inc of incidents) {
+    if (inc.type !== "injury" && inc.type !== "illness") continue;
+
+    const t = inc.title.toLowerCase();
+    const base = {
+      incident_id: inc.id,
+      name: "Sample Worker",
+      job_title: "Operator",
+      department: "Production",
+      employment_status: "employee",
+    };
+
+    if (t.includes("hand laceration")) {
+      rows.push({
+        ...base,
+        body_parts: ["left_hand"],
+        injury_nature: "laceration",
+        object_substance: "tooling",
+        treatment: "medical",
+        days_away: 2,
+        days_restricted: 5,
+        fatality: false,
+        hospitalized: false,
+      });
+    } else if (t.includes("fractured wrist")) {
+      rows.push({
+        ...base,
+        name: "Sample UK Worker",
+        body_parts: ["right_hand"],
+        injury_nature: "fracture",
+        object_substance: "conveyor",
+        treatment: "hospitalization",
+        days_away: 14,
+        days_restricted: 0,
+        fatality: false,
+        hospitalized: true,
+        riddor_specified_injury: "fracture",
+      });
+    } else if (t.includes("slip in lubricant")) {
+      rows.push({
+        ...base,
+        body_parts: ["left_leg"],
+        injury_nature: "contusion",
+        object_substance: "floor",
+        treatment: "first_aid",
+        days_away: 0,
+        days_restricted: 0,
+        fatality: false,
+        hospitalized: false,
+      });
+    } else if (t.includes("eye irritation")) {
+      rows.push({
+        ...base,
+        body_parts: ["left_eye", "right_eye"],
+        injury_nature: "irritation",
+        object_substance: "cleaning agent",
+        treatment: "first_aid",
+        days_away: 0,
+        days_restricted: 0,
+        fatality: false,
+        hospitalized: false,
+      });
+    } else if (t.includes("sprained ankle")) {
+      rows.push({
+        ...base,
+        body_parts: ["left_foot"],
+        injury_nature: "sprain",
+        object_substance: "step",
+        treatment: "first_aid",
+        days_away: 0,
+        days_restricted: 0,
+        fatality: false,
+        hospitalized: false,
+      });
+    } else if (t.includes("heat-stress")) {
+      rows.push({
+        ...base,
+        body_parts: ["head"],
+        injury_nature: "occupational_illness",
+        object_substance: "heat",
+        treatment: "first_aid",
+        days_away: 0,
+        days_restricted: 1,
+        fatality: false,
+        hospitalized: false,
+      });
+    } else if (t.includes("dermatitis")) {
+      rows.push({
+        ...base,
+        body_parts: ["left_hand", "right_hand"],
+        injury_nature: "skin_disorder",
+        object_substance: "cleaning agent",
+        treatment: "medical",
+        days_away: 0,
+        days_restricted: 7,
+        fatality: false,
+        hospitalized: false,
+      });
+    } else if (t.includes("strain")) {
+      rows.push({
+        ...base,
+        body_parts: ["back"],
+        injury_nature: "strain",
+        object_substance: "manual lift",
+        treatment: "medical",
+        days_away: 0,
+        days_restricted: 3,
+        fatality: false,
+        hospitalized: false,
+      });
+    } else if (t.includes("cut from cardboard")) {
+      rows.push({
+        ...base,
+        body_parts: ["right_hand"],
+        injury_nature: "laceration",
+        object_substance: "cardboard banding",
+        treatment: "first_aid",
+        days_away: 0,
+        days_restricted: 0,
+        fatality: false,
+        hospitalized: false,
+      });
+    } else {
+      // Generic fallback for any other injury / illness
+      rows.push({
+        ...base,
+        body_parts: ["other"],
+        injury_nature: inc.type === "illness" ? "occupational_illness" : "contusion",
+        treatment: "first_aid",
+        days_away: 0,
+        days_restricted: 0,
+        fatality: false,
+        hospitalized: false,
+      });
+    }
+  }
+
+  if (rows.length === 0) return;
+
+  const { error } = await sb.from("injured_persons").insert(rows);
+  if (error) throw error;
+  log(`injured_persons inserted: ${rows.length}`);
+}
+
+// ---------------------------------------------------------------------------
+// 4c. Witnesses — a few rows so the witness-statement carry-over (incident →
+// investigation) has something to display.
+// ---------------------------------------------------------------------------
+async function ensureWitnesses(orgId: string) {
+  const { data: incidents } = await sb
+    .from("incidents")
+    .select("id")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(6);
+  if (!incidents || incidents.length === 0) return;
+
+  const { count } = await sb
+    .from("witnesses")
+    .select("id", { count: "exact", head: true })
+    .in(
+      "incident_id",
+      incidents.map((i) => i.id)
+    );
+  if ((count ?? 0) > 0) {
+    log("witnesses already seeded — skipping");
+    return;
+  }
+
+  const rows: Array<Record<string, unknown>> = [];
+  for (const inc of incidents) {
+    rows.push({
+      incident_id: inc.id,
+      name: "Pat Coworker",
+      contact: "pat@demo.local",
+      statement:
+        "Heard a loud noise and turned to see the event. Cordoned the area and notified the supervisor immediately.",
+    });
+  }
+
+  const { error } = await sb.from("witnesses").insert(rows);
+  if (error) throw error;
+  log(`witnesses inserted: ${rows.length}`);
+}
+
+// ---------------------------------------------------------------------------
+// 4d. Site annual hours — without this TRIR/DART can't compute. Houston gets
+// 250k hours (≈125 FTEs), Manchester 180k (≈90 FTEs). Year = current.
+// ---------------------------------------------------------------------------
+async function ensureSiteAnnualHours(sites: Map<string, string>, users: Map<string, string>) {
+  const year = new Date().getFullYear();
+  const admin = users.get("admin@demo.local")!;
+
+  const { count } = await sb
+    .from("site_annual_hours")
+    .select("site_id", { count: "exact", head: true })
+    .eq("year", year);
+  if ((count ?? 0) > 0) {
+    log("site_annual_hours already seeded — skipping");
+    return;
+  }
+
+  const rows = [
+    { site_id: sites.get("houston")!, year, hours_worked: 250_000, updated_by: admin },
+    { site_id: sites.get("manchester")!, year, hours_worked: 180_000, updated_by: admin },
+  ];
+
+  const { error } = await sb.from("site_annual_hours").insert(rows);
+  if (error) throw error;
+  log(`site_annual_hours inserted: ${rows.length} (year ${year})`);
+}
+
+// ---------------------------------------------------------------------------
+// 5. Investigations (5 across Kanban statuses) + sample CAPAs
+// ---------------------------------------------------------------------------
 
 async function seedInvestigationsAndCAPAs(
   orgId: string,
@@ -421,6 +676,163 @@ async function seedInvestigationsAndCAPAs(
 }
 
 // ---------------------------------------------------------------------------
+// 5d. Partial-effective CAPA chain — runs independently of the existing
+// seedInvestigationsAndCAPAs path so it backfills already-seeded orgs too.
+// Idempotency: gates on capas.follow_up_capa_id IS NOT NULL for the org.
+// ---------------------------------------------------------------------------
+async function ensurePartialEffectiveChain(orgId: string, users: Map<string, string>) {
+  const { data: existing } = await sb
+    .from("capas")
+    .select("id")
+    .eq("org_id", orgId)
+    .not("follow_up_capa_id", "is", null)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    log("partial-effective CAPA chain already seeded — skipping");
+    return;
+  }
+
+  const { data: invs } = await sb
+    .from("investigations")
+    .select("id, site_id, incident_id")
+    .eq("org_id", orgId)
+    .limit(1);
+  if (!invs || invs.length === 0) return;
+  const parentInv = invs[0];
+
+  const supervisor = users.get("supervisor@demo.local")!;
+  const ehs = users.get("ehs@demo.local")!;
+
+  const { data: parentCapa, error: parentErr } = await sb
+    .from("capas")
+    .insert({
+      org_id: orgId,
+      site_id: parentInv.site_id,
+      investigation_id: parentInv.id,
+      incident_id: parentInv.incident_id,
+      type: "corrective",
+      title: "Press 7 controls retrofit (parent)",
+      description:
+        "Initial fix to the operator-side controls. Verified as partially effective — residual ergonomic risk remained.",
+      owner_id: supervisor,
+      verifier_id: ehs,
+      due_date: new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10),
+      status: "closed",
+      progress_pct: 100,
+      verification_result: "partially_effective",
+      verification_method: "inspection",
+      completed_at: new Date(Date.now() - 7 * 86_400_000).toISOString(),
+      verified_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+      closed_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+    })
+    .select("id")
+    .single();
+  if (parentErr) throw parentErr;
+
+  const { data: followUp, error: followErr } = await sb
+    .from("capas")
+    .insert({
+      org_id: orgId,
+      site_id: parentInv.site_id,
+      investigation_id: parentInv.id,
+      incident_id: parentInv.incident_id,
+      type: "corrective",
+      title: "Follow-up: Press 7 controls retrofit",
+      description:
+        "Auto-created follow-up — parent CAPA was verified as partially effective. Residual ergonomic risk: add a height-adjustable platform.",
+      owner_id: supervisor,
+      due_date: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
+      status: "created",
+      progress_pct: 0,
+    })
+    .select("id")
+    .single();
+  if (followErr) throw followErr;
+
+  await sb
+    .from("capas")
+    .update({ follow_up_capa_id: followUp.id })
+    .eq("id", parentCapa.id);
+
+  log("partial-effective parent + follow-up CAPA chain seeded");
+}
+
+// ---------------------------------------------------------------------------
+// 5b. RCA whys — populate one in-progress investigation's 5-Why chain so the
+// 5-Why tab demo isn't empty. Queries investigations directly so it backfills
+// already-seeded orgs too.
+// ---------------------------------------------------------------------------
+async function ensureRcaWhys(orgId: string) {
+  const { data: invs } = await sb
+    .from("investigations")
+    .select("id, status")
+    .eq("org_id", orgId)
+    .in("status", ["in_progress", "awaiting_capa"]);
+  if (!invs || invs.length === 0) return;
+  const target = invs[0];
+
+  const { count } = await sb
+    .from("rca_whys")
+    .select("level", { count: "exact", head: true })
+    .eq("investigation_id", target.id);
+  if ((count ?? 0) > 0) {
+    log("rca_whys already seeded — skipping");
+    return;
+  }
+
+  const rows = [
+    { level: 1, question: "Why was the operator injured?", answer: "Hand caught between guard and tooling on press 7." },
+    { level: 2, question: "Why did the guard not stop the press?", answer: "Light curtain was bypassed by a defeated interlock." },
+    { level: 3, question: "Why was the interlock defeated?", answer: "Operators routinely defeat it for short setup runs because the cycle stops aren't reliable." },
+    { level: 4, question: "Why are the cycle stops unreliable?", answer: "Sensor alignment drifts after each die change; PM checklist doesn't include a sensor-alignment step." },
+    { level: 5, question: "Why does the PM checklist miss it?", answer: "Last template review was 2019; new sensor model installed in 2023 not reflected in PM scope." },
+  ];
+
+  const { error } = await sb.from("rca_whys").insert(
+    rows.map((r) => ({ investigation_id: target.id, ...r }))
+  );
+  if (error) throw error;
+  log(`rca_whys inserted: ${rows.length} (investigation ${target.id})`);
+}
+
+// ---------------------------------------------------------------------------
+// 5c. HSE notification record — for the Manchester fractured-wrist incident.
+// Phone-call timestamp + reference is recorded; written submission still pending,
+// so the F2508 page demo shows both states (recorded + outstanding).
+// ---------------------------------------------------------------------------
+async function ensureHseRecord(orgId: string, users: Map<string, string>) {
+  const { data: incidents } = await sb
+    .from("incidents")
+    .select("id, ref_code, title, riddor_reportable")
+    .eq("org_id", orgId)
+    .eq("riddor_reportable", true);
+  if (!incidents || incidents.length === 0) return;
+
+  const target = incidents.find((i) => /fractur/i.test(i.title));
+  if (!target) return;
+
+  const { data: existing } = await sb
+    .from("hse_notification_records")
+    .select("incident_id")
+    .eq("incident_id", target.id)
+    .maybeSingle();
+  if (existing) {
+    log("hse_notification_records already seeded — skipping");
+    return;
+  }
+
+  const ehs = users.get("ehs@demo.local")!;
+  const { error } = await sb.from("hse_notification_records").insert({
+    incident_id: target.id,
+    phone_called_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+    phoned_by: ehs,
+    hse_phone_reference: "HSE-2026-7421",
+  });
+  if (error) throw error;
+  log(`hse_notification_records inserted (incident ${target.ref_code})`);
+}
+
+// ---------------------------------------------------------------------------
 // 6. A couple of active notifications for the dashboard banner
 // ---------------------------------------------------------------------------
 async function seedNotifications(
@@ -482,7 +894,13 @@ async function main() {
   const sites = await ensureSites(orgId);
   const users = await ensureUsers(orgId, sites, roles);
   const incidents = await ensureIncidents(orgId, sites, users);
+  await ensureInjuredPersons(orgId);
+  await ensureWitnesses(orgId);
+  await ensureSiteAnnualHours(sites, users);
   await seedInvestigationsAndCAPAs(orgId, sites, users, incidents);
+  await ensurePartialEffectiveChain(orgId, users);
+  await ensureRcaWhys(orgId);
+  await ensureHseRecord(orgId, users);
   await seedNotifications(orgId, sites, users);
   log("done.");
 }
