@@ -18,7 +18,7 @@
 > - **No "Generate with Argus" button** on `/incidents` or in the wizard. Argus = our equivalent of the references' ARIA, planned as **Phase 09** (`plans/09-argus-ai-assistant.md` — stub dropped alongside this plan).
 > - **No Safety Bulletin step** in the wizard (the references' Step 3). It's a real feature — bulletin metadata, alert categorization, distribution list, ideally PDF render. Planned as **Phase 10** (no plan file yet).
 > - **No 3→4 step wizard restructure**. Without Safety Bulletin the references' Step 3 has no anchor (Witnesses → ??? → Photos doesn't justify itself). Restructure rides on top of Phase 10 once the bulletin lands; until then 3 steps is the right structure and the "Review and finalize" Step 3 stays — its severity / track / notification preview is a UX win the references lose.
-> - **No status pipeline cards** (Reported / Investigating / Action Required / Closed with progress bars from the bottom of the reference image). Judgment call: defer — the trend chart + breakdowns already convey throughput, and our status enum doesn't map cleanly onto the reference's stages. Reconsider in Phase 6c (Investigations) if needed.
+> - ~~No status pipeline cards~~ → **Included** per stakeholder confirmation 2026-05-07: 4-card status-counter row sits above the list table — Reported / Investigating / Action Required / Closed with proportional progress bar fills. Maps onto our `incidents.status` enum: `reported`/`draft` → "Reported", `triaged`/`investigating` → "Investigating", `awaiting_capa`/`capa_in_progress` → "Action Required", `closed` → "Closed".
 > - **No CSV export button** in the list filter bar. The list is already URL-shareable; CSV export is its own affordance, logged as v2.
 > - **No approval tabs** (Draft / Under Review / Approved / Rejected) — our state machine doesn't have an approval workflow; status is exposed via the existing status filter chips.
 > - **No live-data realtime push** on the KPI tiles (Supabase Realtime channels). Server-rendered numbers + on-navigation refresh is sufficient for v1.
@@ -244,9 +244,9 @@ If `total === 0` for the current scope, **still render every tile and chart** bu
 
 ---
 
-## Open questions to resolve before execution starts
+## Confirmed decisions (2026-05-07)
 
-1. **Status pipeline cards** (Reported / Investigating / Action Required / Closed with progress bars) — image shows them between the breakdowns and the list. Currently called out as deferred. **Confirm or override.**
-2. **Where does "Days Since Last Incident" thresholds break?** Prompt says: ≤7 → "Recent — under review", ≤30 → "Watching", else "Sustained". Confirm thresholds are correct for our regulatory cadence (OSHA 8h/24h/7d don't map onto these directly; this is a UX cadence, not a regulatory one).
-3. **`SiteScope` resolution from session** — confirm: default = all sites the user has membership on (per `site_members` + `include_children` BFS, same logic Planner uses); `?site=<id>` URL param narrows to one site. Same model as Planner.
-4. **KPICard `accent` prop tokens** — prompt names `'destructive' | 'warning' | 'amber' | 'brand' | 'success' | 'info'`. Our `docs/design.md` palette has destructive / warning / brand-purple / success-green / info-blue. **`amber` is new** — propose mapping it to severity-S3 amber (`#F59E0B`-equivalent OKLch token from `docs/design.md` §2). Confirm or pick a different token.
+1. **Status pipeline** — included. Renders as a 4-card row above the list table with proportional progress fills (each card shows count + share-of-total).
+2. **"Days Since Last Incident" thresholds** — ≤7 → "Recent — under review", ≤30 → "Watching", else "Sustained" (UX cadence, not regulatory).
+3. **`SiteScope`** — default = all sites the user has membership on (per `site_members` + `include_children` BFS, same logic Planner uses); `?site=<id>` URL param narrows to one site.
+4. **`KPICard` accent `amber`** — maps to severity-S3 amber token from `docs/design.md` §2 / `globals.css` (`bg-sev-3` foreground, 8% alpha background tint).
