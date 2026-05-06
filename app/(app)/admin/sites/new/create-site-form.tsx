@@ -16,6 +16,11 @@ import {
 } from "@/components/ui/select";
 import { createSite, type CreateSiteState } from "./actions";
 
+// Sentinel for the parent-site Select; Radix forbids an empty-string
+// SelectItem (it uses "" to represent the placeholder state). Hidden
+// input reduces this back to "" before the form submits.
+const NO_PARENT = "__none__";
+
 const TIMEZONE_HINTS = [
   { value: "America/Chicago", label: "America/Chicago" },
   { value: "America/Los_Angeles", label: "America/Los_Angeles" },
@@ -125,12 +130,12 @@ export function CreateSiteForm({
       {parentChoices.length > 0 && (
         <div className="space-y-2">
           <Label htmlFor="parent_site_id">Parent site (optional)</Label>
-          <Select value={parentId} onValueChange={setParentId}>
+          <Select value={parentId || NO_PARENT} onValueChange={setParentId}>
             <SelectTrigger id="parent_site_id" className="w-full">
               <SelectValue placeholder="No parent — top-level site" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">No parent — top-level site</SelectItem>
+              <SelectItem value={NO_PARENT}>No parent — top-level site</SelectItem>
               {parentChoices.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
                   {s.name} · {s.country}
@@ -138,7 +143,11 @@ export function CreateSiteForm({
               ))}
             </SelectContent>
           </Select>
-          <input type="hidden" name="parent_site_id" value={parentId} />
+          <input
+            type="hidden"
+            name="parent_site_id"
+            value={parentId === NO_PARENT ? "" : parentId}
+          />
           <FieldError msg={fieldErr("parent_site_id")} />
           <p className="text-xs text-muted-foreground">
             Pick a parent for hierarchy roll-ups. Members with{" "}
