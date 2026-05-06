@@ -328,6 +328,10 @@ Any regulatory term that a worker or supervisor might not know gets an inline `<
 | Owner ≠ Verifier rule | CAPA detail, Verify form | A CAPA's owner cannot close their own CAPA. An independent verifier must confirm the action worked. The database enforces this. |
 | Verification result outcomes | Verify CAPA form | Effective (action worked), Partially effective (residual risk, follow-up CAPA created), Not effective (back to in-progress), Too early to verify (set re-verify date). |
 | Object/substance (OSHA 301 #17) | Wizard Step 2 (injury), 301 form | The specific object, substance, or environmental factor that directly harmed the employee. Required by OSHA Form 301. |
+| Asset marked unsafe | Asset detail condition pill, asset list | An asset in `unsafe` condition must be tagged out and reported as an unsafe-condition incident. Managers should escalate within 24 hours so a CAPA can land before the next shift. |
+| Document expiry vs. retention | Document detail expiry pill, library card | Expiry triggers a re-review reminder; it does NOT permit deletion. OSHA requires 5 years and RIDDOR 3 years of record retention — past-expiry documents stay archived in storage, never hard-deleted. |
+| One document, many links | Document detail "Linked from N records", picker | A library document can attach to many records at once via `document_links`. Replace the file once and every link points at the new content — the audit trail stays intact across incidents, investigations, CAPAs, and assets. |
+| SDS auto-attach (v2) | Wizard Step 1 attachments, Asset SDS field | When a chemical is named on an incident, the platform should pre-attach its Safety Data Sheet from the SDS Manager library. v1 surfaces the link picker so it's a one-click attach; the SDS Manager API integration that auto-suggests the SDS lands in v2. |
 
 ### 9.2 Empty states
 
