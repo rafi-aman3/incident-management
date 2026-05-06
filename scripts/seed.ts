@@ -1267,6 +1267,416 @@ async function ensureSimulatedInspections(
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4 — Resources (Assets + Documents + cross-links)
+//
+// Per plans/04-resources.md §H. Inserts:
+//   * 8 documents (1 per type) — uploads small placeholder content into
+//     the `documents` bucket so /resources/documents/[id] file preview
+//     resolves.
+//   * 6 assets across UCB sites; conveyor seeded in `unsafe` condition
+//     so the unsafe-transition tooltip surface lands populated.
+//   * Cross-links: forklift incident → forklift asset (sparse FK + SDS +
+//     SOP links); conveyor incident → conveyor asset; SOP → seeded CAPA;
+//     SDS → seeded investigation; printable form → seeded inspection.
+//
+// Idempotent: skips entirely if any documents or assets already exist
+// for the org.
+// ---------------------------------------------------------------------------
+async function ensureResources(
+  orgId: string,
+  sites: Map<string, string>,
+  users: Map<string, string>,
+) {
+  const { count: docCount } = await sb
+    .from("documents")
+    .select("*", { count: "exact", head: true })
+    .eq("org_id", orgId);
+  const { count: assetCount } = await sb
+    .from("assets")
+    .select("*", { count: "exact", head: true })
+    .eq("org_id", orgId);
+
+  if ((docCount ?? 0) > 0 || (assetCount ?? 0) > 0) {
+    log("assets/documents already seeded — skipping");
+    return;
+  }
+
+  const ehs = users.get("ehs@demo.local")!;
+  const today = new Date();
+  const inDays = (d: number): string => {
+    const x = new Date(today);
+    x.setDate(x.getDate() + d);
+    return x.toISOString().slice(0, 10);
+  };
+  const minimalJpegBytes = Buffer.from([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+    0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
+    0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+    0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
+    0x13, 0x0f, 0xff, 0xd9,
+  ]);
+
+  // 1. Documents — upload placeholder content + insert metadata rows.
+  type DocSeed = {
+    key: string;
+    name: string;
+    type:
+      | "sds"
+      | "sop"
+      | "policy"
+      | "training_cert"
+      | "form"
+      | "evidence"
+      | "audit_report"
+      | "other";
+    file_name: string;
+    mime_type: string;
+    expiry?: string;
+    notes?: string;
+    site?: string; // slug
+  };
+  const DOC_SEEDS: DocSeed[] = [
+    {
+      key: "sds_ipa",
+      name: "IPA Solvent SDS",
+      type: "sds",
+      file_name: "ipa-sds-2024.pdf",
+      mime_type: "application/pdf",
+      notes:
+        "Isopropyl alcohol — used for parts cleaning. Section 4 covers skin contact response. Referenced by the forklift maintenance hand-off.",
+    },
+    {
+      key: "sop_loto",
+      name: "Lockout/Tagout SOP — Forklift",
+      type: "sop",
+      file_name: "loto-forklift.pdf",
+      mime_type: "application/pdf",
+      notes:
+        "Revised after the 2024 forklift collision. Step 4 added an explicit chock-and-tag confirmation.",
+    },
+    {
+      key: "policy_ppe",
+      name: "PPE Policy — Manufacturing Floor",
+      type: "policy",
+      file_name: "ppe-policy-mfg.pdf",
+      mime_type: "application/pdf",
+      notes: "Mandatory hi-vis + steel-toe inside the warehouse perimeter.",
+    },
+    {
+      key: "training_forklift",
+      name: "Forklift Operator Training Cert — Wally Worker",
+      type: "training_cert",
+      file_name: "training-forklift-2025.pdf",
+      mime_type: "application/pdf",
+      expiry: inDays(14), // expiring soon — exercises the ?expiring=1 filter
+      notes:
+        "Annual refresher. Expires in 2 weeks — re-train before the date or restrict assignments.",
+    },
+    {
+      key: "form_inspection",
+      name: "Daily Pre-Use Inspection Form (printable)",
+      type: "form",
+      file_name: "pre-use-form.pdf",
+      mime_type: "application/pdf",
+      notes:
+        "Paper backup for routes without mobile coverage. Scan back to the inspection record after.",
+    },
+    {
+      key: "evidence_photo",
+      name: "Conveyor leak photo — Bay 3",
+      type: "evidence",
+      file_name: "conveyor-leak.jpg",
+      mime_type: "image/jpeg",
+      notes:
+        "Hydraulic puddle observed under conveyor C-2 the morning of the seizure incident.",
+    },
+    {
+      key: "audit_q1",
+      name: "Q1 2026 Internal Audit Report",
+      type: "audit_report",
+      file_name: "audit-q1-2026.pdf",
+      mime_type: "application/pdf",
+      site: "houston",
+      notes:
+        "Houston-only audit; flagged 3 housekeeping nonconformances and one CAPA recommendation.",
+    },
+    {
+      key: "other_emergency",
+      name: "Emergency Contact List",
+      type: "other",
+      file_name: "emergency-contacts.pdf",
+      mime_type: "application/pdf",
+      notes: "Posted at every muster point and reception.",
+    },
+  ];
+
+  const docs = new Map<string, string>(); // key → id
+
+  for (const doc of DOC_SEEDS) {
+    const safeName = `${crypto.randomUUID()}-${doc.file_name.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
+    const path = `${orgId}/${safeName}`;
+    const body = doc.mime_type.startsWith("image/")
+      ? minimalJpegBytes
+      : Buffer.from(
+          `Placeholder content for ${doc.name}.\n\n${doc.notes ?? ""}\n`,
+          "utf-8",
+        );
+
+    const { error: upErr } = await sb.storage
+      .from("documents")
+      .upload(path, body, { upsert: false, contentType: doc.mime_type });
+    if (upErr) throw upErr;
+
+    const { data: row, error: insErr } = await sb
+      .from("documents")
+      .insert({
+        org_id: orgId,
+        site_id: doc.site ? sites.get(doc.site) ?? null : null,
+        name: doc.name,
+        type: doc.type,
+        storage_path: path,
+        file_name: doc.file_name,
+        mime_type: doc.mime_type,
+        size_bytes: body.byteLength,
+        expiry_date: doc.expiry ?? null,
+        notes: doc.notes ?? null,
+        uploaded_by: ehs,
+      })
+      .select("id")
+      .single();
+    if (insErr) throw insErr;
+    docs.set(doc.key, row.id);
+  }
+  log(`documents inserted: ${docs.size}`);
+
+  // 2. Assets
+  type AssetSeed = {
+    key: string;
+    name: string;
+    kind:
+      | "forklift"
+      | "fume_hood"
+      | "fire_extinguisher"
+      | "aed"
+      | "conveyor"
+      | "ergonomic_station";
+    site: string; // slug
+    location: string;
+    condition: "excellent" | "good" | "fair" | "poor" | "unsafe";
+    last_inspected_days_ago?: number;
+    next_pm_in_days?: number;
+    sds_doc?: string; // doc key
+    notes?: string;
+  };
+  const ASSET_SEEDS: AssetSeed[] = [
+    {
+      key: "forklift_houston",
+      name: "Hyster H40 Forklift",
+      kind: "forklift",
+      site: "houston-bldg-a",
+      location: "Bay 3, Aisle A",
+      condition: "fair",
+      last_inspected_days_ago: 7,
+      next_pm_in_days: 21,
+      sds_doc: "sds_ipa",
+      notes:
+        "Recent hydraulic-line check found minor weep at the rear coupler. Bench tagged out for service.",
+    },
+    {
+      key: "fume_hood_manchester",
+      name: "Lab Fume Hood — Bench 4",
+      kind: "fume_hood",
+      site: "manchester",
+      location: "Lab 1, Bench 4",
+      condition: "good",
+      last_inspected_days_ago: 14,
+      next_pm_in_days: 60,
+    },
+    {
+      key: "fire_extinguisher_houston",
+      name: "Fire Extinguisher 12B (CO2)",
+      kind: "fire_extinguisher",
+      site: "houston",
+      location: "Loading Dock B",
+      condition: "excellent",
+      last_inspected_days_ago: 30,
+      next_pm_in_days: 335,
+    },
+    {
+      key: "aed_manchester",
+      name: "AED — North Reception",
+      kind: "aed",
+      site: "manchester-north",
+      location: "North Reception, Wall mount",
+      condition: "good",
+      last_inspected_days_ago: 60,
+      next_pm_in_days: 305,
+    },
+    {
+      key: "ergonomic_manchester",
+      name: "Sit-Stand Workstation 14",
+      kind: "ergonomic_station",
+      site: "manchester",
+      location: "Office 2.4",
+      condition: "good",
+      last_inspected_days_ago: 90,
+    },
+    {
+      key: "conveyor_houston",
+      name: "Main Floor Conveyor C-2",
+      kind: "conveyor",
+      site: "houston-bldg-a",
+      location: "Floor 1, Line 2",
+      condition: "unsafe",
+      last_inspected_days_ago: 1,
+      next_pm_in_days: -2, // overdue
+      notes:
+        "Motor seizure 2024-04; tagged out, awaiting replacement bearing. Flag triggers the unsafe-condition CTA on detail.",
+    },
+  ];
+
+  const assetRows = ASSET_SEEDS.map((a) => ({
+    org_id: orgId,
+    site_id: sites.get(a.site)!,
+    name: a.name,
+    kind: a.kind,
+    location: a.location,
+    condition: a.condition,
+    status: "active" as const,
+    last_inspected_at:
+      a.last_inspected_days_ago != null
+        ? new Date(Date.now() - a.last_inspected_days_ago * 86_400_000).toISOString()
+        : null,
+    next_pm_at:
+      a.next_pm_in_days != null
+        ? new Date(Date.now() + a.next_pm_in_days * 86_400_000).toISOString()
+        : null,
+    sds_document_id: a.sds_doc ? docs.get(a.sds_doc)! : null,
+    notes: a.notes ?? null,
+    created_by: ehs,
+  }));
+
+  const { data: assetRowsData, error: assetErr } = await sb
+    .from("assets")
+    .insert(assetRows)
+    .select("id");
+  if (assetErr) throw assetErr;
+
+  const assets = new Map<string, string>(); // key → id
+  for (let i = 0; i < ASSET_SEEDS.length; i += 1) {
+    assets.set(ASSET_SEEDS[i].key, assetRowsData[i].id);
+  }
+  log(`assets inserted: ${assets.size}`);
+
+  // 3. Cross-link backfill
+  // 3a. Set incidents.equipment_asset_id on the forklift collision +
+  //     conveyor seizure rows so /incidents/[id] surfaces an Asset link
+  //     and the asset Incidents tab populates.
+  const { data: forkliftIncidents } = await sb
+    .from("incidents")
+    .select("id")
+    .eq("org_id", orgId)
+    .ilike("title", "Forklift collision%");
+  const { data: conveyorIncidents } = await sb
+    .from("incidents")
+    .select("id")
+    .eq("org_id", orgId)
+    .ilike("title", "Conveyor motor seizure%");
+  for (const inc of forkliftIncidents ?? []) {
+    await sb
+      .from("incidents")
+      .update({ equipment_asset_id: assets.get("forklift_houston") })
+      .eq("id", inc.id);
+  }
+  for (const inc of conveyorIncidents ?? []) {
+    await sb
+      .from("incidents")
+      .update({ equipment_asset_id: assets.get("conveyor_houston") })
+      .eq("id", inc.id);
+  }
+
+  // 3b. Polymorphic document_links — covers asset / incident / investigation
+  //     / capa / inspection so the doc-detail "Linked from" panel shows
+  //     entries across multiple parent types.
+  type LinkSeed = {
+    doc: string;
+    parent: "incident" | "investigation" | "capa" | "asset" | "inspection";
+    parent_id: string;
+    link_role: string;
+  };
+  const links: LinkSeed[] = [
+    { doc: "sds_ipa",       parent: "asset",   parent_id: assets.get("forklift_houston")!, link_role: "sds" },
+    { doc: "sop_loto",      parent: "asset",   parent_id: assets.get("forklift_houston")!, link_role: "sop" },
+    { doc: "evidence_photo",parent: "asset",   parent_id: assets.get("conveyor_houston")!, link_role: "photo" },
+  ];
+
+  if (forkliftIncidents && forkliftIncidents[0]) {
+    links.push(
+      { doc: "sds_ipa",  parent: "incident", parent_id: forkliftIncidents[0].id, link_role: "sds" },
+      { doc: "sop_loto", parent: "incident", parent_id: forkliftIncidents[0].id, link_role: "attachment" },
+    );
+  }
+
+  const { data: invs } = await sb
+    .from("investigations")
+    .select("id")
+    .eq("org_id", orgId)
+    .order("started_at", { ascending: false, nullsFirst: false })
+    .limit(1);
+  if (invs && invs[0]) {
+    links.push({
+      doc: "sds_ipa",
+      parent: "investigation",
+      parent_id: invs[0].id,
+      link_role: "evidence",
+    });
+  }
+
+  const { data: capas } = await sb
+    .from("capas")
+    .select("id")
+    .eq("org_id", orgId)
+    .limit(1);
+  if (capas && capas[0]) {
+    links.push({
+      doc: "sop_loto",
+      parent: "capa",
+      parent_id: capas[0].id,
+      link_role: "sop",
+    });
+  }
+
+  const { data: insps } = await sb
+    .from("inspections")
+    .select("id, title")
+    .eq("org_id", orgId)
+    .ilike("title", "%Forklift%")
+    .limit(1);
+  if (insps && insps[0]) {
+    links.push({
+      doc: "form_inspection",
+      parent: "inspection",
+      parent_id: insps[0].id,
+      link_role: "attachment",
+    });
+  }
+
+  const linkRows = links.map((l) => ({
+    document_id: docs.get(l.doc)!,
+    parent_type: l.parent,
+    parent_id: l.parent_id,
+    link_role: l.link_role,
+    created_by: ehs,
+  }));
+
+  if (linkRows.length > 0) {
+    const { error: linkErr } = await sb.from("document_links").insert(linkRows);
+    if (linkErr) throw linkErr;
+  }
+  log(`document_links inserted: ${linkRows.length}`);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
@@ -1288,6 +1698,8 @@ async function main() {
   const cloned = await ensureClonedTemplates(orgId, presets, users);
   await ensureTemplateAssignments(cloned, sites, users);
   await ensureSimulatedInspections(orgId, cloned, sites, users);
+  // ---- Phase 4: Resources (Assets + Documents) ----
+  await ensureResources(orgId, sites, users);
   log("done.");
 }
 

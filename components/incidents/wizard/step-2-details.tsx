@@ -16,6 +16,8 @@ import {
 import { RiskMatrix } from "@/components/risk-matrix/risk-matrix";
 import { BodyMap, type BodyPart } from "@/components/body-map/body-map";
 import { FileUpload } from "@/components/incidents/wizard/file-upload";
+import { LinkedDocumentsSection } from "@/components/documents/linked-documents-section";
+import { AssetTypeaheadField } from "@/components/assets/asset-typeahead-field";
 import { saveStep2 } from "@/app/(app)/incidents/new/[step]/actions";
 import { PPE_OPTIONS, type IncidentType } from "@/lib/incidents/types";
 import {
@@ -54,6 +56,8 @@ export type InitialWitness = {
 
 type Props = {
   incidentId: string;
+  orgId: string;
+  siteId: string | null;
   type: IncidentType;
   isSandbox: boolean;
   isUKSite: boolean;
@@ -65,13 +69,15 @@ type Props = {
     quantity_value?: number | null;
     quantity_unit?: string | null;
     equipment?: string | null;
+    equipment_asset_id?: string | null;
+    equipment_asset_label?: string | null;
     dangerous_occurrence_kind?: string | null;
     attachments?: { id: string; file_name: string; storage_path: string }[];
   };
 };
 
 export function Step2Details(props: Props) {
-  const { incidentId, type, isSandbox, isUKSite, initial } = props;
+  const { incidentId, orgId, siteId, type, isSandbox, isUKSite, initial } = props;
 
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     saveStep2,
@@ -105,6 +111,8 @@ export function Step2Details(props: Props) {
   const showSubstance = type === "environmental_release";
   const showEquipment = type === "property_damage" || type === "dangerous_occurrence";
   const showDangerousOccKind = type === "dangerous_occurrence";
+  const showAssetTypeahead =
+    type === "property_damage" || type === "unsafe_condition" || type === "dangerous_occurrence";
 
   const togglePpe = (item: string) =>
     setPpe((prev) => (prev.includes(item) ? prev.filter((p) => p !== item) : [...prev, item]));
@@ -352,6 +360,18 @@ export function Step2Details(props: Props) {
         </section>
       )}
 
+      {/* Phase 4: optional FK to a registered asset */}
+      {showAssetTypeahead && (
+        <section className="space-y-2">
+          <AssetTypeaheadField
+            name="equipment_asset_id"
+            siteId={siteId}
+            defaultValue={initial.equipment_asset_id ?? null}
+            defaultLabel={initial.equipment_asset_label ?? null}
+          />
+        </section>
+      )}
+
       {/* Dangerous occurrence kind */}
       {showDangerousOccKind && (
         <section className="space-y-2">
@@ -365,9 +385,22 @@ export function Step2Details(props: Props) {
         </section>
       )}
 
-      {/* Attachments */}
-      <section className="space-y-2">
+      {/* Attachments — direct upload (legacy path) + library link picker */}
+      <section className="space-y-3">
         <FileUpload incidentId={incidentId} initial={initial.attachments ?? []} />
+        <LinkedDocumentsSection
+          parentType="incident"
+          parentId={incidentId}
+          orgId={orgId}
+          defaultLinkRole="attachment"
+          defaultTypeFilter={
+            type === "property_damage" || type === "unsafe_condition"
+              ? "sds"
+              : "evidence"
+          }
+          title="Or link from the library"
+          emptyHint="Re-use a SDS, SOP, or training cert from the library instead of re-uploading."
+        />
       </section>
 
       {/* Witnesses */}

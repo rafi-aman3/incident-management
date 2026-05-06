@@ -61,12 +61,16 @@ function MissingId() {
 }
 
 async function Step2Server({ incidentId }: { incidentId: string }) {
-  const { supabase, user } = await requireUser();
+  const { supabase, user, profile } = await requireUser();
 
   const { data: incident } = await supabase
     .from("incidents")
     .select(
-      "id, type, status, is_sandbox, reporter_id, ppe_worn, substance, quantity_value, quantity_unit, equipment, dangerous_occurrence_kind, sites:site_id(country)"
+      `id, type, status, is_sandbox, reporter_id, site_id, ppe_worn, substance,
+       quantity_value, quantity_unit, equipment, dangerous_occurrence_kind,
+       equipment_asset_id,
+       sites:site_id(country),
+       equipment_asset:equipment_asset_id(ref_code, name)`
     )
     .eq("id", incidentId)
     .single();
@@ -89,6 +93,8 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
   return (
     <Step2Details
       incidentId={incidentId}
+      orgId={profile.org_id}
+      siteId={incident.site_id}
       type={incident.type as IncidentType}
       isSandbox={incident.is_sandbox}
       isUKSite={incident.sites?.country === "GB"}
@@ -98,6 +104,10 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
         quantity_value: incident.quantity_value,
         quantity_unit: incident.quantity_unit,
         equipment: incident.equipment,
+        equipment_asset_id: incident.equipment_asset_id,
+        equipment_asset_label: incident.equipment_asset
+          ? `${incident.equipment_asset.ref_code} · ${incident.equipment_asset.name}`
+          : null,
         dangerous_occurrence_kind: incident.dangerous_occurrence_kind,
         injured_persons: injured ?? [],
         witnesses: witnesses ?? [],

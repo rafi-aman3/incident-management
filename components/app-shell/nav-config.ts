@@ -2,9 +2,11 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   AlertOctagon,
+  Boxes,
   ClipboardCheck,
   ClipboardList,
   ClipboardSignature,
+  Files,
   ListChecks,
   ShieldCheck,
   FileBarChart,
@@ -44,6 +46,11 @@ export const NAV_ITEMS: ReadonlyArray<NavItem> = [
   // all hold template:read_org by default per Phase 3 perms migration.
   { href: "/templates",       label: "Templates",       icon: ClipboardCheck,     permission: "template:read_org" },
   { href: "/inspections",     label: "Inspections",     icon: ClipboardSignature, permission: "inspection:read_site" },
+  // Resources — assets is per-site read; documents is org-scoped read.
+  // The sidebar filter uses can(currentSiteId), which works for both
+  // because the perms are granted to the user's role at every site.
+  { href: "/resources/assets",    label: "Assets",     icon: Boxes,         permission: "asset:read_site" },
+  { href: "/resources/documents", label: "Documents",  icon: Files,         permission: "document:read_org" },
   { href: "/reports",         label: "Reports",         icon: FileBarChart,       permission: "incident:read_site" },
   { href: "/admin",           label: "Admin",           icon: Settings2,          permission: "site:configure" },
 ];

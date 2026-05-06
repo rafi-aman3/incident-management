@@ -31,7 +31,12 @@ export type TooltipKey =
   | "template_versions_audit"
   | "all_sites_assignment"
   | "flagged_response_finding"
-  | "finding_escalation";
+  | "finding_escalation"
+  // Phase 4 — Resources (Assets + Documents)
+  | "asset_unsafe_condition"
+  | "document_expiry_retention"
+  | "library_link_reuse"
+  | "sds_auto_attach_intent";
 
 export const REG_TOOLTIPS: Record<TooltipKey, { term: string; copy: string }> = {
   osha_recordable: {
@@ -152,5 +157,25 @@ export const REG_TOOLTIPS: Record<TooltipKey, { term: string; copy: string }> = 
     term: "Escalating a finding",
     copy:
       "Creates a draft incident pre-filled from the finding (item label + comment as description). The new incident shows up under the same site and tracks back to this finding via escalated_incident_id — so reporting can audit the chain.",
+  },
+  asset_unsafe_condition: {
+    term: "Asset marked unsafe",
+    copy:
+      "An asset in 'unsafe' condition must be tagged out and reported as an unsafe-condition incident. Managers should escalate within 24 hours so a CAPA can land before the next shift.",
+  },
+  document_expiry_retention: {
+    term: "Document expiry vs. retention",
+    copy:
+      "Expiry triggers a re-review reminder; it does NOT permit deletion. OSHA requires 5 years and RIDDOR 3 years of record retention — past-expiry documents stay archived in storage, never hard-deleted.",
+  },
+  library_link_reuse: {
+    term: "One document, many links",
+    copy:
+      "A library document can attach to many records at once via document_links. Replace the file once and every link points at the new content — the audit trail stays intact across incidents, investigations, CAPAs, and assets.",
+  },
+  sds_auto_attach_intent: {
+    term: "SDS auto-attach (v2)",
+    copy:
+      "When a chemical is named on an incident, the platform should pre-attach its Safety Data Sheet from the SDS Manager library. v1 surfaces the link picker so it's a one-click attach; the SDS Manager API integration that auto-suggests the SDS lands in v2.",
   },
 };

@@ -31,6 +31,7 @@ import {
 } from "@/components/investigations/detail/five-why-chain";
 import { FindingsEditor } from "@/components/investigations/detail/findings-editor";
 import { EvidenceUploader } from "@/components/investigations/detail/evidence-uploader";
+import { LinkedDocumentsSection } from "@/components/documents/linked-documents-section";
 import {
   EvidenceGrid,
   type EvidenceItem,
@@ -55,7 +56,7 @@ export default async function InvestigationDetailPage({
   searchParams: SearchParams;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const { supabase, currentSiteId } = await requireUser();
+  const { supabase, profile, currentSiteId } = await requireUser();
 
   const tab: DetailTabKey =
     typeof sp.tab === "string" && (VALID_TABS as readonly string[]).includes(sp.tab)
@@ -317,6 +318,19 @@ export default async function InvestigationDetailPage({
             items={evidenceItems}
             canDelete={canEdit && !isClosed}
           />
+          <div className="rounded-md border bg-card p-4">
+            <LinkedDocumentsSection
+              parentType="investigation"
+              parentId={inv.id}
+              orgId={profile.org_id}
+              defaultLinkRole="evidence"
+              defaultTypeFilter="evidence"
+              canLink={canEdit && !isClosed}
+              canUnlink={canEdit && !isClosed}
+              title="Library evidence"
+              emptyHint="Pull SDS sheets, SOPs, training records, or audit reports from the library — they keep the link audit-trail intact across modules."
+            />
+          </div>
         </div>
       )}
 

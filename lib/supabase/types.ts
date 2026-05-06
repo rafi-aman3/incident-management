@@ -42,8 +42,11 @@ export type Database = {
       activity_events: {
         Row: {
           actor_id: string | null
+          asset_id: string | null
           capa_id: string | null
           created_at: string
+          document_id: string | null
+          document_link_id: string | null
           finding_id: string | null
           id: string
           incident_id: string | null
@@ -55,8 +58,11 @@ export type Database = {
         }
         Insert: {
           actor_id?: string | null
+          asset_id?: string | null
           capa_id?: string | null
           created_at?: string
+          document_id?: string | null
+          document_link_id?: string | null
           finding_id?: string | null
           id?: string
           incident_id?: string | null
@@ -68,8 +74,11 @@ export type Database = {
         }
         Update: {
           actor_id?: string | null
+          asset_id?: string | null
           capa_id?: string | null
           created_at?: string
+          document_id?: string | null
+          document_link_id?: string | null
           finding_id?: string | null
           id?: string
           incident_id?: string | null
@@ -88,6 +97,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "activity_events_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "activity_events_capa_id_fkey"
             columns: ["capa_id"]
             isOneToOne: false
@@ -99,6 +115,20 @@ export type Database = {
             columns: ["capa_id"]
             isOneToOne: false
             referencedRelation: "capas_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_events_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_events_document_link_id_fkey"
+            columns: ["document_link_id"]
+            isOneToOne: false
+            referencedRelation: "document_links"
             referencedColumns: ["id"]
           },
           {
@@ -155,6 +185,95 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assets: {
+        Row: {
+          condition: Database["public"]["Enums"]["asset_condition"]
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          kind: Database["public"]["Enums"]["asset_kind"]
+          last_inspected_at: string | null
+          location: string | null
+          name: string
+          next_pm_at: string | null
+          notes: string | null
+          org_id: string
+          ref_code: string
+          sds_document_id: string | null
+          site_id: string
+          status: Database["public"]["Enums"]["asset_status"]
+          updated_at: string
+        }
+        Insert: {
+          condition?: Database["public"]["Enums"]["asset_condition"]
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["asset_kind"]
+          last_inspected_at?: string | null
+          location?: string | null
+          name: string
+          next_pm_at?: string | null
+          notes?: string | null
+          org_id: string
+          ref_code?: string
+          sds_document_id?: string | null
+          site_id: string
+          status?: Database["public"]["Enums"]["asset_status"]
+          updated_at?: string
+        }
+        Update: {
+          condition?: Database["public"]["Enums"]["asset_condition"]
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["asset_kind"]
+          last_inspected_at?: string | null
+          location?: string | null
+          name?: string
+          next_pm_at?: string | null
+          notes?: string | null
+          org_id?: string
+          ref_code?: string
+          sds_document_id?: string | null
+          site_id?: string
+          status?: Database["public"]["Enums"]["asset_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_sds_document_id_fkey"
+            columns: ["sds_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
             referencedColumns: ["id"]
           },
         ]
@@ -326,6 +445,133 @@ export type Database = {
           },
         ]
       }
+      document_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          document_id: string
+          id: string
+          link_role: string | null
+          parent_id: string
+          parent_type: Database["public"]["Enums"]["document_link_parent"]
+          removed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          document_id: string
+          id?: string
+          link_role?: string | null
+          parent_id: string
+          parent_type: Database["public"]["Enums"]["document_link_parent"]
+          removed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          document_id?: string
+          id?: string
+          link_role?: string | null
+          parent_id?: string
+          parent_type?: Database["public"]["Enums"]["document_link_parent"]
+          removed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_links_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          archived_at: string | null
+          archived_reason: string | null
+          expiry_date: string | null
+          file_name: string
+          id: string
+          mime_type: string
+          name: string
+          notes: string | null
+          org_id: string
+          site_id: string | null
+          size_bytes: number
+          storage_path: string
+          type: Database["public"]["Enums"]["document_type"]
+          updated_at: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_reason?: string | null
+          expiry_date?: string | null
+          file_name: string
+          id?: string
+          mime_type: string
+          name: string
+          notes?: string | null
+          org_id: string
+          site_id?: string | null
+          size_bytes: number
+          storage_path: string
+          type: Database["public"]["Enums"]["document_type"]
+          updated_at?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          archived_reason?: string | null
+          expiry_date?: string | null
+          file_name?: string
+          id?: string
+          mime_type?: string
+          name?: string
+          notes?: string | null
+          org_id?: string
+          site_id?: string | null
+          size_bytes?: number
+          storage_path?: string
+          type?: Database["public"]["Enums"]["document_type"]
+          updated_at?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hse_notification_records: {
         Row: {
           created_at: string
@@ -446,6 +692,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           equipment: string | null
+          equipment_asset_id: string | null
           id: string
           is_sandbox: boolean
           location: string | null
@@ -476,6 +723,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           equipment?: string | null
+          equipment_asset_id?: string | null
           id?: string
           is_sandbox?: boolean
           location?: string | null
@@ -506,6 +754,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           equipment?: string | null
+          equipment_asset_id?: string | null
           id?: string
           is_sandbox?: boolean
           location?: string | null
@@ -528,6 +777,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "incidents_equipment_asset_id_fkey"
+            columns: ["equipment_asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "incidents_org_id_fkey"
             columns: ["org_id"]
@@ -2609,6 +2865,10 @@ export type Database = {
       }
     }
     Functions: {
+      archive_document_v1: {
+        Args: { p_document_id: string; p_force?: boolean; p_reason?: string }
+        Returns: undefined
+      }
       assign_capa_from_investigation_v1: {
         Args: {
           p_actor_id: string
@@ -2621,6 +2881,13 @@ export type Database = {
           p_verifier_id: string
         }
         Returns: string
+      }
+      can_edit_parent: {
+        Args: {
+          p_parent_id: string
+          p_parent_type: Database["public"]["Enums"]["document_link_parent"]
+        }
+        Returns: boolean
       }
       classify_incident_v1: {
         Args: {
@@ -2650,6 +2917,15 @@ export type Database = {
         Args: { p_preset_id: string }
         Returns: string
       }
+      link_document_v1: {
+        Args: {
+          p_document_id: string
+          p_link_role?: string
+          p_parent_id: string
+          p_parent_type: Database["public"]["Enums"]["document_link_parent"]
+        }
+        Returns: string
+      }
       load_sample_chain_v1: {
         Args: { p_actor_id: string; p_site_id: string; p_verifier_id: string }
         Returns: string
@@ -2672,10 +2948,21 @@ export type Database = {
         Returns: undefined
       }
       regenerate_item_ids: { Args: { p_items: Json }; Returns: Json }
+      replace_document_file_v1: {
+        Args: {
+          p_document_id: string
+          p_file_name: string
+          p_mime_type: string
+          p_size_bytes: number
+          p_storage_path: string
+        }
+        Returns: undefined
+      }
       reset_demo_data_v1: { Args: { p_org_id: string }; Returns: undefined }
       resolve_org_permissions: { Args: never; Returns: string[] }
       resolve_permissions: { Args: { p_site_id: string }; Returns: string[] }
       seed_default_roles: { Args: { p_org_id: string }; Returns: undefined }
+      unlink_document_v1: { Args: { p_link_id: string }; Returns: undefined }
       user_can_access_site: { Args: { p_site_id: string }; Returns: boolean }
       verify_capa_v1: {
         Args: {
@@ -2690,6 +2977,24 @@ export type Database = {
       }
     }
     Enums: {
+      asset_condition: "excellent" | "good" | "fair" | "poor" | "unsafe"
+      asset_kind:
+        | "forklift"
+        | "fume_hood"
+        | "fire_extinguisher"
+        | "aed"
+        | "conveyor"
+        | "ergonomic_station"
+        | "machine_guard"
+        | "press"
+        | "crane"
+        | "vehicle"
+        | "eyewash_station"
+        | "spill_kit"
+        | "safety_shower"
+        | "generator"
+        | "other"
+      asset_status: "active" | "retired"
       body_part:
         | "head"
         | "neck"
@@ -2715,6 +3020,23 @@ export type Database = {
         | "verified"
         | "closed"
       capa_type: "corrective" | "preventive"
+      document_link_parent:
+        | "incident"
+        | "investigation"
+        | "capa"
+        | "asset"
+        | "site"
+        | "inspection"
+        | "finding"
+      document_type:
+        | "sds"
+        | "sop"
+        | "policy"
+        | "training_cert"
+        | "form"
+        | "evidence"
+        | "audit_report"
+        | "other"
       employment_status: "employee" | "contractor" | "visitor" | "agency"
       finding_status:
         | "open"
@@ -2922,6 +3244,25 @@ export const Constants = {
   },
   public: {
     Enums: {
+      asset_condition: ["excellent", "good", "fair", "poor", "unsafe"],
+      asset_kind: [
+        "forklift",
+        "fume_hood",
+        "fire_extinguisher",
+        "aed",
+        "conveyor",
+        "ergonomic_station",
+        "machine_guard",
+        "press",
+        "crane",
+        "vehicle",
+        "eyewash_station",
+        "spill_kit",
+        "safety_shower",
+        "generator",
+        "other",
+      ],
+      asset_status: ["active", "retired"],
       body_part: [
         "head",
         "neck",
@@ -2949,6 +3290,25 @@ export const Constants = {
         "closed",
       ],
       capa_type: ["corrective", "preventive"],
+      document_link_parent: [
+        "incident",
+        "investigation",
+        "capa",
+        "asset",
+        "site",
+        "inspection",
+        "finding",
+      ],
+      document_type: [
+        "sds",
+        "sop",
+        "policy",
+        "training_cert",
+        "form",
+        "evidence",
+        "audit_report",
+        "other",
+      ],
       employment_status: ["employee", "contractor", "visitor", "agency"],
       finding_status: [
         "open",
