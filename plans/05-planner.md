@@ -241,12 +241,12 @@ Per `.claude/rules/github-workflow.md`: branch `feat/phase-5-planner`, PR title 
 
 ---
 
-## Open questions (raise before code)
+## Open questions — resolved 2026-05-06 before §A kickoff
 
-1. **App-level aggregator vs. Postgres union view.** Plan: app-level (one query per source, merged in TS). Trade-off: easier to extend + the existing per-source RLS does the perm filtering for free; downside is N=6 round trips per render. For seed-scale data (dozens of events per month) this is well under the cache window. View alternative tracked as v2 if we ever need a single-query dashboard widget. Confirm.
-2. **Event-type filter representation in the URL.** Two options: (a) `?type=incident,capa_due` (CSV — fewer toggles render = shorter URL); (b) `?incident=1&capa_due=1` (verbose but each chip self-documents). Plan: (a). Confirm.
-3. **"All sites" site filter.** Plan: site picker offers each accessible site + an "All accessible sites" option. The existing site picker (used elsewhere) only does single-site; this is a small extension and kept local to the planner. Confirm.
-4. **Should we render scheduled inspections (`template_assignments` with no `started_at` yet)?** Plan: NO for Phase 5 — until the recurring-inspection cron lands (deferred from Phase 3), the only honest "future inspection" date is one a user manually picked. Showing a phantom row that says "Forklift Daily 06:00" every weekday before the run exists feels wrong. Open to revisit if user disagrees.
-5. **Color tokens for the chips.** Plan: incident severity colors mirror `<SeverityBadge>` (Phase 1); other kinds use brand-purple + amber + destructive per the `PLANNER_EVENT_TONE` map. No new tokens introduced. Confirm.
-6. **What goes in the chip label when truncated?** Month view cells are tight (~120 px wide). Plan: chips show only `${kind icon} ${truncated title}` (no ref code). Hover tooltip shows the full label + date + site. Confirm.
-7. **Worker visibility.** Plan: workers see all events at sites they're members of, including incidents reported by others (per existing `incidents_read` RLS). Confirm — vs. restricting workers to only their own incidents on the planner (matches `/incidents` worker-default `?tab=mine` filtering).
+1. **App-level aggregator vs. Postgres union view** → **app-level**. 6 parallel queries merged in TS; per-source RLS does the perm filtering for free. v2 may revisit if a dashboard widget needs the same shape.
+2. **Event-type URL representation** → **verbose** (`?incident=1&capa_due=1`). Each chip self-documents in the URL even though the string is longer; trumps CSV brevity.
+3. **"All sites" filter option** → **include it**. Site picker offers each accessible site + an "All accessible sites" option, scoped local to `/planner`.
+4. **Render unstarted scheduled inspections** → **no, per plan**. Until the recurring-inspection cron lands, only inspections with `started_at` surface.
+5. **Chip color tokens** → **no new tokens**. Severity mirrors `<SeverityBadge>`; others use brand-purple + amber + destructive per `PLANNER_EVENT_TONE`.
+6. **Truncated chip label (month cells)** → **default**: icon + truncated title; hover surfaces full label + date + site.
+7. **Worker visibility** → **default**: workers see all events at sites they're members of (matches existing `incidents_read` RLS), not just their own.
