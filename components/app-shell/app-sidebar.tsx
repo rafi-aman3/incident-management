@@ -13,33 +13,62 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Pin, PinOff, ShieldCheck } from "lucide-react";
 import { NAV_ITEMS } from "./nav-config";
 
 export function AppSidebar({
   allowedHrefs,
   userLabel,
   roleLabel,
+  pinned,
+  onPinToggle,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   allowedHrefs: ReadonlyArray<string>;
   userLabel: string;
   roleLabel: string;
+  pinned: boolean;
+  onPinToggle: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
 }) {
   const pathname = usePathname();
   const allowed = new Set(allowedHrefs);
   const items = NAV_ITEMS.filter((item) => allowed.has(item.href));
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <SidebarHeader className="px-3 py-3">
-        <div className="flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground font-bold">
-            E
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground font-bold">
+              E
+            </div>
+            <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
+              <span className="text-sm font-semibold">EHS Platform</span>
+              <span className="text-xs text-muted-foreground">v1.0</span>
+            </div>
           </div>
-          <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="text-sm font-semibold">EHS Platform</span>
-            <span className="text-xs text-muted-foreground">v1.0</span>
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onPinToggle}
+                aria-label={pinned ? "Unpin sidebar" : "Pin sidebar"}
+                aria-pressed={pinned}
+                className="hidden md:inline-flex group-data-[collapsible=icon]:hidden"
+              >
+                {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              {pinned ? "Unpin sidebar (auto-collapses)" : "Pin sidebar (keeps it open)"}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </SidebarHeader>
 
