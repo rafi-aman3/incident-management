@@ -38,6 +38,13 @@ async function AppShell({ children }: { children: ReactNode }) {
     )
     .filter((s): s is { id: string; name: string; country: "US" | "GB" } => s !== null);
 
+  // Mirror create_site_v1's gating: bootstrap (zero memberships) OR holds
+  // site_admin somewhere. Keeps the "Create new site" affordance off the
+  // dropdown for users who'd just bounce off the destination.
+  const canCreateSite =
+    memberships.length === 0 ||
+    memberships.some((m) => m.role?.key === "site_admin");
+
   let notifications: NotificationItem[] = [];
   if (currentSiteId) {
     // Bell shows: site-wide regulatory deadlines (recipient_id NULL) +
@@ -73,6 +80,7 @@ async function AppShell({ children }: { children: ReactNode }) {
         <Topbar
           sites={sites}
           currentSiteId={currentSiteId}
+          canCreateSite={canCreateSite}
           notifications={notifications}
           fullName={fullName}
           email={profile.email}

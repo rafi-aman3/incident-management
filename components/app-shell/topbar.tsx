@@ -9,6 +9,7 @@ import type { RoleKey } from "@/lib/supabase/auth";
 export function Topbar({
   sites,
   currentSiteId,
+  canCreateSite,
   notifications,
   fullName,
   email,
@@ -18,6 +19,7 @@ export function Topbar({
 }: {
   sites: SwitcherSite[];
   currentSiteId: string | null;
+  canCreateSite: boolean;
   notifications: NotificationItem[];
   fullName: string;
   email: string;
@@ -29,7 +31,7 @@ export function Topbar({
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mx-1 h-5" />
-      <SiteSwitcher sites={sites} currentSiteId={currentSiteId} />
+      <SiteSwitcher sites={sites} currentSiteId={currentSiteId} canCreateSite={canCreateSite} />
       <div className="ml-auto flex items-center gap-1">
         <HelpDrawer roleKey={roleKey} />
         <NotificationBell notifications={notifications} />
