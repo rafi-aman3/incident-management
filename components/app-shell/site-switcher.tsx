@@ -1,8 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Building2 } from "lucide-react";
+import { Check, ChevronDown, Building2, Plus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +34,12 @@ export function SiteSwitcher({
 
   if (!current) {
     return (
-      <span className="text-xs text-muted-foreground">No site assigned</span>
+      <Button asChild variant="outline" size="sm" className="gap-1.5">
+        <Link href="/admin/site-setup">
+          <Plus className="h-3.5 w-3.5" />
+          <span>Set up a site</span>
+        </Link>
+      </Button>
     );
   }
 
