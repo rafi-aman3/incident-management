@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SignatureCanvas } from "@/components/inspections/runner/signature-canvas";
 import { MediaUploader } from "@/components/inspections/runner/media-uploader";
+import { InfoTooltip } from "@/components/info-tooltip";
 import {
   saveInspectionAnswer,
   completeInspection,
@@ -327,9 +328,10 @@ export function InspectionRunner(props: Props) {
       <Dialog open={flaggedDialogOpen} onOpenChange={setFlaggedDialogOpen}>
         <DialogContent className="max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="flex items-center">
               <AlertTriangle className="mr-1.5 inline-block h-4 w-4 text-warning" />
               Flagged items detected
+              <InfoTooltip tip="flagged_response_finding" />
             </DialogTitle>
             <DialogDescription>
               These responses will become open findings on submit. Add a

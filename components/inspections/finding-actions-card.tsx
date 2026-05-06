@@ -9,6 +9,7 @@ import {
   resolveFinding,
   escalateFindingToIncident,
 } from "@/app/(app)/inspections/findings-actions";
+import { InfoTooltip } from "@/components/info-tooltip";
 import type { FindingStatus } from "@/lib/templates/types";
 
 export function FindingActionsCard({
@@ -86,6 +87,7 @@ export function FindingActionsCard({
           <AlertOctagon className="mr-1 h-3 w-3" />
           Escalate to incident
         </Button>
+        <InfoTooltip tip="finding_escalation" />
       </div>
       {!canResolve && !canEscalate && (
         <p className="text-xs text-muted-foreground">

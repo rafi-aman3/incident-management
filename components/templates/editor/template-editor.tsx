@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TemplateStatusBadge } from "@/components/templates/badges";
 import { ChangeSummaryDialog } from "@/components/templates/editor/change-summary-dialog";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { saveDraftVersion } from "@/app/(app)/templates/[id]/edit/actions";
 import type {
   TemplateNodeItem,
@@ -253,6 +254,7 @@ export function TemplateEditor(props: Props) {
           >
             Publish v{props.draftVersionNumber}
           </button>
+          <InfoTooltip tip="template_publish_immutable" />
         </div>
       </div>
 

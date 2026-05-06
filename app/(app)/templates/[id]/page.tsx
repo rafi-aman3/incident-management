@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, History, Pencil } from "lucide-react";
+import { ArrowLeft, History, MapPinned, Pencil } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { orgCan } from "@/lib/auth/orgCan";
 import {
@@ -8,6 +8,7 @@ import {
   IndustryChip,
   VersionBadge,
 } from "@/components/templates/badges";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { ChecklistPreview } from "@/components/templates/checklist-preview";
 import type {
   TemplateNodeItem,
@@ -41,6 +42,7 @@ export default async function TemplateViewerPage({
 
   const canRead = await orgCan("template:read_org");
   const canEdit = await orgCan("template:edit");
+  const canAssign = await orgCan("template:assign");
   if (!canRead) {
     return (
       <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
@@ -128,14 +130,24 @@ export default async function TemplateViewerPage({
           )}
         </div>
 
-        {canEdit && !tmpl.is_system_preset && (
-          <Link
-            href={`/templates/${tmpl.id}/edit`}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
-          >
-            <Pencil className="h-4 w-4" /> Edit
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {canAssign && !tmpl.is_system_preset && tmpl.status === "published" && (
+            <Link
+              href={`/templates/${tmpl.id}/assign`}
+              className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+            >
+              <MapPinned className="h-4 w-4" /> Assign
+            </Link>
+          )}
+          {canEdit && !tmpl.is_system_preset && (
+            <Link
+              href={`/templates/${tmpl.id}/edit`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+            >
+              <Pencil className="h-4 w-4" /> Edit
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -159,6 +171,7 @@ export default async function TemplateViewerPage({
           <div className="flex items-center gap-2 border-b px-4 py-3">
             <History className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Versions</h2>
+            <InfoTooltip tip="template_versions_audit" />
           </div>
           <ul className="divide-y">
             {versionList.length === 0 && (

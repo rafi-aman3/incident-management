@@ -2,7 +2,9 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   AlertOctagon,
+  ClipboardCheck,
   ClipboardList,
+  ClipboardSignature,
   ListChecks,
   ShieldCheck,
   FileBarChart,
@@ -32,12 +34,18 @@ export type NavItem = {
 
 export const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { href: "/dashboard",       label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/incidents/new/1", label: "Report Incident", icon: PlusCircle,      permission: "incident:report" },
-  { href: "/incidents",       label: "Incidents",       icon: AlertOctagon,    permission: "incident:read_site" },
-  { href: "/investigations",  label: "Investigations",  icon: ClipboardList,   permission: "incident:read_site" },
-  { href: "/capa",            label: "CAPA",            icon: ListChecks,      permission: "capa:complete" },
-  { href: "/reports",         label: "Reports",         icon: FileBarChart,    permission: "incident:read_site" },
-  { href: "/admin",           label: "Admin",           icon: Settings2,       permission: "site:configure" },
+  { href: "/incidents/new/1", label: "Report Incident", icon: PlusCircle,         permission: "incident:report" },
+  { href: "/incidents",       label: "Incidents",       icon: AlertOctagon,       permission: "incident:read_site" },
+  { href: "/investigations",  label: "Investigations",  icon: ClipboardList,      permission: "incident:read_site" },
+  { href: "/capa",            label: "CAPA",            icon: ListChecks,         permission: "capa:complete" },
+  // Templates is org-scoped (not per-site); the layout's site-scoped can()
+  // filter is loose enough that a worker with template:read_org via any
+  // membership will see it. site_admin / ehs_manager / supervisor / worker
+  // all hold template:read_org by default per Phase 3 perms migration.
+  { href: "/templates",       label: "Templates",       icon: ClipboardCheck,     permission: "template:read_org" },
+  { href: "/inspections",     label: "Inspections",     icon: ClipboardSignature, permission: "inspection:read_site" },
+  { href: "/reports",         label: "Reports",         icon: FileBarChart,       permission: "incident:read_site" },
+  { href: "/admin",           label: "Admin",           icon: Settings2,          permission: "site:configure" },
 ];
 
 export const ROLE_BADGE: Record<RoleKey, { label: string; icon: LucideIcon }> = {
