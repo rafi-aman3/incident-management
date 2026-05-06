@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { FileText, Loader2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -167,9 +168,9 @@ function PickerDialog({
           <DialogDescription>
             Pick a file from the org library to associate with this record.
             To upload a new file, head to{" "}
-            <a href="/resources/documents/new" className="underline">
+            <Link href="/resources/documents/new" className="underline">
               Documents → Upload
-            </a>
+            </Link>
             .
           </DialogDescription>
         </DialogHeader>
