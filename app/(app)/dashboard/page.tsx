@@ -257,13 +257,13 @@ export default async function DashboardPage() {
           <section className="rounded-md border border-dashed p-8 text-center">
             <h2 className="text-base font-semibold">No sites yet</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Set up your first site to start capturing incidents, running inspections, and rolling up reports.
+              Create your first site to start capturing incidents, running inspections, and rolling up reports.
             </p>
             <Link
-              href="/admin/site-setup"
+              href="/admin/sites/new"
               className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
-              <Plus className="h-4 w-4" /> Set up your first site
+              <Plus className="h-4 w-4" /> Create your first site
             </Link>
           </section>
         )}

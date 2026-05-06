@@ -35,9 +35,9 @@ export function SiteSwitcher({
   if (!current) {
     return (
       <Button asChild variant="outline" size="sm" className="gap-1.5">
-        <Link href="/admin/site-setup">
+        <Link href="/admin/sites/new">
           <Plus className="h-3.5 w-3.5" />
-          <span>Set up a site</span>
+          <span>Create a site</span>
         </Link>
       </Button>
     );
