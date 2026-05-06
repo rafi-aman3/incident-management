@@ -1,6 +1,10 @@
 import * as React from "react"
 
-const MOBILE_BREAKPOINT = 768
+// 1024 (lg). Below this width the shadcn sidebar primitive flips to its
+// Sheet-overlay mode and the topbar surfaces a hamburger to open it —
+// iPad-portrait (768) is treated as mobile so a 240px rail doesn't crowd
+// the content area.
+const MOBILE_BREAKPOINT = 1024
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)

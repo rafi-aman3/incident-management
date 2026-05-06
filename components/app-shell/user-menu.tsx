@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings, Users } from "lucide-react";
+import Link from "next/link";
 import { signOut } from "@/app/(auth)/login/actions";
 
 export function UserMenu({
@@ -54,6 +55,19 @@ export function UserMenu({
             </span>
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/settings" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Settings
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/members" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Members
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
           <form action={signOut} className="w-full">
