@@ -17,40 +17,22 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import type { TooltipKey } from "@/lib/constants/tooltips";
 import { trir, dart, formatKpi, isDartCase } from "@/lib/format/kpi";
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ created?: string }>;
-}) {
-  const { supabase, profile, memberships, currentSiteId, currentRoleKey } = await requireUser();
+export default async function DashboardPage() {
+  const { supabase, profile, currentSiteId, currentRoleKey } = await requireUser();
 
-  // First-time onboarding: a site_admin whose ONLY membership is on a not-yet-
-  // completed site gets sent through the wizard. If they already have any other
-  // completed site, the dashboard renders a banner pointing at the wizard
-  // instead — otherwise they'd be trapped here whenever they create a 2nd site.
+  // Site_admin viewing an unfinished site sees a yellow banner above the
+  // dashboard with a "Finish setup" link. We do NOT force-redirect into the
+  // wizard — the user explicitly wants to land on the dashboard after
+  // creating a site, and trapping them on the wizard makes the just-created
+  // site invisible from the topbar SiteSwitcher and KPI strip.
   let setupIncompleteSiteName: string | null = null;
   if (currentSiteId && currentRoleKey === "site_admin") {
-    const memberSiteIds = memberships.map((m) => m.site_id);
-    const { data: sitesData } = await supabase
+    const { data: currentSite } = await supabase
       .from("sites")
-      .select("id, name, setup_completed_at")
-      .in("id", memberSiteIds);
-    const sites = sitesData ?? [];
-    const currentSite = sites.find((s) => s.id === currentSiteId);
-    const hasOtherCompleted = sites.some(
-      (s) => s.id !== currentSiteId && s.setup_completed_at,
-    );
+      .select("name, setup_completed_at")
+      .eq("id", currentSiteId)
+      .maybeSingle();
     if (currentSite && !currentSite.setup_completed_at) {
-      if (!hasOtherCompleted) {
-        // Forward the ?created param so the wizard fires the success toast.
-        const sp = await searchParams;
-        const created = sp?.created;
-        redirect(
-          created
-            ? `/admin/site-setup/1?created=${encodeURIComponent(created)}`
-            : "/admin/site-setup",
-        );
-      }
       setupIncompleteSiteName = currentSite.name;
     }
   }
