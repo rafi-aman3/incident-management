@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus, ArrowRight } from "lucide-react";
+import { Plus, ArrowRight, AlertTriangle } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { INCIDENT_TYPE_META, type IncidentType } from "@/lib/incidents/types";
@@ -16,16 +16,28 @@ import type { TooltipKey } from "@/lib/constants/tooltips";
 import { trir, dart, formatKpi, isDartCase } from "@/lib/format/kpi";
 
 export default async function DashboardPage() {
-  const { supabase, profile, currentSiteId, currentRoleKey } = await requireUser();
+  const { supabase, profile, memberships, currentSiteId, currentRoleKey } = await requireUser();
 
-  // Site admins with un-set-up sites get sent to the wizard
+  // First-time onboarding: a site_admin whose ONLY membership is on a not-yet-
+  // completed site gets sent through the wizard. If they already have any other
+  // completed site, the dashboard renders a banner pointing at the wizard
+  // instead — otherwise they'd be trapped here whenever they create a 2nd site.
+  let setupIncompleteSiteName: string | null = null;
   if (currentSiteId && currentRoleKey === "site_admin") {
-    const { data: site } = await supabase
+    const memberSiteIds = memberships.map((m) => m.site_id);
+    const { data: sitesData } = await supabase
       .from("sites")
-      .select("setup_completed_at")
-      .eq("id", currentSiteId)
-      .single();
-    if (!site?.setup_completed_at) redirect("/admin/site-setup");
+      .select("id, name, setup_completed_at")
+      .in("id", memberSiteIds);
+    const sites = sitesData ?? [];
+    const currentSite = sites.find((s) => s.id === currentSiteId);
+    const hasOtherCompleted = sites.some(
+      (s) => s.id !== currentSiteId && s.setup_completed_at,
+    );
+    if (currentSite && !currentSite.setup_completed_at) {
+      if (!hasOtherCompleted) redirect("/admin/site-setup");
+      setupIncompleteSiteName = currentSite.name;
+    }
   }
 
   const canReportIncident = currentSiteId ? await can("incident:report", currentSiteId) : false;
@@ -150,6 +162,24 @@ export default async function DashboardPage() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
+        {setupIncompleteSiteName && (
+          <div className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+            <div className="flex-1">
+              <strong className="font-semibold">Site setup in progress:</strong>{" "}
+              <span className="text-muted-foreground">
+                {setupIncompleteSiteName} hasn&apos;t finished site setup yet.
+              </span>{" "}
+              <Link
+                href="/admin/site-setup"
+                className="font-medium text-primary hover:underline"
+              >
+                Finish setup →
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Dashboard</p>
