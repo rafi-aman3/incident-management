@@ -2,7 +2,7 @@ import { ReactNode, Suspense } from "react";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
-import { SiteCreatedToast } from "@/components/site-setup/created-toast";
+import { SiteCreatedToast } from "@/components/app-shell/site-created-toast";
 
 /**
  * Wizard layout. Gates the entire `/admin/site-setup/*` tree on the

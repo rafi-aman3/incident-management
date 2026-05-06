@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, ArrowRight, AlertTriangle } from "lucide-react";
+import { SiteCreatedToast } from "@/components/app-shell/site-created-toast";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { INCIDENT_TYPE_META, type IncidentType } from "@/lib/incidents/types";
@@ -15,7 +17,11 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import type { TooltipKey } from "@/lib/constants/tooltips";
 import { trir, dart, formatKpi, isDartCase } from "@/lib/format/kpi";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ created?: string }>;
+}) {
   const { supabase, profile, memberships, currentSiteId, currentRoleKey } = await requireUser();
 
   // First-time onboarding: a site_admin whose ONLY membership is on a not-yet-
@@ -35,7 +41,16 @@ export default async function DashboardPage() {
       (s) => s.id !== currentSiteId && s.setup_completed_at,
     );
     if (currentSite && !currentSite.setup_completed_at) {
-      if (!hasOtherCompleted) redirect("/admin/site-setup");
+      if (!hasOtherCompleted) {
+        // Forward the ?created param so the wizard fires the success toast.
+        const sp = await searchParams;
+        const created = sp?.created;
+        redirect(
+          created
+            ? `/admin/site-setup/1?created=${encodeURIComponent(created)}`
+            : "/admin/site-setup",
+        );
+      }
       setupIncompleteSiteName = currentSite.name;
     }
   }
@@ -162,6 +177,9 @@ export default async function DashboardPage() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
+        <Suspense fallback={null}>
+          <SiteCreatedToast />
+        </Suspense>
         {setupIncompleteSiteName && (
           <div className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />

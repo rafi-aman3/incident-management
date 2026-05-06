@@ -104,9 +104,10 @@ export async function createSite(
   });
   console.log("[createSite] cookie set, redirecting to /admin/site-setup");
 
-  // Redirect straight to step 1 so we keep the ?created param — the
-  // /admin/site-setup index does its own redirect and drops query strings.
-  redirect(
-    `/admin/site-setup/1?created=${encodeURIComponent(parsed.data.name)}`,
-  );
+  // Land on the dashboard so the user sees the new site reflected in the
+  // topbar SiteSwitcher, the KPI strip, and the optional setup-incomplete
+  // banner. Toast fires from the ?created param. If the user has no
+  // completed sites yet (true bootstrap), the dashboard's own auto-redirect
+  // forwards them to the wizard.
+  redirect(`/dashboard?created=${encodeURIComponent(parsed.data.name)}`);
 }
