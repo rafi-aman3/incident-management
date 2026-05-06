@@ -48,8 +48,16 @@ export const PERMISSIONS = [
   "finding:read",
   "finding:resolve",
   "finding:escalate",
-  "asset:manage",
+  "asset:read_site",
+  "asset:create",
+  "asset:edit",
+  "asset:delete",
+  "document:read_org",
   "document:upload",
+  "document:edit_metadata",
+  "document:archive",
+  "document_link:create",
+  "document_link:remove",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
