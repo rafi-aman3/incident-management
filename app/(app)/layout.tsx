@@ -40,11 +40,15 @@ async function AppShell({ children }: { children: ReactNode }) {
 
   let notifications: NotificationItem[] = [];
   if (currentSiteId) {
+    // Bell shows: site-wide regulatory deadlines (recipient_id NULL) +
+    // notifications addressed to the current user (CAPA owner/verifier
+    // assignments, escalations).
     const { data } = await supabase
       .from("notifications")
-      .select("id, kind, title, body, deadline_at, incident_id, created_at")
+      .select("id, kind, title, body, deadline_at, incident_id, capa_id, recipient_id, created_at")
       .eq("site_id", currentSiteId)
       .is("resolved_at", null)
+      .or(`recipient_id.is.null,recipient_id.eq.${profile.id}`)
       .order("deadline_at", { ascending: true })
       .limit(20);
     notifications = (data ?? []).map((n) => ({
@@ -54,6 +58,7 @@ async function AppShell({ children }: { children: ReactNode }) {
       body: n.body,
       deadline_at: n.deadline_at,
       incident_id: n.incident_id,
+      capa_id: n.capa_id,
       created_at: n.created_at,
     }));
   }
