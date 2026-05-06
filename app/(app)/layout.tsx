@@ -45,9 +45,21 @@ async function AppShell({ children }: { children: ReactNode }) {
     memberships.length === 0 ||
     memberships.some((m) => m.role?.key === "site_admin");
 
+  // Raw site_members read (bypasses the membership join's RLS-on-sites
+  // filter) so we can tell whether memberships are truly absent vs. being
+  // hidden because the embedded sites read failed.
+  const { data: rawMembers, error: rawErr } = await supabase
+    .from("site_members")
+    .select("site_id, role_id")
+    .eq("profile_id", profile.id);
+
   console.log("[AppShell]", {
-    user: profile.email,
-    memberships_count: memberships.length,
+    auth_uid: profile.id,
+    profile_email: profile.email,
+    profile_org_id: profile.org_id,
+    memberships_via_join: memberships.length,
+    raw_site_members_for_this_uid: rawMembers?.length ?? 0,
+    raw_query_error: rawErr?.message ?? null,
     sites_visible_in_switcher: sites.length,
     sites: sites.map((s) => `${s.name} (${s.country})`),
     current_site_id: currentSiteId,
