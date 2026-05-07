@@ -415,6 +415,10 @@ export function Step2Details(props: Props) {
             <Plus className="h-3 w-3" /> Add witness
           </button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Statements you record here will carry over to the assigned investigator
+          once the report is finalized.
+        </p>
         <ul className="space-y-3">
           {witnesses.map((w, i) => (
             <li key={i} className="rounded-md border p-3">

@@ -121,20 +121,41 @@ export function Step3Review(props: Props) {
         <p className="text-sm text-destructive">{state.error}</p>
       )}
 
-      <div className="flex items-center justify-between border-t pt-4">
-        <a
-          href={`/incidents/new/2?id=${incidentId}`}
-          className="text-sm text-muted-foreground underline-offset-2 hover:underline"
-        >
-          ← Back
-        </a>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-        >
-          {isPending ? "Submitting…" : "Submit incident"}
-        </button>
+      <div className="flex flex-col items-stretch gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4 text-sm">
+          <a
+            href={`/incidents/new/2?id=${incidentId}`}
+            className="text-muted-foreground underline-offset-2 hover:underline"
+          >
+            ← Back
+          </a>
+          <a
+            href="/incidents"
+            className="text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Save draft &amp; exit
+          </a>
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            type="submit"
+            disabled={isPending}
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+          >
+            {isPending ? "Finalizing…" : "Finalize report"}
+          </button>
+          {!isSandbox && (
+            <p className="max-w-xs text-right text-xs text-muted-foreground">
+              Starts the regulatory clock and notifies anyone configured for{" "}
+              {track === "A"
+                ? "Track A"
+                : track === "B"
+                ? "Track B"
+                : "Track C"}{" "}
+              events at this site.
+            </p>
+          )}
+        </div>
       </div>
     </form>
   );

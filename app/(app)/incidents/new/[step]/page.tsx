@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { Step1WhatHappened } from "@/components/incidents/wizard/step-1-what-happened";
 import { Step2Details } from "@/components/incidents/wizard/step-2-details";
@@ -29,9 +31,27 @@ export default async function ReportWizardPage({
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 py-8">
-      <div className="space-y-1">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">Report incident</p>
-        <h1 className="text-2xl font-semibold">Report a safety event</h1>
+      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 ring-1 ring-foreground/5">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          <Link href="/incidents" className="hover:underline">
+            Incidents
+          </Link>{" "}
+          <span aria-hidden>›</span> New
+        </p>
+        <div className="mt-1 flex items-start gap-3">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+            aria-hidden
+          >
+            <AlertTriangle className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-semibold leading-tight">Report Incident</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Complete all three steps to create a full investigation package.
+            </p>
+          </div>
+        </div>
       </div>
       <WizardProgress current={stepNum as 1 | 2 | 3} />
 

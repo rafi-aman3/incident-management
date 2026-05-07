@@ -8,7 +8,10 @@ export const Step1Schema = z.object({
   occurred_at: z
     .string()
     .min(1, "Date and time are required")
-    .refine((v) => !Number.isNaN(Date.parse(v)), { message: "Not a valid date" }),
+    .refine((v) => !Number.isNaN(Date.parse(v)), { message: "Not a valid date" })
+    .refine((v) => Date.parse(v) <= Date.now(), {
+      message: "Occurred time can't be in the future",
+    }),
   area: z.string().trim().max(120).optional().or(z.literal("")),
   location: z.string().trim().max(200).optional().or(z.literal("")),
   description: z.string().trim().max(5000).optional().or(z.literal("")),
