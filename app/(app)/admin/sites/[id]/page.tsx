@@ -28,6 +28,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  AddMemberDialog,
+  type ProfileOption,
+  type RoleOption,
+} from "@/components/admin/add-member-dialog";
+import { ChangeRoleDialog } from "@/components/admin/change-role-dialog";
+import { RemoveMemberDialog } from "@/components/admin/remove-member-dialog";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -52,9 +59,10 @@ export default async function AdminSiteDetailPage({
       : "overview";
 
   // Permission check at the target site (not the cookie site).
-  const [canConfigure, canArchive] = await Promise.all([
+  const [canConfigure, canArchive, canManageMembers] = await Promise.all([
     can("site:configure", id),
     can("site:archive", id),
+    can("member:manage", id),
   ]);
   if (!canConfigure) redirect("/admin/sites");
 
@@ -100,6 +108,7 @@ export default async function AdminSiteDetailPage({
   // ---- Tab-specific data ----
   type Member = {
     profile_id: string;
+    role_id: string;
     role_key: string | null;
     role_name: string | null;
     include_children: boolean;
@@ -107,25 +116,56 @@ export default async function AdminSiteDetailPage({
     email: string;
   };
   let members: Member[] = [];
+  let candidateProfiles: ProfileOption[] = [];
+  let roleOptions: RoleOption[] = [];
   let hours: AnnualHoursRow[] = [];
 
   if (tab === "members") {
-    const { data: rawMembers } = await supabase
-      .from("site_members")
-      .select(
-        "profile_id, include_children, role:roles(key, name), profile:profiles(full_name, email)",
-      )
-      .eq("site_id", site.id);
-    members = (rawMembers ?? [])
+    const [membersRes, allProfilesRes, rolesRes] = await Promise.all([
+      supabase
+        .from("site_members")
+        .select(
+          "profile_id, role_id, include_children, role:roles(key, name), profile:profiles(full_name, email)",
+        )
+        .eq("site_id", site.id),
+      supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .eq("org_id", profile.org_id)
+        .order("full_name", { ascending: true }),
+      supabase
+        .from("roles")
+        .select("id, key, name")
+        .eq("org_id", profile.org_id)
+        .order("name", { ascending: true }),
+    ]);
+
+    members = (membersRes.data ?? [])
       .filter((m) => m.profile)
       .map((m) => ({
         profile_id: m.profile_id,
+        role_id: m.role_id,
         role_key: m.role?.key ?? null,
         role_name: m.role?.name ?? null,
         include_children: m.include_children,
         full_name: m.profile!.full_name,
         email: m.profile!.email,
       }));
+
+    const memberIds = new Set(members.map((m) => m.profile_id));
+    candidateProfiles = (allProfilesRes.data ?? [])
+      .filter((p) => !memberIds.has(p.id))
+      .map((p) => ({
+        id: p.id,
+        full_name: p.full_name,
+        email: p.email,
+      }));
+
+    roleOptions = (rolesRes.data ?? []).map((r) => ({
+      id: r.id,
+      key: r.key,
+      name: r.name,
+    }));
   }
 
   if (tab === "hours") {
@@ -203,71 +243,117 @@ export default async function AdminSiteDetailPage({
         </div>
       )}
 
-      {tab === "members" && (
-        <div className="space-y-3">
-          <div className="rounded-md border bg-warning/10 px-4 py-3 text-sm">
-            <p className="font-medium">Member editing ships in Phase 11b.</p>
-            <p className="text-xs text-muted-foreground">
-              Read-only for now. To add a member today, run{" "}
-              <code className="rounded bg-background px-1 py-0.5 font-mono text-[11px]">
-                add_site_member_v1
-              </code>{" "}
-              from the SQL editor.
-            </p>
-          </div>
-          {members.length === 0 ? (
-            <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
-              No members on this site yet.
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Member</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Include children</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {members.map((m) => {
-                    const name = m.full_name ?? m.email;
-                    return (
-                      <TableRow key={m.profile_id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-7 w-7">
-                              <AvatarFallback className="text-[10px]">
-                                {initials(name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-medium">{name}</p>
-                              <p className="text-[11px] text-muted-foreground">{m.email}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium">
-                            {m.role_name ?? m.role_key ?? "—"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {m.include_children ? (
-                            <span className="text-xs">Yes</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">No</span>
-                          )}
-                        </TableCell>
+      {tab === "members" &&
+        (() => {
+          const adminCount = members.filter((m) => m.role_key === "site_admin").length;
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {members.length} member{members.length === 1 ? "" : "s"} on this site.
+                </p>
+                {canManageMembers && !archived && (
+                  <AddMemberDialog
+                    mode="add-profile-to-site"
+                    siteId={site.id}
+                    candidates={candidateProfiles}
+                    roles={roleOptions}
+                  />
+                )}
+              </div>
+              {members.length === 0 ? (
+                <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
+                  No members on this site yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Member</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Include children</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {members.map((m) => {
+                        const name = m.full_name ?? m.email;
+                        const isLastAdmin =
+                          m.role_key === "site_admin" && adminCount <= 1;
+                        return (
+                          <TableRow key={m.profile_id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-7 w-7">
+                                  <AvatarFallback className="text-[10px]">
+                                    {initials(name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium">{name}</p>
+                                  <p className="text-[11px] text-muted-foreground">{m.email}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium">
+                                {m.role_name ?? m.role_key ?? "—"}
+                              </span>
+                              {isLastAdmin && (
+                                <span
+                                  className="ml-1 text-[10px] text-muted-foreground"
+                                  aria-label="Last site admin — protected"
+                                >
+                                  · last admin
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {m.include_children ? (
+                                <span className="text-xs">Yes</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">No</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {canManageMembers && !archived ? (
+                                <div className="inline-flex items-center gap-1">
+                                  <ChangeRoleDialog
+                                    siteId={site.id}
+                                    profileId={m.profile_id}
+                                    memberName={name}
+                                    currentRoleId={m.role_id}
+                                    currentIncludeChildren={m.include_children}
+                                    roles={roleOptions}
+                                  />
+                                  <RemoveMemberDialog
+                                    siteId={site.id}
+                                    profileId={m.profile_id}
+                                    memberName={name}
+                                    isLastSiteAdmin={isLastAdmin}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              {archived && (
+                <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  Member editing is disabled while the site is archived. Unarchive
+                  first.
+                </p>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          );
+        })()}
 
       {tab === "hours" && (
         <AnnualHoursEditor
