@@ -13,46 +13,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/supabase/auth";
-import { can, requirePermission } from "@/lib/auth/can";
+import { can } from "@/lib/auth/can";
 import type { Database } from "@/lib/supabase/types";
+import { type AssetCondition } from "@/lib/documents/types";
+import type { ActionResult } from "@/lib/incidents/schemas";
+import { AssetCreateSchema, AssetUpdateSchema } from "./assets-schemas";
 
 type AssetUpdate = Database["public"]["Tables"]["assets"]["Update"];
-import {
-  AssetConditionSchema,
-  AssetKindSchema,
-  AssetStatusSchema,
-  type AssetCondition,
-} from "@/lib/documents/types";
-import type { ActionResult } from "@/lib/incidents/schemas";
-
-// ---------------------------------------------------------------------------
-// Schemas
-// ---------------------------------------------------------------------------
-const dateOrNull = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD")
-  .nullable()
-  .optional();
-
-export const AssetCreateSchema = z.object({
-  name:               z.string().trim().min(1, "Name is required").max(160),
-  kind:               AssetKindSchema,
-  site_id:            z.string().uuid(),
-  location:           z.string().trim().max(160).optional().or(z.literal("")),
-  condition:          AssetConditionSchema.default("good"),
-  status:             AssetStatusSchema.default("active"),
-  last_inspected_at:  dateOrNull,
-  next_pm_at:         dateOrNull,
-  sds_document_id:    z.string().uuid().nullable().optional(),
-  notes:              z.string().trim().max(2000).optional().or(z.literal("")),
-});
-export type AssetCreateInput = z.infer<typeof AssetCreateSchema>;
-
-export const AssetUpdateSchema = AssetCreateSchema.partial().extend({
-  // site_id changes are allowed but require asset:edit at BOTH old and new
-  // site — handled in updateAsset below.
-});
-export type AssetUpdateInput = z.infer<typeof AssetUpdateSchema>;
 
 // ---------------------------------------------------------------------------
 // createAsset
@@ -380,5 +347,3 @@ export async function guardAtLeastOneCreateSite(): Promise<void> {
   }
 }
 
-// Quiet ESLint about an unused import that a future revision may want
-void requirePermission;

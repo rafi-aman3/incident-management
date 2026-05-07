@@ -7,10 +7,8 @@
 
 import { redirect } from "next/navigation";
 import type { z } from "zod";
-import {
-  AssetUpdateSchema,
-  updateAsset,
-} from "@/lib/actions/assets";
+import { updateAsset } from "@/lib/actions/assets";
+import { AssetUpdateSchema } from "@/lib/actions/assets-schemas";
 import type { ActionResult } from "@/lib/incidents/schemas";
 
 /** Form-action wrapper for the asset edit page. Reads `id` from the

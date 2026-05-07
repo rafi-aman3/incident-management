@@ -16,7 +16,7 @@ export default async function IncidentDetailPage({ params }: { params: Params })
   const { id } = await params;
   const { supabase, profile, currentSiteId } = await requireUser();
 
-  const { data: incident, error } = await supabase
+  const { data: incident } = await supabase
     .from("incidents")
     .select(
       `
@@ -24,17 +24,20 @@ export default async function IncidentDetailPage({ params }: { params: Params })
       severity, track, status, classified_at, closed_at, is_sandbox,
       reporter_id, ppe_worn, substance, quantity_value, quantity_unit,
       equipment, dangerous_occurrence_kind, site_id, equipment_asset_id,
+      deleted_at,
       asset:equipment_asset_id(id, ref_code, name, kind, condition),
       reporter:reporter_id(full_name, email),
       injured_persons(name, body_parts, treatment, fatality, hospitalized, riddor_specified_injury),
       witnesses(name, contact, statement)
-      `
+      `,
     )
     .eq("id", id)
-    .is("deleted_at", null)
-    .single();
+    .maybeSingle();
 
-  if (error || !incident) notFound();
+  if (!incident) notFound();
+  if (incident.deleted_at) {
+    return <DeletedNotice refCode={incident.ref_code} deletedAt={incident.deleted_at} />;
+  }
   if (incident.status === "draft") redirect(`/incidents/new/3?id=${incident.id}`);
 
   const meta = INCIDENT_TYPE_META[incident.type as IncidentType];
@@ -50,35 +53,43 @@ export default async function IncidentDetailPage({ params }: { params: Params })
       ])
     : [false, false, false];
 
-  // Latest severity-override (if any) for the audit card
-  const { data: latestOverride } = await supabase
-    .from("severity_overrides")
-    .select("original_severity, new_severity, reason, overridden_by, created_at, profile:overridden_by(full_name, email)")
-    .eq("incident_id", incident.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Aside cards + triage modal data — fan out in parallel.
+  const [
+    overridesRes,
+    investigationRes,
+    attachmentsRes,
+    siteMembersRes,
+  ] = await Promise.all([
+    supabase
+      .from("severity_overrides")
+      .select(
+        "original_severity, new_severity, reason, overridden_by, created_at, profile:overridden_by(full_name, email)",
+      )
+      .eq("incident_id", incident.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("investigations")
+      .select(
+        "id, ref_code, status, due_date, lead_investigator_id, lead:lead_investigator_id(full_name, email)",
+      )
+      .eq("incident_id", incident.id)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabase
+      .from("incident_attachments")
+      .select("id, file_name, storage_path, mime_type, size_bytes, created_at")
+      .eq("incident_id", incident.id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("site_members")
+      .select("profile:profiles(id, full_name, email), role:roles(key)")
+      .eq("site_id", incident.site_id),
+  ]);
 
-  // Linked investigation
-  const { data: investigation } = await supabase
-    .from("investigations")
-    .select("id, ref_code, status, due_date, lead_investigator_id, lead:lead_investigator_id(full_name, email)")
-    .eq("incident_id", incident.id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  // Attachments
-  const { data: attachments } = await supabase
-    .from("incident_attachments")
-    .select("id, file_name, storage_path, mime_type, size_bytes, created_at")
-    .eq("incident_id", incident.id)
-    .order("created_at", { ascending: true });
-
-  // Site members for triage modal pickers
-  const { data: siteMembersRaw } = await supabase
-    .from("site_members")
-    .select("profile:profiles(id, full_name, email), role:roles(key)")
-    .eq("site_id", incident.site_id);
+  const overrides = overridesRes.data ?? [];
+  const investigation = investigationRes.data;
+  const attachments = attachmentsRes.data;
+  const siteMembersRaw = siteMembersRes.data;
   const members: SiteMemberOption[] = (siteMembersRaw ?? [])
     .filter((m) => m.profile)
     .map((m) => ({
@@ -250,19 +261,7 @@ export default async function IncidentDetailPage({ params }: { params: Params })
               <SeverityBadge severity={incident.severity} />
               <TrackBadge track={incident.track} />
             </div>
-            {latestOverride && (
-              <div className="mt-3 rounded-md bg-muted p-3 text-xs text-muted-foreground">
-                <div className="mb-1 font-medium text-foreground">Latest override</div>
-                <div>
-                  {latestOverride.original_severity} → {latestOverride.new_severity}
-                </div>
-                <div className="mt-1">
-                  by {latestOverride.profile?.full_name ?? latestOverride.profile?.email ?? "—"} ·{" "}
-                  {new Date(latestOverride.created_at).toLocaleDateString()}
-                </div>
-                <p className="mt-1 italic">&quot;{latestOverride.reason}&quot;</p>
-              </div>
-            )}
+            {overrides.length > 0 && <OverrideHistory overrides={overrides} />}
           </Card>
 
           {investigation && (
@@ -416,6 +415,88 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex items-start justify-between gap-3">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="text-right">{value}</dd>
+    </div>
+  );
+}
+
+type OverrideRow = {
+  original_severity: string | null;
+  new_severity: string | null;
+  reason: string | null;
+  created_at: string;
+  profile: { full_name: string | null; email: string } | null;
+};
+
+function OverrideHistory({ overrides }: { overrides: OverrideRow[] }) {
+  return (
+    <details className="mt-3 rounded-md bg-muted p-3 text-xs text-muted-foreground">
+      <summary className="cursor-pointer list-none">
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-foreground">
+            Override history ({overrides.length})
+          </span>
+          <span className="text-[10px] uppercase tracking-wide">Show all</span>
+        </div>
+        {/* Always-visible latest entry as a preview */}
+        <div className="mt-2 space-y-0.5">
+          <div>
+            {overrides[0].original_severity} → {overrides[0].new_severity}
+          </div>
+          <div>
+            by {overrides[0].profile?.full_name ?? overrides[0].profile?.email ?? "—"} ·{" "}
+            {new Date(overrides[0].created_at).toLocaleDateString()}
+          </div>
+          {overrides[0].reason && (
+            <p className="italic">&quot;{overrides[0].reason}&quot;</p>
+          )}
+        </div>
+      </summary>
+      {overrides.length > 1 && (
+        <ul className="mt-3 space-y-3 border-t border-border/60 pt-3">
+          {overrides.slice(1).map((o, i) => (
+            <li key={i} className="space-y-0.5">
+              <div>
+                {o.original_severity} → {o.new_severity}
+              </div>
+              <div>
+                by {o.profile?.full_name ?? o.profile?.email ?? "—"} ·{" "}
+                {new Date(o.created_at).toLocaleDateString()}
+              </div>
+              {o.reason && <p className="italic">&quot;{o.reason}&quot;</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  );
+}
+
+function DeletedNotice({
+  refCode,
+  deletedAt,
+}: {
+  refCode: string | null;
+  deletedAt: string;
+}) {
+  return (
+    <div className="mx-auto mt-12 max-w-md rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center ring-1 ring-foreground/5">
+      <h1 className="text-lg font-semibold">This incident was deleted</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {refCode && (
+          <>
+            <span className="font-mono">{refCode}</span> ·{" "}
+          </>
+        )}
+        Soft-deleted by an admin on{" "}
+        {new Date(deletedAt).toLocaleDateString()}. The record is retained for
+        OSHA / RIDDOR retention but is no longer visible in active feeds.
+      </p>
+      <Link
+        href="/incidents"
+        className="mt-4 inline-flex items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-sm font-medium hover:bg-accent"
+      >
+        ← Back to incidents
+      </Link>
     </div>
   );
 }

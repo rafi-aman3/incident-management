@@ -65,7 +65,7 @@ export function StatusBadge({ status }: { status: string }) {
     status === "closed"
       ? "bg-muted text-muted-foreground"
       : status === "draft"
-      ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+      ? "bg-warning/15 text-warning"
       : "bg-accent text-foreground";
   return (
     <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium", tone)}>
