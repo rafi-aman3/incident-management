@@ -10,6 +10,9 @@ export type InvestigationCardData = {
   status: InvestigationStatus;
   due_date: string | null;
   started_at: string | null;
+  lead_investigator_id: string | null;
+  site_id: string;
+  site_name: string | null;
   lead: {
     id: string;
     full_name: string | null;

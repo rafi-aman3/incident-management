@@ -20,24 +20,30 @@ export function FindingsEditor({
   const [status, setStatus] = useState<SaveStatus>("idle");
   const lastSaved = useRef(initial);
 
+  const persist = async (v: string) => {
+    setStatus("saving");
+    const result = await saveInvestigationText({
+      investigation_id: investigationId,
+      field: "findings",
+      value: v,
+    });
+    if (result.ok) {
+      setStatus("saved");
+      lastSaved.current = v;
+      window.setTimeout(() => setStatus("idle"), 1500);
+    } else {
+      setStatus("error");
+    }
+  };
+
   useEffect(() => {
     if (value === lastSaved.current) return;
-    setStatus("saving");
-    const t = window.setTimeout(async () => {
-      const result = await saveInvestigationText({
-        investigation_id: investigationId,
-        field: "findings",
-        value,
-      });
-      if (result.ok) {
-        setStatus("saved");
-        lastSaved.current = value;
-        window.setTimeout(() => setStatus("idle"), 1500);
-      } else {
-        setStatus("error");
-      }
+    const t = window.setTimeout(() => {
+      void persist(value);
     }, 1000);
+    setStatus("saving");
     return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [investigationId, value]);
 
   return (
@@ -54,18 +60,28 @@ export function FindingsEditor({
             Autosaves 1 second after you stop typing. Plain text for v1; markdown later.
           </p>
         </div>
-        {status !== "idle" && (
-          <span
-            className={cn(
-              "text-[11px] tabular-nums",
-              status === "error" ? "text-destructive" : "text-muted-foreground"
-            )}
-          >
-            {status === "saving" && "Saving…"}
-            {status === "saved" && "Saved"}
-            {status === "error" && "Save failed"}
-          </span>
-        )}
+        {status !== "idle" &&
+          (status === "error" ? (
+            <span className="inline-flex items-center gap-2 text-[11px]">
+              <span className="text-destructive">Save failed</span>
+              <button
+                type="button"
+                onClick={() => void persist(value)}
+                className="rounded border border-destructive/30 px-1.5 py-0.5 font-medium text-destructive hover:bg-destructive/10"
+              >
+                Retry
+              </button>
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "text-[11px] tabular-nums text-muted-foreground",
+              )}
+            >
+              {status === "saving" && "Saving…"}
+              {status === "saved" && "Saved"}
+            </span>
+          ))}
       </div>
       <div className="p-4">
         <Textarea

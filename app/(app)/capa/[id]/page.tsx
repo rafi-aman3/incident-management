@@ -104,6 +104,7 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
     payload: (e.payload ?? {}) as Record<string, unknown>,
     created_at: e.created_at,
     actor_name: e.actor?.full_name ?? e.actor?.email ?? null,
+    href: null,
   }));
 
   const basePath = `/capa/${capa.id}`;

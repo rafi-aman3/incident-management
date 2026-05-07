@@ -48,6 +48,23 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const VALID_TABS: ReadonlyArray<DetailTabKey> = DETAIL_TABS.map((t) => t.key);
 
+/**
+ * Decide the most useful deep-link target for an activity_events row,
+ * given which parent FK it carries. CAPA verbs jump to /capa/[id]; incident
+ * verbs to /incidents/[id]; investigation verbs return null (we're already
+ * looking at the investigation).
+ */
+function deepLinkForVerb(
+  verb: string,
+  parents: { incident_id: string | null; investigation_id: string | null; capa_id: string | null },
+): string | null {
+  if (verb.startsWith("capa.") && parents.capa_id) return `/capa/${parents.capa_id}`;
+  if (verb.startsWith("incident.") && parents.incident_id) {
+    return `/incidents/${parents.incident_id}`;
+  }
+  return null;
+}
+
 export default async function InvestigationDetailPage({
   params,
   searchParams,
@@ -96,28 +113,7 @@ export default async function InvestigationDetailPage({
       ])
     : [false, false, false];
 
-  // 3. Team (joined to profiles)
-  const { data: teamRaw } = await supabase
-    .from("investigation_team_members")
-    .select("profile_id, role, profile:profiles ( full_name, email )")
-    .eq("investigation_id", inv.id);
-  const team: InvestigationTeamMember[] = (teamRaw ?? [])
-    .filter((m) => m.profile)
-    .map((m) => ({
-      profile_id: m.profile_id,
-      role: m.role as InvestigationTeamMember["role"],
-      full_name: m.profile!.full_name,
-      email: m.profile!.email,
-    }));
-
-  // 4. Witness statements (incident-scoped — carry over from /incidents)
-  const { data: witnessesRaw } = await supabase
-    .from("witnesses")
-    .select("id, name, contact, statement")
-    .eq("incident_id", incident.id);
-  const statements: WitnessStatement[] = witnessesRaw ?? [];
-
-  // 5. Site members for modal pickers
+  // 3. Site members — needed always (modals use them on every tab).
   const { data: siteMembersRaw } = await supabase
     .from("site_members")
     .select("profile:profiles ( id, full_name, email )")
@@ -129,6 +125,31 @@ export default async function InvestigationDetailPage({
       full_name: m.profile!.full_name,
       email: m.profile!.email,
     }));
+
+  // 4. Team + witness statements — only needed for the Summary tab.
+  let team: InvestigationTeamMember[] = [];
+  let statements: WitnessStatement[] = [];
+  if (tab === "summary") {
+    const [teamRes, witnessRes] = await Promise.all([
+      supabase
+        .from("investigation_team_members")
+        .select("profile_id, role, profile:profiles ( full_name, email )")
+        .eq("investigation_id", inv.id),
+      supabase
+        .from("witnesses")
+        .select("id, name, contact, statement")
+        .eq("incident_id", incident.id),
+    ]);
+    team = (teamRes.data ?? [])
+      .filter((m) => m.profile)
+      .map((m) => ({
+        profile_id: m.profile_id,
+        role: m.role as InvestigationTeamMember["role"],
+        full_name: m.profile!.full_name,
+        email: m.profile!.email,
+      }));
+    statements = witnessRes.data ?? [];
+  }
 
   const removableProfileId = typeof sp.profile === "string" ? sp.profile : null;
   const removableMember =
@@ -186,19 +207,64 @@ export default async function InvestigationDetailPage({
   }
 
   if (tab === "timeline") {
-    const { data: actRaw } = await supabase
-      .from("activity_events")
-      .select("id, verb, payload, created_at, actor:actor_id ( full_name, email )")
-      .or(`investigation_id.eq.${inv.id},incident_id.eq.${incident.id}`)
-      .order("created_at", { ascending: false })
-      .limit(100);
-    timeline = (actRaw ?? []).map((e) => ({
+    // Look up CAPAs spawned from this investigation so their activity rows
+    // can be joined into the timeline.
+    const { data: capaIdRows } = await supabase
+      .from("capas")
+      .select("id")
+      .eq("investigation_id", inv.id);
+    const capaIds = (capaIdRows ?? []).map((c) => c.id);
+
+    const orParts = [
+      `investigation_id.eq.${inv.id}`,
+      `incident_id.eq.${incident.id}`,
+    ];
+    if (capaIds.length > 0) {
+      orParts.push(`capa_id.in.(${capaIds.join(",")})`);
+    }
+
+    const [actRes, notifRes] = await Promise.all([
+      supabase
+        .from("activity_events")
+        .select(
+          "id, verb, payload, created_at, incident_id, investigation_id, capa_id, actor:actor_id ( full_name, email )"
+        )
+        .or(orParts.join(","))
+        .order("created_at", { ascending: false })
+        .limit(150),
+      supabase
+        .from("notifications")
+        .select("id, kind, title, capa_id, incident_id, created_at, recipient:recipient_id ( full_name, email )")
+        .eq("incident_id", incident.id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+    ]);
+
+    const fromActivity: ActivityEvent[] = (actRes.data ?? []).map((e) => ({
       id: e.id,
       verb: e.verb,
       payload: (e.payload ?? {}) as Record<string, unknown>,
       created_at: e.created_at,
       actor_name: e.actor?.full_name ?? e.actor?.email ?? null,
+      href: deepLinkForVerb(e.verb, {
+        incident_id: e.incident_id,
+        investigation_id: e.investigation_id,
+        capa_id: e.capa_id,
+      }),
     }));
+
+    const fromNotifs: ActivityEvent[] = (notifRes.data ?? []).map((n) => ({
+      id: `notif-${n.id}`,
+      verb: "notification.fired",
+      payload: { kind: n.kind, title: n.title } as Record<string, unknown>,
+      created_at: n.created_at,
+      actor_name: n.recipient?.full_name ?? n.recipient?.email ?? null,
+      href: n.capa_id ? `/capa/${n.capa_id}` : `/incidents/${n.incident_id}`,
+    }));
+
+    timeline = [...fromActivity, ...fromNotifs].sort((a, b) =>
+      a.created_at < b.created_at ? 1 : -1,
+    );
   }
 
   const summaryData: IncidentSummaryData = {
@@ -225,7 +291,7 @@ export default async function InvestigationDetailPage({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link
             href="/investigations"
@@ -241,7 +307,7 @@ export default async function InvestigationDetailPage({
             <InvestigationStatusBadge status={status} />
             {!isClosed && <DueDateChip dueDate={inv.due_date} />}
             {incident.is_sandbox && (
-              <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <span className="inline-flex items-center rounded-full border border-warning/30 bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning-foreground dark:text-warning">
                 practice
               </span>
             )}
