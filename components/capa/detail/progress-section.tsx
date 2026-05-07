@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { updateCapaProgress } from "@/app/(app)/capa/[id]/actions";
 
@@ -22,23 +23,33 @@ export function CapaProgressSection({
   const [status, setStatus] = useState<SaveStatus>("idle");
   const lastSaved = useRef(initialPct);
 
-  useEffect(() => {
-    if (pct === lastSaved.current) return;
-    if (readOnly) return;
-    setStatus("saving");
-    const t = window.setTimeout(async () => {
-      const result = await updateCapaProgress({ capa_id: capaId, pct });
+  const save = useCallback(
+    async (next: number) => {
+      setStatus("saving");
+      const result = await updateCapaProgress({ capa_id: capaId, pct: next });
       if (result.ok) {
         setStatus("saved");
-        lastSaved.current = pct;
+        lastSaved.current = next;
+        if (result.data?.promoted) {
+          toast.success("CAPA started", {
+            description: "Status moved to In progress.",
+          });
+        }
         window.setTimeout(() => setStatus("idle"), 1200);
       } else {
         setStatus("error");
         toast.error(result.error);
       }
-    }, 500);
+    },
+    [capaId],
+  );
+
+  useEffect(() => {
+    if (pct === lastSaved.current) return;
+    if (readOnly) return;
+    const t = window.setTimeout(() => void save(pct), 500);
     return () => window.clearTimeout(t);
-  }, [capaId, pct, readOnly]);
+  }, [pct, readOnly, save]);
 
   return (
     <div className="rounded-lg border bg-card">
@@ -52,7 +63,18 @@ export function CapaProgressSection({
             <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>
           )}
         </div>
-        <SaveIndicator status={status} />
+        <div className="flex items-center gap-2">
+          <SaveIndicator status={status} />
+          {status === "error" && !readOnly && (
+            <button
+              type="button"
+              onClick={() => void save(pct)}
+              className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium hover:bg-accent"
+            >
+              <RotateCcw className="h-3 w-3" /> Retry
+            </button>
+          )}
+        </div>
       </div>
       <div className="space-y-3 px-4 py-3">
         <div className="h-2 w-full overflow-hidden rounded-full bg-muted">

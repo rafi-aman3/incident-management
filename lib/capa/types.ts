@@ -51,3 +51,18 @@ export const ACTIVE_STATUSES: ReadonlyArray<CapaStatus> = [
 ];
 
 export const CLOSED_STATUSES: ReadonlyArray<CapaStatus> = ["verified", "closed"];
+
+/**
+ * Per-tab empty-state copy. Keyed off the tab the user is currently looking
+ * at so "Mine" empty doesn't read like "All" empty (the prior shipped string
+ * was "No CAPAs match this view." for every tab — same string regardless of
+ * intent).
+ */
+export const CAPA_TAB_EMPTY_COPY: Record<CapaTabKey, string> = {
+  mine: "Nothing assigned to you. New CAPAs from investigations or inspections appear here.",
+  active: "No active CAPAs. They'll show up here as investigations create them.",
+  pending_verification: "Nothing waiting on a verifier.",
+  overdue: "No overdue CAPAs — nice work.",
+  closed: "No closed CAPAs yet.",
+  all: "No CAPAs in this org yet.",
+};

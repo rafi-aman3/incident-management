@@ -102,8 +102,8 @@ function ReassignVerifierModal({
           <input type="hidden" name="capa_id" value={capaId} />
           <div className="space-y-2">
             <Label htmlFor="reassign-verifier-id">New verifier</Label>
-            <Select name="new_verifier_id">
-              <SelectTrigger id="reassign-verifier-id">
+            <Select name="new_verifier_id" required>
+              <SelectTrigger id="reassign-verifier-id" aria-required="true">
                 <SelectValue placeholder="Pick a verifier" />
               </SelectTrigger>
               <SelectContent>
