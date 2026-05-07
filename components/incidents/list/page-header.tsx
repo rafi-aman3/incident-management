@@ -21,9 +21,6 @@ export function IncidentsPageHeader({ canReportIncident }: { canReportIncident: 
           <h1 className="mt-0.5 text-2xl font-semibold leading-tight">
             Incident Management
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            ISO 45001:2018 · ISO 45002:2023 · RCA · RIDDOR · Near Miss &amp; Incident Reporting
-          </p>
         </div>
       </div>
       {canReportIncident && (
