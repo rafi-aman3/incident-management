@@ -14,10 +14,8 @@ import {
   type AssetStatus,
 } from "@/lib/documents/types";
 import { DocumentSelectField } from "@/components/documents/document-select-field";
-import {
-  createAssetAction,
-  type AssetCreateInput,
-} from "@/lib/actions/assets";
+import { createAssetAction } from "@/lib/actions/assets";
+import type { AssetCreateInput } from "@/lib/actions/assets-schemas";
 import { updateAssetForForm } from "@/app/(app)/resources/assets/actions";
 import type { ActionResult } from "@/lib/incidents/schemas";
 

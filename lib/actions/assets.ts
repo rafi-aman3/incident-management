@@ -17,19 +17,9 @@ import { can } from "@/lib/auth/can";
 import type { Database } from "@/lib/supabase/types";
 import { type AssetCondition } from "@/lib/documents/types";
 import type { ActionResult } from "@/lib/incidents/schemas";
-import {
-  AssetCreateSchema,
-  AssetUpdateSchema,
-  type AssetCreateInput,
-  type AssetUpdateInput,
-} from "./assets-schemas";
+import { AssetCreateSchema, AssetUpdateSchema } from "./assets-schemas";
 
 type AssetUpdate = Database["public"]["Tables"]["assets"]["Update"];
-
-// Re-export the input types so existing consumers that imported them from
-// "@/lib/actions/assets" keep working. Type-only re-exports are erased at
-// compile time and don't violate the "use server" export rule.
-export type { AssetCreateInput, AssetUpdateInput };
 
 // ---------------------------------------------------------------------------
 // createAsset
