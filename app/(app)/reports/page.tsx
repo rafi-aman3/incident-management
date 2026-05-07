@@ -75,9 +75,6 @@ export default async function ReportsLandingPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Continuous output layer
-          </p>
           <h1 className="text-2xl font-semibold">Reports</h1>
           <p className="text-sm text-muted-foreground">
             OSHA and RIDDOR paperwork generated live from the incident database.

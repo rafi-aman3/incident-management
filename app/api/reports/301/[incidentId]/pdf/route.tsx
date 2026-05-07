@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
@@ -11,17 +12,12 @@ type Params = Promise<{ incidentId: string }>;
 
 export async function GET(_req: Request, { params }: { params: Params }) {
   const { incidentId } = await params;
-  const { supabase, currentSiteId } = await requireUser();
-
-  if (!currentSiteId) return new NextResponse("No active site", { status: 400 });
-  if (!(await can("report:export", currentSiteId))) {
-    return new NextResponse("Forbidden", { status: 403 });
-  }
+  const { supabase } = await requireUser();
 
   const { data: incident, error } = await supabase
     .from("incidents")
     .select(
-      `id, ref_code, occurred_at, area, location, description, osha_recordable,
+      `id, site_id, ref_code, occurred_at, area, location, description, osha_recordable,
        site:site_id ( name, address ),
        reporter:reporter_id ( full_name, email ),
        injured_persons (
@@ -34,10 +30,13 @@ export async function GET(_req: Request, { params }: { params: Params }) {
     .single();
 
   if (error || !incident || !incident.site) {
-    return new NextResponse("Incident not found", { status: 404 });
+    redirect(`/reports?pdf_error=not_found`);
+  }
+  if (!(await can("report:export", incident.site_id))) {
+    redirect(`/reports/osha-301/${incident.id}?pdf_error=forbidden`);
   }
   if (!incident.osha_recordable) {
-    return new NextResponse("Incident is not OSHA-recordable", { status: 400 });
+    redirect(`/reports/osha-301/${incident.id}?pdf_error=not_recordable`);
   }
 
   const ip = (incident.injured_persons ?? [])[0];
@@ -66,14 +65,17 @@ export async function GET(_req: Request, { params }: { params: Params }) {
     reporter: incident.reporter ?? null,
   };
 
-  const buffer = await renderToBuffer(<Osha301Pdf source={source} />);
-  const fileName = `osha-301-${incident.ref_code ?? incident.id}.pdf`;
-
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="${fileName}"`,
-      "cache-control": "no-store",
-    },
-  });
+  try {
+    const buffer = await renderToBuffer(<Osha301Pdf source={source} />);
+    const fileName = `osha-301-${incident.ref_code ?? incident.id}.pdf`;
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        "content-type": "application/pdf",
+        "content-disposition": `attachment; filename="${fileName}"`,
+        "cache-control": "no-store",
+      },
+    });
+  } catch {
+    redirect(`/reports/osha-301/${incident.id}?pdf_error=render_failed`);
+  }
 }

@@ -10,26 +10,32 @@ import {
   type Osha301Source,
 } from "@/lib/format/osha301";
 import { PrintButton } from "@/components/reports/print-button";
+import { PdfErrorBanner } from "@/components/reports/pdf-error-banner";
 
 type Params = Promise<{ incidentId: string }>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function Osha301Page({ params }: { params: Params }) {
+export default async function Osha301Page({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: SearchParams;
+}) {
   const { incidentId } = await params;
-  const { supabase, currentSiteId } = await requireUser();
+  const sp = await searchParams;
+  const pdfErrorCode =
+    typeof sp.pdf_error === "string" ? sp.pdf_error : null;
+  const { supabase } = await requireUser();
 
-  const canRead = currentSiteId
-    ? await can("incident:read_site", currentSiteId)
-    : false;
-  const canExport = currentSiteId
-    ? await can("report:export", currentSiteId)
-    : false;
-
-  if (!canRead) notFound();
-
+  // Fetch the incident first (RLS scopes to sites the user can access),
+  // then key the perm guard off the incident's own site_id — not the user's
+  // currentSiteId cookie. Multi-site users with cookie on the "wrong" site
+  // would otherwise 404 here.
   const { data: incident, error } = await supabase
     .from("incidents")
     .select(
-      `id, ref_code, occurred_at, area, location, description, osha_recordable, is_sandbox,
+      `id, site_id, ref_code, occurred_at, area, location, description, osha_recordable, is_sandbox,
        site:site_id ( name, address ),
        reporter:reporter_id ( full_name, email ),
        injured_persons (
@@ -42,6 +48,10 @@ export default async function Osha301Page({ params }: { params: Params }) {
     .single();
 
   if (error || !incident || !incident.site) notFound();
+
+  const canRead = await can("incident:read_site", incident.site_id);
+  const canExport = await can("report:export", incident.site_id);
+  if (!canRead) notFound();
   if (!incident.osha_recordable) {
     return (
       <div className="space-y-4">
@@ -126,7 +136,10 @@ export default async function Osha301Page({ params }: { params: Params }) {
         </div>
       </div>
 
+      <PdfErrorBanner code={pdfErrorCode} />
+
       <div
+        role="status"
         className={`rounded-md border-l-4 p-3 text-sm ${
           overdue
             ? "border-destructive bg-destructive/5"
@@ -198,9 +211,9 @@ function FieldGroup({
 }) {
   return (
     <div className="border-b last:border-b-0">
-      <p className="bg-muted/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide">
+      <h2 className="bg-muted/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide">
         {label}
-      </p>
+      </h2>
       <ul className="divide-y">
         {fields.map((f) => (
           <li key={f.key} className="grid grid-cols-[40px_1fr_2fr] gap-3 px-4 py-2.5 text-sm">

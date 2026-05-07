@@ -86,9 +86,21 @@ export async function GET(req: Request) {
   }));
 
   const csv = serializeItaCsv(itaRows);
-  const fileName = `osha-300-${year}${month !== null ? `-${String(month).padStart(2, "0")}` : ""}.csv`;
+  // Excel-on-Windows misreads non-ASCII column values without a UTF-8 BOM.
+  const bom = "﻿";
 
-  return new NextResponse(csv, {
+  // Filename includes the establishment slug when set so multi-establishment
+  // orgs don't clobber files on download.
+  const slug = (site?.osha_establishment_id ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const monthSuffix = month !== null ? `-${String(month).padStart(2, "0")}` : "";
+  const fileName = slug
+    ? `osha-300-${slug}-${year}${monthSuffix}.csv`
+    : `osha-300-${year}${monthSuffix}.csv`;
+
+  return new NextResponse(bom + csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="${fileName}"`,

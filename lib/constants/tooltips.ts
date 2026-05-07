@@ -19,6 +19,7 @@ export type TooltipKey =
   | "capa_verifier_independence"
   | "capa_partial_effective"
   | "osha_300_vs_301"
+  | "osha_300_columns"
   | "osha_300a_posting"
   | "ita_deadline"
   | "riddor_deadlines"
@@ -98,6 +99,11 @@ export const REG_TOOLTIPS: Record<TooltipKey, { term: string; copy: string }> = 
     term: "OSHA 300 vs 301",
     copy:
       "300 is the running log (one row per recordable case, 13 columns A–M). 301 is the per-incident detail form (18 fields). Both apply to the same case; both retained 5 years.",
+  },
+  osha_300_columns: {
+    term: "OSHA 300 columns A–M",
+    copy:
+      "A: case number · B: employee name + job · C: date · D: where it happened · E: description · F: classification (1 injury / 2–6 illness types) · G: death · H: days away · I: job transfer or restriction · J: other recordable · K/L: day counts · M: illness type code.",
   },
   osha_300a_posting: {
     term: "300A posting window",

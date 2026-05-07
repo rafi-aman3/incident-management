@@ -77,7 +77,7 @@ function PhoneRow({
 
   if (record?.phone_called_at) {
     return (
-      <div className="flex items-start gap-3 px-4 py-3">
+      <div role="status" className="flex items-start gap-3 px-4 py-3">
         <Phone className="mt-0.5 h-4 w-4 text-success" />
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 text-sm font-medium">
@@ -110,6 +110,7 @@ function PhoneRow({
           id="phone-ref"
           name="hse_phone_reference"
           required
+          aria-required="true"
           maxLength={120}
           placeholder="e.g. HSE-2026-1234"
           disabled={!canEdit}
@@ -145,7 +146,7 @@ function OnlineRow({
 
   if (record?.written_submitted_at) {
     return (
-      <div className="flex items-start gap-3 px-4 py-3">
+      <div role="status" className="flex items-start gap-3 px-4 py-3">
         <FileText className="mt-0.5 h-4 w-4 text-success" />
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 text-sm font-medium">
@@ -177,6 +178,7 @@ function OnlineRow({
           id="online-ref"
           name="riddor_online_reference"
           required
+          aria-required="true"
           maxLength={120}
           placeholder="e.g. RIDDOR-9876543"
           disabled={!canEdit}
