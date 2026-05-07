@@ -1,141 +1,174 @@
 # Phase 6c — Investigations polish
 
-**Status:** drafted 2026-05-06 (Phase 6 module 3 of 10)
-**Goal:** The investigation surface owns the longest-dwell screen in the product (a 5-tab detail with a Kanban list view). Every tab carries its own state, every drag posts the right activity_event, every witness statement that came in via the Wizard surfaces in the right place, and the OSHA 301 sticky banner never goes stale.
+**Status:** drafted 2026-05-06 · re-audited 2026-05-07 against shipped surfaces (Phase 6 module 3 of 10)
+**Goal:** Tighten the longest-dwell screen in the product. The Kanban + 5-tab detail are already wired to the correct workflow; the gaps are in keyboard a11y on drag, an evidence uploader whose drag-and-drop copy is a lie, a Timeline tab that only joins 2 of the 4 promised event sources, and the small-functional-gap pile (lead/site filter chips, raw amber sandbox literal, "Module 2" subtitle, overloaded "Open" filter).
 **Branch:** `feat/phase-6-investigations-polish`
 **PR target:** `main`
-**Pages covered:** `/investigations`, `/investigations/[id]`
+**Pages covered:** `/investigations`, `/investigations/[id]` (5 tabs)
 
 > **What this PR ships:**
-> - Audit + fixes per the 10-item shared checklist.
-> - Hardened Kanban drag (no ghost cards, idempotent server action on drop).
-> - Tab-state preserved in URL (`?tab=summary|five-why|evidence|findings|timeline`).
-> - 5-Why chain editor: keyboard-only operable, autosave, undo on accidental delete.
-> - Evidence upload: drag-and-drop, mime-type guard, preview thumbnails.
-> - Findings tab: status filters; "Escalate to incident" CTA only when `escalation_eligible`.
-> - Timeline tab: cross-source events (incident · investigation · capa · notifications).
-
-> **Not in this PR:**
-> - No new investigation status (open / in_progress / closed locked).
-> - No new RCA method (5-Why is locked; fishbone / fault-tree deferred to v2).
-> - No new evidence type beyond photo / doc / video / audio.
+> - 10-item shared checklist applied to both routes; concrete findings + fixes below.
+> - Kanban: KeyboardSensor + ARIA live announcements; per-column empty copy; lead + site filters; sandbox-badge token migration; "Open" chip split into Pending / In progress; "Module 2" subtitle dropped (matches 6b).
+> - Detail: tab strip gets `aria-current`; sandbox badge migrated; `loading.tsx` + `error.tsx` shipped at the route level; sequential queries parallelized.
+> - 5-Why: retry-on-save-fail button per row (autosave is locked at 5 rows; nothing else changes).
+> - Evidence: real drag-and-drop wired (current copy promises it but only click works); per-file failure no longer kills the batch; trash button keyboard-reachable + confirm modal; PDF inline thumbnail via signed URL where viewer-supported.
+> - Findings: stays a single textarea per spec — plan section corrected to match shipped reality (the prior rewrite mis-described it as cards-with-status-pills; that's the inspection findings model).
+> - Timeline: joins CAPA + notification events to fulfill the "4 sources" promise; per-day grouping; deep-link affordance.
+>
+> **Not in this PR (deferred or n/a):**
+> - No new investigation status; state machine is locked (`pending_assignment → in_progress → awaiting_capa → closed`).
+> - No fishbone / fault-tree RCA — 5-Why locked for v1.
+> - No branching 5-Why (single chain).
+> - No new RPCs, no new perm keys, no schema changes.
+> - No mobile-specific Kanban layout beyond the existing `sm:grid-cols-2` collapse.
 
 ---
 
-## Pages
+## 0. Cross-cutting findings (apply to both routes)
 
-### 1. `/investigations` (Kanban)
-3-column board: Open · In progress · Closed. Drag to advance. Filter by site / track / due-date. Card shows incident severity stripe, type, due-date, owner avatar.
-
-**Audit table:**
-
-| Dimension | Status | Finding | Fix |
+| # | Finding | File(s) | Fix |
 |---|---|---|---|
-| 1. Visual fidelity | TBD | Card stripe = incident severity color; column headers; drag affordance per `@dnd-kit` defaults | |
-| 2. Empty state | TBD | Each column empty: "Nothing in <state> yet" — short helper | |
-| 3. Loading state | TBD | Column skeletons (3 placeholder cards each) | |
-| 4. Error state | TBD | Drag-drop server action error → revert position + toast | |
-| 5. Responsive | TBD | sm: collapse to a single tab-list view (Open / In progress / Closed) | |
-| 6. A11y / keyboard | TBD | `@dnd-kit` keyboard sensor: Space picks up, arrows move, Enter drops, Esc cancels. Announce moves via aria-live. | |
+| 0.1 | "Practice" sandbox badge uses raw `bg-amber-100 ... dark:bg-amber-950` literals — Phase 6b migrated all other surfaces to `warning/15 + warning` token pair | `app/(app)/investigations/page.tsx` (n/a — Kanban cards don't show it; only detail does) `app/(app)/investigations/[id]/page.tsx:243` | Replace with token pair; reuse the helper used in 6b |
+| 0.2 | "Module 2" / "Module …" eyebrow above page title is internal-speak, dropped on `/incidents` in 6b | `app/(app)/investigations/page.tsx:96` | Drop the eyebrow; lift the title hierarchy to match 6b |
+| 0.3 | No `loading.tsx` / `error.tsx` at the route level — page blanks during nav and any thrown error escapes to the global boundary | `app/(app)/investigations/loading.tsx` (missing), `app/(app)/investigations/[id]/loading.tsx` (missing), `app/(app)/investigations/[id]/error.tsx` (missing) | Add skeletons matching post-load layout; wire brand error card with retry |
+
+---
+
+## 1. `/investigations` (Kanban + List view)
+
+3-column-or-4-column board (DB enum is 4 statuses: `pending_assignment / in_progress / awaiting_capa / closed`; the prior plan said 3, which was wrong). Filter chips (severity S1/S2/S3 + status) and a Kanban / List view toggle. List view uses a shadcn Table.
+
+### Audit table
+
+| Dim | Status | Finding | Fix |
+|---|---|---|---|
+| 1. Visual fidelity | ⚠ partial | Cards have a grip handle + severity / track badges but no left-edge severity stripe; design.md doesn't strictly require one — keep current treatment. View-toggle uses `bg-primary` correctly. | None (visual treatment locked) |
+| 2. Empty state | ⚠ weak | Module-level empty: text-only "No investigations yet" with a 1-line helper, no icon, no CTA. Per-column empty: literal `(empty)`. List-view empty: "No investigations match these filters" — only ever rendered in list view. | Per-column empty: short copy per column (e.g. `pending_assignment` → "Nothing waiting for a lead"). Module empty: keep copy, add a muted icon (`SearchX`) for visual ballast; no CTA — ui-flow §8.9 explicitly says investigations are auto-created on classify, not user-created here. |
+| 3. Loading state | ✗ missing | No `loading.tsx`; page blanks on nav | Add skeleton: header bar + 4 column placeholders × 3 cards each |
+| 4. Error state | ⚠ weak | `queryError` rendered as bare destructive paragraph at top of page (line 107) | Render via the brand error card; keep retry behaviour to a `Try again` Link refreshing the page |
+| 5. Responsive | ✓ ok | `sm:grid-cols-2 xl:grid-cols-4` — at md it's 2 columns; at < sm it stacks | None |
+| 6. A11y / keyboard | ✗ broken | `useSensors(useSensor(PointerSensor, …))` — **no KeyboardSensor**. Keyboard users cannot drag. No `aria-live` for moves. FilterChips are `<Link>`s with no `aria-pressed` / `aria-current`. | Add `KeyboardSensor` from `@dnd-kit/core` + `sortableKeyboardCoordinates`; wrap board in `<div role="region" aria-label="Investigation kanban">`; on drag end announce via `<span aria-live="polite" className="sr-only">` ("Moved IN-2025-0001 to In progress"). Filter chips: `aria-pressed={active}`. |
 | 7. Form-error UX | n/a | | |
-| 8. Copy | TBD | Column header copy + due-date label ("Due in 3 days" / "Overdue 2 days") | |
-| 9. Dark mode | TBD | Card severity stripe in dark | |
-| 10. Cache Components | TBD | Board state is per-org + dynamic | |
+| 8. Copy | ⚠ | Subtitle "Module 2" is internal. Filter chip "Open" matches **both** `pending_assignment` AND `in_progress` — collapses two real states behind one chip. View-toggle labels "Kanban / List" are fine. | Drop "Module 2" eyebrow. Split "Open" → "Pending" + "In progress" (each maps to one DB enum). Refresh column subtitles per `INVESTIGATION_STATUS_META` (current copy is OK, audit each line for wording consistency). |
+| 9. Dark mode | ✓ ok | All tokens; no raw hex on this route | None |
+| 10. Cache Components | ✓ ok | `searchParams: Promise<...>` awaited; no stale `'use cache'` (page is intentionally uncached) | None |
 
-**Likely small gaps:**
-- Drag-drop transition between Open → Closed should require a CAPA exists (per workflow rule). UI should disable the drop target if rule blocks it, with explainer.
-- Filter state in URL (site / track / due-window).
-- Card click vs. card drag — both reachable; click-through to detail doesn't fire on accidental drag.
-- "Assign me" button on Open cards if owner is null and viewer has `investigation:assign`.
-- Overdue cards have a subtle red corner indicator.
+### Small functional gaps
 
-### 2. `/investigations/[id]` (5-tab detail)
-Tabs: **Summary** · **5-Why** · **Evidence** · **Findings** · **Timeline**. URL state `?tab=...` survives refresh + share. OSHA 301 sticky banner persists across all tabs while applicable.
+- ui-flow §8.9 promises **lead, severity, site, date-range** filters; only severity + status are wired. Add **Lead** (multi-select dropdown) and **Site** ("All accessible sites" / specific) chips. Date-range deferred to v2 (low value vs. the `due_date` chip already on every card).
+- No "Assign me" CTA on `pending_assignment` cards even though `investigation:lead` perm exists. Add a tertiary ghost button on the card visible when `lead === null && canLead`.
+- Filter state isn't preserved when toggling Kanban/List — `buildHref` already merges, so this is just a copy-check; verify with `sev=S2 → click List → back to Kanban` flow.
+- Drag from `closed` is silently disallowed (terminal state). Add a subtle `cursor-not-allowed` on `closed`-column cards' grip.
 
-**Per-tab audit:**
+---
+
+## 2. `/investigations/[id]` — 5-tab detail
+
+URL state `?tab=summary|why|evidence|findings|timeline` survives refresh + share. OSHA 301 sticky banner persists across tabs while `osha_recordable && !isClosed` (no submitted-state to gate on — the 301 is a PDF render at `/reports/osha-301/[id]`, not a stateful form, so this is correct).
+
+### Header + banner audit
+
+| Dim | Status | Finding | Fix |
+|---|---|---|---|
+| 1. Visual | ✓ ok | Title + status pill + due-date chip; Action cluster (Assign CAPA / Close — no CAPA) gated by perms | None |
+| 2. Empty state | n/a (always populated — investigation always has source incident) | | |
+| 5. Responsive | ⚠ minor | Top action cluster could collide with title at narrow widths | Wrap with `flex-wrap`; or move actions to a footer bar at sm |
+| 6. A11y | ⚠ | "practice" sandbox span has no `aria-label` (just text "practice" — fine); but raw amber tokens (see 0.1) | Token migration |
+| 8. Copy | ✓ ok | Action labels are verbs ("Assign CAPA", "Close — no CAPA"). Banner copy is correct (cites §1904.29(b)(3)). | None |
+
+### Per-tab audit
 
 #### Summary tab
-| Dimension | Status | Finding | Fix |
-|---|---|---|---|
-| 1. Visual fidelity | TBD | Top: incident link card + severity badge + reg banner; "Investigation" header with status pill | |
-| 2. Empty state | TBD | "Investigation just opened — start with the 5-Why tab" | |
-| 6. A11y / keyboard | TBD | Tab navigation arrow-key per WAI-ARIA tabs pattern | |
-| 8. Copy | TBD | "Status" pill copy (Open / In progress / Closed) — match Kanban | |
 
-**Likely small gaps:**
-- Witness statements carried over from Wizard Step 2 — surfaced on Summary OR Evidence? Place per `docs/ui-flow.md`. Confirm the carryover hasn't dropped silently.
-- Action bar: "Mark in progress" / "Close investigation" / "Reopen" — disabled per perm + per workflow rule with explainer tooltip.
+| Dim | Status | Finding | Fix |
+|---|---|---|---|
+| 1. Visual | ✓ ok | 2-col grid: snapshot card + witnesses left, team right | None |
+| 2. Empty state | ⚠ minor | WitnessStatementsSection empty: "No witness statements yet." — no helper or CTA path explanation | Add helper line: "Statements added at the incident phase carry over here automatically." (already in the section header — copy below the empty list could repeat the path). |
+| 6. A11y | ⚠ minor | TeamPanel role badge is purely color-coded ("Lead" pill in `bg-primary/10 text-primary`); add a non-color signal (Crown icon already exists in the header — surface it next to the pill or use the badge) | Add `<Crown />` or text-only "Lead" disambiguator in the role pill |
+| Other | ⚠ | Five sequential queries (inv → team → witnesses → site_members) — only the tab-conditional ones are gated. Team + witnesses + site_members are always fetched even for non-summary tabs. | Move team + witnesses fetch into `if (tab === "summary")` block; site_members is needed by modals (kept always). Saves ~3 RTTs per tab nav. |
 
 #### 5-Why tab
-| Dimension | Status | Finding | Fix |
-|---|---|---|---|
-| 1. Visual fidelity | TBD | Per `docs/design.md` §6.9 — chain visual; current why highlighted | |
-| 2. Empty state | TBD | "Start with the problem statement" — autofocus the first input on first land | |
-| 4. Error state | TBD | Autosave failure → toast + retry; never lose what was typed | |
-| 6. A11y / keyboard | TBD | Tab between why nodes; Enter adds next why; Backspace on empty deletes | |
-| 7. Form-error UX | TBD | Save server-action returns the standard shape; pending state per node | |
-| 8. Copy | TBD | "Why?" prompt vs. "Why did this happen?" — pick one and use it | |
 
-**Likely small gaps:**
-- Undo last-deleted why (5s toast with Undo).
-- Autosave debounce — 1s? Indicator: "Saved 3s ago".
-- Limit 5 whys (or allow more)? Per RCA convention, 5 is conventional but not strict. Confirm against `docs/SPEC.md`.
-- Branching — single chain in v1; document as "no branching in v1" in §15 if user asks.
+| Dim | Status | Finding | Fix |
+|---|---|---|---|
+| 1. Visual | ✓ ok | Why-5 highlighted (`bg-primary/5` + ROOT CAUSE badge with Target icon) | None |
+| 2. Empty state | n/a | Always 5 seeded rows; placeholder copy covers cold-state | None |
+| 4. Error state | ⚠ | Save-fail just prints "Save failed" — no retry; user must edit the field again to retrigger | Add a `Retry` ghost button next to the `SaveIndicator` when `status === "error"` that re-invokes `saveWhy` with the current values |
+| 6. A11y | ✓ ok | Each row has `<Label htmlFor>` + `<Input>` + `<Textarea>`; `disabled` mirrors `readOnly`. | None |
+| 7. Form-error UX | ⚠ | Field-level errors don't surface — Zod failures only return `result.error` which is a global string in the indicator | Acceptable for autosave (error is rare and recoverable); no fix |
+| 8. Copy | ✓ ok | Question placeholder cascades ("Why did this happen?" → "Why did the answer to Why #N-1 happen?") | None |
 
 #### Evidence tab
-| Dimension | Status | Finding | Fix |
-|---|---|---|---|
-| 1. Visual fidelity | TBD | Grid with thumbnails; type icon overlay (photo / doc / video / audio) | |
-| 2. Empty state | TBD | "Drop files here or" + Browse + DocumentLinkPicker | |
-| 3. Loading state | TBD | Upload progress per file | |
-| 4. Error state | TBD | Mime-type rejection inline; oversize rejection with limit | |
-| 6. A11y / keyboard | TBD | Drop zone focusable; Browse button keyboard-only operable | |
-| 7. Form-error UX | TBD | Per-file error — doesn't kill the batch | |
-| 8. Copy | TBD | "Add evidence" (consistent with library DocumentLinkPicker) | |
 
-**Likely small gaps:**
-- DocumentLinkPicker → existing library docs link via `document_links`; uploaded-here files go to Storage + create a `documents` row + auto-link.
-- Evidence-only-uploaded-here vs. library-linked — visual differentiator.
-- Delete evidence — soft-delete with audit; confirm modal.
+| Dim | Status | Finding | Fix |
+|---|---|---|---|
+| 1. Visual | ⚠ | Grid is OK; PDFs render as a generic FileText icon — no thumbnail | Out of scope (PDF.js is a heavy dep); keep current FileText fallback. Document as v2 in SPEC §15. |
+| 2. Empty state | ✓ ok | "No evidence yet — upload photos, maintenance logs, SDS sheets, or PDF reports." | None |
+| 3. Loading | n/a | Upload `busy` state shown on button; per-file progress not surfaced | Acceptable for v1 |
+| 4. Error state | ✗ broken | Per-file `throw` aborts entire batch — file 3 of 5 failing kills 4 + 5 (plan promised "per-file error doesn't kill the batch") | Refactor `for` to gather successes + failures; report at end with one toast per outcome bucket. Don't `throw`; track `failed: string[]`. |
+| 6. A11y | ✗ broken | (a) "Drag photos or PDFs here" copy with no `onDragOver` / `onDrop` handlers — only click works. (b) Trash button is `opacity-0 group-hover:opacity-100` — keyboard users can't reach it. | (a) Wire `onDragEnter / onDragOver / onDragLeave / onDrop` on the drop zone div; share the `upload(files)` handler. (b) Show trash button by default (no opacity gating), or use `focus-within:opacity-100` so keyboard focus also reveals it. |
+| 7. Delete confirm | ✗ missing | Trash icon submits a `<form action={deleteInvestigationEvidence}>` immediately — no confirm. Hard-delete (DELETE FROM + storage.remove). Soft-delete rule applies to incidents/investigations/capas only, so hard-delete is permitted, but a confirm modal is non-negotiable for destructive UI. | Wrap delete in a confirm modal: "Delete <filename>? This removes the file and the metadata. Cannot be undone." |
+| 8. Copy | ✓ ok | "Add evidence" / "Library evidence" / "No evidence yet" all consistent | None |
 
 #### Findings tab
-| Dimension | Status | Finding | Fix |
-|---|---|---|---|
-| 1. Visual fidelity | TBD | Finding cards: status pill (open / resolved / escalated), severity inherited from inspection if any | |
-| 2. Empty state | TBD | "No findings yet — add one or wait for an inspection to surface one" | |
-| 4. Error state | TBD | "Escalate to incident" action → routes to `/incidents/new/1?from=finding&id=...` (Phase 1 pre-fill) | |
-| 6. A11y / keyboard | TBD | Card actions reachable | |
-| 8. Copy | TBD | "Resolve" vs. "Mark resolved" — pick one | |
 
-**Likely small gaps:**
-- Findings sourced from inspections (failed answers) — show inspection link.
-- Findings created manually here — separate "+ Add finding" affordance.
-- Bulk resolve? Probably v2.
+| Dim | Status | Finding | Fix |
+|---|---|---|---|
+| 1. Visual | ✓ ok | Card with header + textarea (rows=14) + autosave indicator | None |
+| 2. Empty state | ⚠ minor | Empty textarea has placeholder; no separate empty card | Acceptable — placeholder is the empty state |
+| 4. Error state | ⚠ | Same as 5-Why — no retry button on save-fail | Add `Retry` button (matches 5-Why pattern) |
+| Plan correction | — | Earlier draft of this plan described findings as "cards with status pills + escalate-to-incident CTA". That's the **inspection findings** model (`inspection_findings` table). Investigation findings is a single `text` column on `investigations` per SPEC §5; the textarea is correct. | Plan corrected (this section) — no shipped-code fix needed |
 
 #### Timeline tab
-| Dimension | Status | Finding | Fix |
-|---|---|---|---|
-| 1. Visual fidelity | TBD | Vertical timeline; events grouped by day; icon per event kind | |
-| 2. Empty state | TBD | "No activity yet" — won't happen often (incident creation is event #1) | |
-| 6. A11y / keyboard | TBD | Items focusable; deep-link button on each | |
-| 8. Copy | TBD | Event copy: action verb + actor + target (e.g., "Anna assigned this to Boris") | |
 
-**Likely small gaps:**
-- Filter chips: which event kinds to show (default: all).
-- Cross-source: includes incident events + capa events + notifications + severity overrides? Confirm scope.
-- "Notes" — free-form note added by anyone with `investigation:note` perm? If so, audit. If not yet, log as v2.
+| Dim | Status | Finding | Fix |
+|---|---|---|---|
+| 1. Visual | ⚠ | Flat reverse-chrono list; no per-day grouping; no deep-link button per item | Group by `format(date, 'yyyy-MM-dd')` into `<section>`s with day-header. Add a small icon-link on each row that targets the correct deep URL (incident verb → `/incidents/<id>`, investigation verb → current page, capa verb → `/capa/<id>`). |
+| 2. Empty state | ⚠ minor | "No activity yet." — won't actually happen (incident.classified is event #1) | Keep but soften: "Nothing has happened yet." |
+| 4. Cross-source coverage | ✗ partial | Query is `activity_events.or(investigation_id.eq.X, incident_id.eq.Y)` — captures incident + investigation events but **not CAPA events** (CAPAs link via `capa_id`, not `investigation_id` on activity rows) and **not notifications** (separate table) | Extend the query: (a) lookup `capa.id where capa.investigation_id = inv.id`, then OR `capa_id.in(...)`; (b) join `notifications where investigation_id = inv.id`; merge in TS; sort. Add verb labels for `capa.created / capa.completed / capa.verified / capa.verification_partial / notification.fired`. |
+| 6. A11y | ⚠ | Avatar fallbacks have initials; verb text reads naturally. No focusable rows. | When deep-link icon is added (above), it's the focus target. Otherwise list rows are non-interactive — that's fine. |
+| 8. Copy | ✓ ok | VERB_LABELS map covers the current verbs accurately | Add the new CAPA + notification verb labels |
+
+### Cross-tab small gaps
+
+- **Tab strip** is `<Link>` based; missing `aria-current="page"` on the active tab. Fix: add `aria-current={active ? "page" : undefined}` in `detail-tabs.tsx`.
+- **Header action cluster** disappears when `isClosed`; that's correct, but a closed investigation has no "Reopen" affordance (terminal state per spec). Surface a small footnote on the status pill: "Closed investigations are read-only." Keep behaviour.
+- **Modal `?action=...` pattern** — currently only one URL key (`action`) plus `profile` for remove-team. Working as expected; no fix.
 
 ---
 
-## Definition of done — Investigations PR
+## 3. Definition of done
 
-1. 10-item checklist passes for both pages.
-2. Kanban drag is keyboard-only operable AND screen-reader announces moves.
-3. Tab state lives in URL; refresh + share preserves tab.
-4. 5-Why autosave never loses input; undo works.
-5. Evidence upload tolerates per-file failure; never blocks the batch.
-6. Findings → Escalate-to-incident pre-fills the Wizard Step 1 correctly.
-7. Timeline merges events from at least 4 sources (incident · investigation · capa · notifications).
-8. OSHA 301 sticky banner persists across tabs while applicable; disappears on report submit.
-9. Smoke-test (`docs/smoke-test-phase2.md` investigation steps) re-runs green.
-10. PR description shows before/after for any visual swap + a 30s screen recording of Kanban keyboard nav.
+Smoke-test pass (re-running `docs/smoke-test-phase2.md` investigation steps):
+
+1. Kanban renders with seeded UCB data; drag with mouse + keyboard both work; ARIA live announces moves.
+2. Filter chips with `aria-pressed`; "Pending" / "In progress" each map to a single DB enum value; lead + site filters round-trip via URL.
+3. Detail loads; tab strip `aria-current`; tab-state survives refresh + share.
+4. 5-Why autosaves; retry button surfaces on simulated save-fail.
+5. Evidence: drag a file onto the dropzone (the copy is no longer a lie); upload 3 files where one is too large — the other 2 succeed and a single toast names the failed file. Trash button reachable via Tab; confirm modal blocks accidental delete.
+6. Findings textarea autosaves; retry button on save-fail.
+7. Timeline lists incident + investigation + CAPA + notification events, grouped by day, with deep-link icon per row.
+8. OSHA 301 banner persists across tabs while applicable; vanishes on close.
+9. Sandbox practice badge uses warning tokens (no raw amber); "Module 2" eyebrow gone; `loading.tsx` + `error.tsx` ship.
+10. PR description: before/after for the Kanban (showing keyboard drag affordance) + Evidence dropzone (showing real DnD) + Timeline (showing 4-source merge).
+
+---
+
+## Open questions (resolve before opening the PR)
+
+1. **"Assign me" CTA on pending_assignment cards** — currently no card-level affordance; full lead-assign goes through `?action=reassign-lead` on the detail page. Add a 1-click "Assign me" on cards (gated on `investigation:lead` + `lead === null`)? **Recommend: yes** — saves 2 clicks for the supervisor flow.
+2. **Site filter chip** — Phase 5 planner uses verbose `?site=all|<uuid>` shape. Mirror it here? **Recommend: yes**, same shape — `?site=...` (default = current site cookie).
+3. **Date-range filter** — ui-flow §8.9 promises it; is it worth the calendar-popover footprint when every card already chips its own due-date? **Recommend: defer to v2**, log in SPEC §15.
+4. **Trash-button confirm modal** — small inline `<AlertDialog>` or full `Dialog`? **Recommend: shadcn `<AlertDialog>`** (matches the destructive pattern used elsewhere).
+5. **Timeline: include `severity_overrides` table?** It's append-only audit; verbs there don't go through `activity_events`. **Recommend: defer** — a "Severity overridden" event is already emitted to `activity_events` per Phase 1, so we'd double-count. Confirm by grepping for the verb.
+6. **Should we move team / witnesses fetches into the `tab === "summary"` block to save RTTs on non-summary tabs?** **Recommend: yes** — saves ~3 queries when a user lands on `?tab=evidence` or `?tab=timeline` from a deep link.
+
+---
+
+## Out of scope (logged in SPEC §15 if confirmed)
+
+- PDF thumbnail rendering on Evidence tab (PDF.js is heavy)
+- Bulk-resolve / bulk-action on findings (n/a for free-text findings)
+- Branching 5-Why or alternative RCA methods (5-Why locked for v1)
+- Reopen-closed investigations (terminal state by design)
+- Date-range filter on Kanban
