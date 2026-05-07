@@ -7,9 +7,11 @@ import {
   ArrowRight,
   Database,
   Sparkles,
+  Mail,
 } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { orgCan } from "@/lib/auth/orgCan";
 import { EmptyState } from "@/components/empty-state";
 
 export default async function AdminPage() {
@@ -18,15 +20,16 @@ export default async function AdminPage() {
   // Permission gate — show the dashboard to anyone with site:configure
   // (lifted on the migration), member:invite, or role:read on at least
   // the current site. Each tile/card filters per-perm again below.
-  const [canConfigure, canInvite, canReadRoles] = currentSiteId
+  const [canConfigure, canInvite, canReadRoles, canReadInvitations] = currentSiteId
     ? await Promise.all([
         can("site:configure", currentSiteId),
         can("member:invite", currentSiteId),
         can("role:read", currentSiteId),
+        orgCan("invitation:read"),
       ])
-    : [false, false, false];
+    : [false, false, false, false];
 
-  if (!canConfigure && !canInvite && !canReadRoles) {
+  if (!canConfigure && !canInvite && !canReadRoles && !canReadInvitations) {
     return (
       <EmptyState
         title="Admin is for site admins"
@@ -41,6 +44,7 @@ export default async function AdminPage() {
     archivedSitesRes,
     membersRes,
     rolesRes,
+    pendingInvitationsRes,
   ] = await Promise.all([
     supabase
       .from("sites")
@@ -60,12 +64,22 @@ export default async function AdminPage() {
       .from("roles")
       .select("id", { count: "exact", head: true })
       .eq("org_id", profile.org_id),
+    canReadInvitations
+      ? supabase
+          .from("invitations")
+          .select("id", { count: "exact", head: true })
+          .eq("org_id", profile.org_id)
+          .is("accepted_at", null)
+          .is("revoked_at", null)
+          .gt("expires_at", new Date().toISOString())
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const activeSites = activeSitesRes.count ?? 0;
   const archivedSites = archivedSitesRes.count ?? 0;
   const members = membersRes.count ?? 0;
   const roles = rolesRes.count ?? 0;
+  const pendingInvitations = pendingInvitationsRes.count ?? 0;
 
   return (
     <div className="space-y-8">
@@ -76,7 +90,7 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <KpiTile
           label="Active sites"
           value={activeSites}
@@ -90,11 +104,18 @@ export default async function AdminPage() {
           tone="muted"
           href="/admin/sites?status=archived"
         />
-        <KpiTile label="Members" value={members} icon={Users} tone="muted" />
-        <KpiTile label="Roles" value={roles} icon={ShieldCheck} tone="muted" />
+        <KpiTile label="Members" value={members} icon={Users} tone="muted" href="/admin/members" />
+        <KpiTile label="Roles" value={roles} icon={ShieldCheck} tone="muted" href="/admin/roles" />
+        <KpiTile
+          label="Pending invites"
+          value={pendingInvitations}
+          icon={Mail}
+          tone="muted"
+          href="/admin/invitations"
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <AdminCard
           title="Sites"
           body="Rename, edit address, re-parent, archive. Edit annual hours used by OSHA 300A."
@@ -103,15 +124,21 @@ export default async function AdminPage() {
         />
         <AdminCard
           title="Members"
-          body="Org-wide member list, per-site role + include-children toggle. Email invitations land in 11c."
+          body="Org-wide member list, per-site role + include-children toggle."
           href="/admin/members"
           available
         />
         <AdminCard
           title="Roles"
-          body="Edit role permission sets. The 4 default roles (worker / supervisor / EHS manager / site admin) keep their identity but can pick up extra perms."
-          available={false}
-          comingIn="Phase 11c"
+          body="Edit role permission sets. The 4 default roles keep their identity but can pick up extra perms; create custom roles like Auditor (read-only)."
+          href="/admin/roles"
+          available
+        />
+        <AdminCard
+          title="Invitations"
+          body="Email magic-link invitations to colleagues who aren't on the platform yet. Best-effort email + always-show-the-link."
+          href="/admin/invitations"
+          available
         />
       </div>
 

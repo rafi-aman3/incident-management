@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, ArrowRight, AlertTriangle } from "lucide-react";
 import { SiteCreatedToast } from "@/components/app-shell/site-created-toast";
+import { InvitedToast } from "@/components/app-shell/invited-toast";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { INCIDENT_TYPE_META, type IncidentType } from "@/lib/incidents/types";
@@ -161,6 +162,7 @@ export default async function DashboardPage() {
       <div className="space-y-6">
         <Suspense fallback={null}>
           <SiteCreatedToast />
+          <InvitedToast />
         </Suspense>
         {setupIncompleteSiteName && (
           <div className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
