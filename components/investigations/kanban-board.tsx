@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   KeyboardSensor,
@@ -37,16 +38,25 @@ const COLUMN_EMPTY_COPY: Record<InvestigationStatus, string> = {
   closed: "Nothing closed yet.",
 };
 
+export type KanbanCurrentUser = {
+  id: string;
+  full_name: string | null;
+  email: string;
+};
+
 export function KanbanBoard({
   initialColumns,
   canSelfAssign,
+  currentUser,
 }: {
   initialColumns: Record<InvestigationStatus, InvestigationCardData[]>;
   canSelfAssign: boolean;
+  currentUser: KanbanCurrentUser;
 }) {
   const [columns, setColumns] = useState(initialColumns);
   const [announcement, setAnnouncement] = useState("");
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -95,6 +105,39 @@ export function KanbanBoard({
     });
   }
 
+  /**
+   * Optimistic move when the viewer claims an unassigned investigation.
+   * Server action also advances pending_assignment → in_progress, so we
+   * mirror that here. router.refresh() syncs SSR state for any downstream
+   * surface (sidebar counts, etc.).
+   */
+  function onAssignedToMe(cardId: string) {
+    setColumns((prev) => {
+      const fromStatus: InvestigationStatus = "pending_assignment";
+      const toStatus: InvestigationStatus = "in_progress";
+      const card = prev[fromStatus].find((c) => c.id === cardId);
+      if (!card) return prev;
+      const updated: InvestigationCardData = {
+        ...card,
+        status: toStatus,
+        lead_investigator_id: currentUser.id,
+        lead: {
+          id: currentUser.id,
+          full_name: currentUser.full_name,
+          email: currentUser.email,
+        },
+        started_at: card.started_at ?? new Date().toISOString(),
+      };
+      return {
+        ...prev,
+        [fromStatus]: prev[fromStatus].filter((c) => c.id !== cardId),
+        [toStatus]: [updated, ...prev[toStatus]],
+      };
+    });
+    setAnnouncement(`You're the lead now. Investigation moved to In Progress.`);
+    router.refresh();
+  }
+
   return (
     <div role="region" aria-label="Investigation kanban">
       <span aria-live="polite" className="sr-only">
@@ -113,6 +156,7 @@ export function KanbanBoard({
               status={status}
               cards={columns[status]}
               canSelfAssign={canSelfAssign}
+              onAssignedToMe={onAssignedToMe}
             />
           ))}
         </div>
@@ -125,10 +169,12 @@ function Column({
   status,
   cards,
   canSelfAssign,
+  onAssignedToMe,
 }: {
   status: InvestigationStatus;
   cards: InvestigationCardData[];
   canSelfAssign: boolean;
+  onAssignedToMe: (cardId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const meta = INVESTIGATION_STATUS_META[status];
@@ -162,6 +208,7 @@ function Column({
               card={c}
               terminal={status === "closed"}
               canSelfAssign={canSelfAssign}
+              onAssignedToMe={onAssignedToMe}
             />
           ))
         )}
@@ -174,10 +221,12 @@ function DraggableCard({
   card,
   terminal,
   canSelfAssign,
+  onAssignedToMe,
 }: {
   card: InvestigationCardData;
   terminal: boolean;
   canSelfAssign: boolean;
+  onAssignedToMe: (cardId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: card.id, disabled: terminal });
@@ -236,7 +285,10 @@ function DraggableCard({
             <DueDateChip dueDate={card.due_date} />
           </div>
           {showAssignMe && (
-            <AssignMeButton investigationId={card.id} />
+            <AssignMeButton
+              investigationId={card.id}
+              onAssigned={() => onAssignedToMe(card.id)}
+            />
           )}
         </div>
       </div>
@@ -244,7 +296,13 @@ function DraggableCard({
   );
 }
 
-function AssignMeButton({ investigationId }: { investigationId: string }) {
+function AssignMeButton({
+  investigationId,
+  onAssigned,
+}: {
+  investigationId: string;
+  onAssigned: () => void;
+}) {
   const [pending, startTransition] = useTransition();
   return (
     <button
@@ -255,6 +313,7 @@ function AssignMeButton({ investigationId }: { investigationId: string }) {
           const result = await assignMeAsLead(investigationId);
           if (result.ok) {
             toast.success("You're the lead now");
+            onAssigned();
           } else {
             toast.error(result.error);
           }

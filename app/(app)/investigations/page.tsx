@@ -252,6 +252,11 @@ export default async function InvestigationsPage({
           <KanbanBoard
             initialColumns={columns}
             canSelfAssign={canSelfAssign}
+            currentUser={{
+              id: user.id,
+              full_name: profile.full_name,
+              email: profile.email,
+            }}
           />
         ))}
     </div>
