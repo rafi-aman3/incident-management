@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Users, ArrowLeft, Info } from "lucide-react";
+import { Users, ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { MembersFilters } from "@/components/admin/members-filters";
 import { MembersList, type MemberRow } from "@/components/admin/members-list";
+import { InviteMemberDialog } from "@/components/admin/invite-member-dialog";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -160,7 +161,13 @@ export default async function AdminMembersPage({
             this org.
           </p>
         </div>
-        <InvitePlaceholderInfo />
+        {canInvite && (
+          <InviteMemberDialog
+            sites={sites}
+            roles={roles.map((r) => ({ id: r.id, key: r.key, name: r.name }))}
+            defaultSiteId={currentSiteId ?? undefined}
+          />
+        )}
       </div>
 
       <MembersFilters
@@ -174,15 +181,3 @@ export default async function AdminMembersPage({
   );
 }
 
-function InvitePlaceholderInfo() {
-  return (
-    <div className="max-w-sm rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
-      <p className="flex items-center gap-1 font-medium">
-        <Info className="h-3 w-3" /> Email invitations ship in Phase 11c.
-      </p>
-      <p className="text-muted-foreground">
-        To add an existing colleague, open a site and use the Members tab.
-      </p>
-    </div>
-  );
-}

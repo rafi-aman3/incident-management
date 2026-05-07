@@ -1430,6 +1430,90 @@ export type Database = {
           },
         ]
       }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          include_children: boolean
+          invited_by: string | null
+          org_id: string
+          revoked_at: string | null
+          role_id: string
+          site_id: string
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          include_children?: boolean
+          invited_by?: string | null
+          org_id: string
+          revoked_at?: string | null
+          role_id: string
+          site_id: string
+          token: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          include_children?: boolean
+          invited_by?: string | null
+          org_id?: string
+          revoked_at?: string | null
+          role_id?: string
+          site_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitations_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitations_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitations_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_recipients: {
         Row: {
           created_at: string
@@ -2881,6 +2965,15 @@ export type Database = {
       }
     }
     Functions: {
+      accept_invitation_v1: {
+        Args: { p_token: string }
+        Returns: {
+          org_id: string
+          role_id: string
+          site_id: string
+          site_name: string
+        }[]
+      }
       add_site_member_v1: {
         Args: {
           p_include_children?: boolean
@@ -2941,6 +3034,26 @@ export type Database = {
         Args: { p_inspection_id: string }
         Returns: undefined
       }
+      create_invitation_v1: {
+        Args: {
+          p_email: string
+          p_include_children?: boolean
+          p_role_id: string
+          p_site_id: string
+        }
+        Returns: {
+          invitation_id: string
+          token: string
+        }[]
+      }
+      create_role_v1: {
+        Args: {
+          p_description: string
+          p_name: string
+          p_permission_keys: string[]
+        }
+        Returns: string
+      }
       create_site_v1: {
         Args: {
           p_address?: string
@@ -2953,6 +3066,7 @@ export type Database = {
         Returns: string
       }
       current_org: { Args: never; Returns: string }
+      delete_role_v1: { Args: { p_role_id: string }; Returns: undefined }
       escalate_finding_to_incident_v1: {
         Args: { p_finding_id: string }
         Returns: string
@@ -3023,9 +3137,22 @@ export type Database = {
       reset_demo_data_v1: { Args: { p_org_id: string }; Returns: undefined }
       resolve_org_permissions: { Args: never; Returns: string[] }
       resolve_permissions: { Args: { p_site_id: string }; Returns: string[] }
+      revoke_invitation_v1: {
+        Args: { p_invitation_id: string }
+        Returns: undefined
+      }
       seed_default_roles: { Args: { p_org_id: string }; Returns: undefined }
       unarchive_site_v1: { Args: { p_site_id: string }; Returns: undefined }
       unlink_document_v1: { Args: { p_link_id: string }; Returns: undefined }
+      update_role_v1: {
+        Args: {
+          p_description?: string
+          p_name?: string
+          p_permission_keys?: string[]
+          p_role_id: string
+        }
+        Returns: undefined
+      }
       update_site_v1: {
         Args: {
           p_address?: string
@@ -3161,6 +3288,7 @@ export type Database = {
         | "capa_overdue"
         | "capa_escalated"
         | "assigned"
+        | "invited"
       riddor_specified_injury:
         | "fracture"
         | "amputation"
@@ -3438,6 +3566,7 @@ export const Constants = {
         "capa_overdue",
         "capa_escalated",
         "assigned",
+        "invited",
       ],
       riddor_specified_injury: [
         "fracture",
