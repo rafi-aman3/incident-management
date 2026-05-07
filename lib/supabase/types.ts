@@ -1905,6 +1905,9 @@ export type Database = {
       sites: {
         Row: {
           address: string | null
+          archive_reason: string | null
+          archived_at: string | null
+          archived_by: string | null
           country: string
           created_at: string
           id: string
@@ -1921,6 +1924,9 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           country: string
           created_at?: string
           id?: string
@@ -1937,6 +1943,9 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           country?: string
           created_at?: string
           id?: string
@@ -1952,6 +1961,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sites_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sites_org_id_fkey"
             columns: ["org_id"]
@@ -2869,6 +2885,10 @@ export type Database = {
         Args: { p_document_id: string; p_force?: boolean; p_reason?: string }
         Returns: undefined
       }
+      archive_site_v1: {
+        Args: { p_reason?: string; p_site_id: string }
+        Returns: undefined
+      }
       assign_capa_from_investigation_v1: {
         Args: {
           p_actor_id: string
@@ -2973,7 +2993,22 @@ export type Database = {
       resolve_org_permissions: { Args: never; Returns: string[] }
       resolve_permissions: { Args: { p_site_id: string }; Returns: string[] }
       seed_default_roles: { Args: { p_org_id: string }; Returns: undefined }
+      unarchive_site_v1: { Args: { p_site_id: string }; Returns: undefined }
       unlink_document_v1: { Args: { p_link_id: string }; Returns: undefined }
+      update_site_v1: {
+        Args: {
+          p_address?: string
+          p_clear_parent?: boolean
+          p_naics_code?: string
+          p_name?: string
+          p_osha_establishment_id?: string
+          p_parent_site_id?: string
+          p_region?: string
+          p_site_id: string
+          p_timezone?: string
+        }
+        Returns: undefined
+      }
       user_can_access_site: { Args: { p_site_id: string }; Returns: boolean }
       verify_capa_v1: {
         Args: {

@@ -10,6 +10,7 @@
 export const PERMISSIONS = [
   "site:read",
   "site:configure",
+  "site:archive",
   "member:invite",
   "member:manage",
   "role:read",
