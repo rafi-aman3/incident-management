@@ -2881,6 +2881,15 @@ export type Database = {
       }
     }
     Functions: {
+      add_site_member_v1: {
+        Args: {
+          p_include_children?: boolean
+          p_profile_id: string
+          p_role_id: string
+          p_site_id: string
+        }
+        Returns: undefined
+      }
       archive_document_v1: {
         Args: { p_document_id: string; p_force?: boolean; p_reason?: string }
         Returns: undefined
@@ -2908,6 +2917,15 @@ export type Database = {
           p_parent_type: Database["public"]["Enums"]["document_link_parent"]
         }
         Returns: boolean
+      }
+      change_site_member_role_v1: {
+        Args: {
+          p_include_children?: boolean
+          p_profile_id: string
+          p_role_id: string
+          p_site_id: string
+        }
+        Returns: undefined
       }
       classify_incident_v1: {
         Args: {
@@ -2948,6 +2966,15 @@ export type Database = {
         Args: { p_preset_id: string }
         Returns: string
       }
+      invite_member_to_site_v1: {
+        Args: {
+          p_email: string
+          p_include_children?: boolean
+          p_role_id: string
+          p_site_id: string
+        }
+        Returns: undefined
+      }
       link_document_v1: {
         Args: {
           p_document_id: string
@@ -2979,6 +3006,10 @@ export type Database = {
         Returns: undefined
       }
       regenerate_item_ids: { Args: { p_items: Json }; Returns: Json }
+      remove_site_member_v1: {
+        Args: { p_profile_id: string; p_site_id: string }
+        Returns: undefined
+      }
       replace_document_file_v1: {
         Args: {
           p_document_id: string

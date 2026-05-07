@@ -103,9 +103,9 @@ export default async function AdminPage() {
         />
         <AdminCard
           title="Members"
-          body="Org-wide member list, per-site role + include-children toggle, invitations."
-          available={false}
-          comingIn="Phase 11b"
+          body="Org-wide member list, per-site role + include-children toggle. Email invitations land in 11c."
+          href="/admin/members"
+          available
         />
         <AdminCard
           title="Roles"
