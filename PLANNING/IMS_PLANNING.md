@@ -147,6 +147,159 @@ The reports module supports:
 
 *(See §9 for the regulatory details. See §17.2 for the OSHA ITA 2026 deadlines. See §17.6 for the leading-vs-lagging KPI strategy.)*
 
+### End-to-End Lifecycle Flow Diagram
+
+The diagram below shows how a single safety event travels through the four foundational modules — **Incident → Investigation → CAPA → Reports** — including the workflow engine, the three-track split, the CAPA verification outcomes, and the status machine.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         EHS INCIDENT LIFECYCLE FLOW                              │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+  ╔══════════════════════════════════════════════════════════════════════════════╗
+  ║                          1. INCIDENT  (3-step wizard)                         ║
+  ╚══════════════════════════════════════════════════════════════════════════════╝
+
+   /incidents/new/1                /incidents/new/2              /incidents/new/3
+   ┌──────────────┐                ┌──────────────┐              ┌──────────────┐
+   │   STEP 1     │                │   STEP 2     │              │   STEP 3     │
+   │   Basics     │  draft row ──▶ │  Details     │  ──────────▶ │  Classify &  │
+   │              │  inserted      │  + evidence  │              │  Finalize    │
+   │ • when/where │  status=draft  │ • witnesses  │              │ • 5×5 matrix │
+   │ • type       │                │ • injured    │              │ • route A/B/C│
+   │ • people     │                │ • assets     │              │ • finalize ▼ │
+   └──────────────┘                └──────────────┘              └──────┬───────┘
+                                                                        │
+                                                       finalizeIncident │ Server Action
+                                                                        ▼
+                                  ┌─────────────────────────────────────────────┐
+                                  │  WORKFLOW ENGINE  (lib/workflow/*.ts)        │
+                                  │  ┌───────────┐  ┌───────────┐  ┌──────────┐ │
+                                  │  │ severity  │─▶│ routing   │─▶│ notify   │ │
+                                  │  │  engine   │  │  engine   │  │  engine  │ │
+                                  │  └───────────┘  └───────────┘  └──────────┘ │
+                                  │      ▲ regulatory clock starts here          │
+                                  └─────────────────────────────────────────────┘
+                                                        │
+                          ┌─────────────────────────────┼─────────────────────────────┐
+                          ▼                             ▼                             ▼
+                    ┌──────────┐                  ┌──────────┐                  ┌──────────┐
+                    │ TRACK A  │                  │ TRACK B  │                  │ TRACK C  │
+                    │ Critical │                  │ Standard │                  │ Log&close│
+                    │ S1 / S2  │                  │   S3     │                  │   S4     │
+                    │ destruct.│                  │ amber    │                  │ success  │
+                    └────┬─────┘                  └────┬─────┘                  └────┬─────┘
+                         │                             │                             │
+                         ▼                             ▼                             ▼
+                  investigation              investigation                   close incident
+                  required                   required                        (no investigation)
+                         │                             │                             │
+                         └─────────────┬───────────────┘                              │
+                                       │                                              │
+       status: classified ─▶ under_investigation                                      │
+                                       ▼                                              │
+                                                                                      │
+  ╔══════════════════════════════════════════════════════════════════════════════╗   │
+  ║                          2. INVESTIGATION  (Kanban + 5-tab)                   ║   │
+  ╚══════════════════════════════════════════════════════════════════════════════╝   │
+                                                                                      │
+   /investigations/[id]                                                               │
+   ┌───────────────────────────────────────────────────────────────────────────┐     │
+   │  Summary  │  5-Why  │  Evidence  │  Findings  │  Timeline                  │     │
+   │  ───────  │  ─────  │  ────────  │  ────────  │  ────────                  │     │
+   │  context  │ 5-Why   │ photos /   │ root cause │ activity                   │     │
+   │  +injured │ chain   │ docs /     │ + contri-  │ events                     │     │
+   │  +witness │ (RCA)   │ statements │ buting     │                            │     │
+   │           │         │            │ factors    │                            │     │
+   └───────────────────────────────────────────────────────────────────────────┘     │
+                                       │                                              │
+                       create CAPAs    │   (one or many — atomic via                  │
+                                       ▼    assign_capa_from_investigation_v1)        │
+                                                                                      │
+       status: under_investigation ─▶ awaiting_capa                                   │
+                                                                                      │
+  ╔══════════════════════════════════════════════════════════════════════════════╗   │
+  ║                          3. CAPA  (Corrective + Preventive Action)            ║   │
+  ╚══════════════════════════════════════════════════════════════════════════════╝   │
+                                                                                      │
+   /capa/[id]                                                                         │
+   ┌──────────────────────────────────────────────────────────────────────────┐      │
+   │                                                                           │      │
+   │   ┌─────────┐    progress    ┌──────────────┐    complete   ┌─────────┐  │      │
+   │   │ created │ ─── slider ──▶ │ in_progress  │ ────────────▶ │complete │  │      │
+   │   │         │  auto-promote  │              │   confirm     │         │  │      │
+   │   └─────────┘                └──────────────┘               └────┬────┘  │      │
+   │                                                                  │       │      │
+   │                              ┌───────────────────────────────────┘       │      │
+   │                              ▼                                            │      │
+   │                       ┌──────────────┐                                    │      │
+   │                       │  VERIFY      │   ⚠ owner ≠ verifier              │      │
+   │                       │  (verify_    │   (UI + Server Action + DB CHECK) │      │
+   │                       │   capa_v1)   │                                    │      │
+   │                       └──────┬───────┘                                    │      │
+   │                              │                                            │      │
+   │           ┌──────────────────┼──────────────────┬──────────────────┐      │      │
+   │           ▼                  ▼                  ▼                  ▼      │      │
+   │   ┌────────────┐   ┌─────────────────┐  ┌─────────────┐   ┌──────────┐  │      │
+   │   │ effective  │   │ partially_      │  │ not_        │   │ too_     │  │      │
+   │   │            │   │ effective       │  │ effective   │   │ early    │  │      │
+   │   │   ✓ done   │   │ ↓               │  │ ↓           │   │ ↓        │  │      │
+   │   │            │   │ auto-spawn      │  │ reopen /    │   │ re-queue │  │      │
+   │   │            │   │ follow-up CAPA  │  │ new CAPA    │   │ verifier │  │      │
+   │   │            │   │ (follow_up_     │  │             │   │          │  │      │
+   │   │            │   │  capa_id)       │  │             │   │          │  │      │
+   │   └────────────┘   └─────────────────┘  └─────────────┘   └──────────┘  │      │
+   │                                                                           │      │
+   │   verification_method: inspection · monitoring · audit_trend ·            │      │
+   │                        re_interview · document_review                     │      │
+   └──────────────────────────────────────────────────────────────────────────┘      │
+                                       │                                              │
+       all CAPAs verified              │                                              │
+       status: awaiting_capa ─▶ closed │                                              │
+                                       ▼                                              │
+                                                                                      │
+  ╔══════════════════════════════════════════════════════════════════════════════╗   │
+  ║                          4. REGULATORY REPORTS                                ║◀──┘
+  ╚══════════════════════════════════════════════════════════════════════════════╝
+                                       (close — even Track C surfaces in 300 Log)
+   /reports
+
+   ┌────────────────── US (OSHA) ──────────────────┐  ┌─────────── UK (RIDDOR) ──────────┐
+   │                                                │  │                                  │
+   │  ┌──────────┐   ┌──────────┐   ┌────────────┐ │  │  ┌──────────────────────────┐    │
+   │  │ OSHA 300 │   │ OSHA 300A│   │  OSHA 301  │ │  │  │   RIDDOR  F2508          │    │
+   │  │  Log     │   │  Annual  │   │ Per-incdt  │ │  │  │   Per-incident PDF       │    │
+   │  │  table   │   │  summary │   │  PDF       │ │  │  │   + HSE notification     │    │
+   │  │ + ITA CSV│   │ TRIR/DART│   │  (@react-  │ │  │  │     record card          │    │
+   │  │          │   │ live calc│   │   pdf)     │ │  │  │                          │    │
+   │  └──────────┘   └──────────┘   └────────────┘ │  │  └──────────────────────────┘    │
+   │                                                │  │                                  │
+   │  driven by: site_annual_hours editor           │  │   driven by: classification      │
+   │             + injured_persons + recordable     │  │              + reportable flag   │
+   └────────────────────────────────────────────────┘  └──────────────────────────────────┘
+
+  ════════════════════════════════════════════════════════════════════════════════════
+  STATUS MACHINE  (incidents.status)
+  ────────────────────────────────────────────────────────────────────────────────────
+   draft ──▶ submitted ──▶ classified ──▶ under_investigation ──▶ awaiting_capa ──▶ closed
+     │           │              │                                        ▲              ▲
+     │           │              │ Track C skips investigation ──────────┐│              │
+     │           │              └────────────────────────────────────────┴──────────────┘
+     │           │
+     └───────────┴── 3-step wizard (draft row exists from Step 1)
+  ════════════════════════════════════════════════════════════════════════════════════
+
+  KEY INVARIANTS
+  ──────────────
+  • Notifications fire at CLASSIFICATION (Step 3 finalize), not at workflow end —
+    regulatory clocks (OSHA 8h fatality / 24h amputation, RIDDOR immediate) start there.
+  • CAPA owner ≠ verifier — enforced UI + Server Action + DB CHECK constraint.
+  • Soft-delete only on incidents/investigations/capas (5y OSHA / 3y RIDDOR retention).
+  • Workflow engine runs in Server Actions, never DB triggers.
+```
+
+*(See §6 for the wizard, §5 for the routing engine, §7 for investigation, §8 for CAPA, §9 for reports, and §11 for the notification triggers shown above.)*
+
 ---
 
 ## 1. Executive Summary
