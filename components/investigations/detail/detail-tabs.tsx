@@ -19,7 +19,7 @@ export function DetailTabs({
   basePath: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b">
+    <div role="tablist" className="flex flex-wrap items-center gap-1 border-b">
       {DETAIL_TABS.map((tab) => {
         const active = current === tab.key;
         const href = tab.key === "summary" ? basePath : `${basePath}?tab=${tab.key}`;
@@ -27,11 +27,14 @@ export function DetailTabs({
           <Link
             key={tab.key}
             href={href}
+            role="tab"
+            aria-selected={active}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
               active
                 ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
             {tab.label}

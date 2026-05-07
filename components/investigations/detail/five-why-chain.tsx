@@ -86,6 +86,23 @@ function WhyRowEditor({
   const [status, setStatus] = useState<SaveStatus>("idle");
   const lastSaved = useRef({ question: initial.question, answer: initial.answer });
 
+  const persist = async (q: string, a: string) => {
+    setStatus("saving");
+    const result = await saveWhy({
+      investigation_id: investigationId,
+      level: initial.level,
+      question: q,
+      answer: a,
+    });
+    if (result.ok) {
+      setStatus("saved");
+      lastSaved.current = { question: q, answer: a };
+      window.setTimeout(() => setStatus("idle"), 1500);
+    } else {
+      setStatus("error");
+    }
+  };
+
   useEffect(() => {
     if (
       question === lastSaved.current.question &&
@@ -93,23 +110,12 @@ function WhyRowEditor({
     ) {
       return;
     }
-    setStatus("saving");
-    const t = window.setTimeout(async () => {
-      const result = await saveWhy({
-        investigation_id: investigationId,
-        level: initial.level,
-        question,
-        answer,
-      });
-      if (result.ok) {
-        setStatus("saved");
-        lastSaved.current = { question, answer };
-        window.setTimeout(() => setStatus("idle"), 1500);
-      } else {
-        setStatus("error");
-      }
+    const t = window.setTimeout(() => {
+      void persist(question, answer);
     }, 1000);
+    setStatus("saving");
     return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [investigationId, initial.level, question, answer]);
 
   const isRoot = initial.level === 5;
@@ -133,7 +139,11 @@ function WhyRowEditor({
             <Target className="h-2.5 w-2.5" /> Root cause
           </span>
         )}
-        <SaveIndicator status={status} className="ml-auto" />
+        <SaveIndicator
+          status={status}
+          onRetry={() => void persist(question, answer)}
+          className="ml-auto"
+        />
       </div>
       <div className="space-y-2">
         <div>
@@ -184,24 +194,30 @@ function RootCauseSummary({
   const [status, setStatus] = useState<SaveStatus>("idle");
   const lastSaved = useRef(initial);
 
+  const persist = async (v: string) => {
+    setStatus("saving");
+    const result = await saveInvestigationText({
+      investigation_id: investigationId,
+      field: "root_cause_summary",
+      value: v,
+    });
+    if (result.ok) {
+      setStatus("saved");
+      lastSaved.current = v;
+      window.setTimeout(() => setStatus("idle"), 1500);
+    } else {
+      setStatus("error");
+    }
+  };
+
   useEffect(() => {
     if (value === lastSaved.current) return;
-    setStatus("saving");
-    const t = window.setTimeout(async () => {
-      const result = await saveInvestigationText({
-        investigation_id: investigationId,
-        field: "root_cause_summary",
-        value,
-      });
-      if (result.ok) {
-        setStatus("saved");
-        lastSaved.current = value;
-        window.setTimeout(() => setStatus("idle"), 1500);
-      } else {
-        setStatus("error");
-      }
+    const t = window.setTimeout(() => {
+      void persist(value);
     }, 1000);
+    setStatus("saving");
     return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [investigationId, value]);
 
   return (
@@ -215,7 +231,7 @@ function RootCauseSummary({
             Plain-English statement of the underlying cause
           </h2>
         </div>
-        <SaveIndicator status={status} />
+        <SaveIndicator status={status} onRetry={() => void persist(value)} />
       </div>
       <div className="p-4">
         <Textarea
@@ -233,23 +249,34 @@ function RootCauseSummary({
 
 function SaveIndicator({
   status,
+  onRetry,
   className,
 }: {
   status: SaveStatus;
+  onRetry?: () => void;
   className?: string;
 }) {
   if (status === "idle") return null;
+  if (status === "error") {
+    return (
+      <span className={cn("inline-flex items-center gap-2 text-[11px]", className)}>
+        <span className="text-destructive">Save failed</span>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded border border-destructive/30 px-1.5 py-0.5 font-medium text-destructive hover:bg-destructive/10"
+          >
+            Retry
+          </button>
+        )}
+      </span>
+    );
+  }
   return (
-    <span
-      className={cn(
-        "text-[11px] tabular-nums",
-        status === "error" ? "text-destructive" : "text-muted-foreground",
-        className
-      )}
-    >
+    <span className={cn("text-[11px] tabular-nums text-muted-foreground", className)}>
       {status === "saving" && "Saving…"}
       {status === "saved" && "Saved"}
-      {status === "error" && "Save failed"}
     </span>
   );
 }

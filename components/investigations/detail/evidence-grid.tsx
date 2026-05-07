@@ -1,4 +1,19 @@
+"use client";
+
 import { FileText, Trash2 } from "lucide-react";
+import { useTransition } from "react";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { deleteInvestigationEvidence } from "@/app/(app)/investigations/[id]/actions";
 
 export type EvidenceItem = {
@@ -73,17 +88,11 @@ export function EvidenceGrid({
             </p>
           </div>
           {canDelete && (
-            <form action={deleteInvestigationEvidence}>
-              <input type="hidden" name="investigation_id" value={investigationId} />
-              <input type="hidden" name="evidence_id" value={it.id} />
-              <button
-                type="submit"
-                aria-label={`Delete ${it.file_name}`}
-                className="absolute right-1.5 top-1.5 rounded-md bg-background/90 p-1 text-muted-foreground opacity-0 backdrop-blur transition-opacity hover:text-destructive group-hover:opacity-100"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </form>
+            <DeleteEvidenceButton
+              investigationId={investigationId}
+              evidenceId={it.id}
+              fileName={it.file_name}
+            />
           )}
         </li>
       ))}
@@ -91,3 +100,58 @@ export function EvidenceGrid({
   );
 }
 
+function DeleteEvidenceButton({
+  investigationId,
+  evidenceId,
+  fileName,
+}: {
+  investigationId: string;
+  evidenceId: string;
+  fileName: string;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  const onConfirm = () => {
+    const fd = new FormData();
+    fd.set("investigation_id", investigationId);
+    fd.set("evidence_id", evidenceId);
+    startTransition(async () => {
+      try {
+        await deleteInvestigationEvidence(fd);
+        toast.success("Evidence deleted");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Delete failed");
+      }
+    });
+  };
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Delete ${fileName}`}
+          disabled={pending}
+          className="absolute right-1.5 top-1.5 rounded-md bg-background/90 p-1 text-muted-foreground backdrop-blur transition-colors hover:text-destructive focus-visible:text-destructive focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destructive disabled:opacity-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this evidence?</AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="font-medium text-foreground">{fileName}</span> and its
+            metadata will be removed. This can&apos;t be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} disabled={pending}>
+            {pending ? "Deleting…" : "Delete"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
