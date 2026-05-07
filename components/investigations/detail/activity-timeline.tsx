@@ -28,11 +28,16 @@ const VERB_LABELS: Record<string, string> = {
   "evidence.deleted": "deleted evidence",
   "witness.statement_added": "added a witness statement",
   "capa.created": "created a CAPA",
+  "capa.started": "started work on the CAPA",
   "capa.completed": "marked CAPA complete",
   "capa.verified": "verified CAPA closure",
   "capa.verification_partial": "marked CAPA partially effective",
   "capa.reassigned_verifier": "reassigned CAPA verifier",
+  "capa.verifier_reassigned": "reassigned CAPA verifier",
   "notification.fired": "sent a notification",
+  "notification.capa_overdue": "flagged the CAPA as overdue",
+  "notification.capa_escalated": "escalated the CAPA",
+  "notification.assigned": "sent an assignment notification",
 };
 
 export function ActivityTimeline({ events }: { events: ActivityEvent[] }) {

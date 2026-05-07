@@ -15,6 +15,7 @@ const CLOSED_ENUM = CLOSED_STATUSES as ReadonlyArray<CapaStatus>;
 import { CapaKpiStrip, type CapaKpiCounts } from "@/components/capa/capa-kpi-strip";
 import { CapaTabs } from "@/components/capa/capa-tabs";
 import { CapaList, type CapaRow } from "@/components/capa/capa-list";
+import { CapaFilters } from "@/components/capa/capa-filters";
 import {
   CapaCreateModal,
   type CapaCreateMember,
@@ -23,23 +24,95 @@ import {
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const VALID_TABS: ReadonlyArray<CapaTabKey> = CAPA_TABS.map((t) => t.key);
 
+type SiteRow = {
+  id: string;
+  name: string;
+  parent_site_id: string | null;
+};
+
+function pickFirst(raw: string | string[] | undefined): string {
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw) && raw.length > 0) return raw[0];
+  return "";
+}
+
+/** BFS site-tree expansion: same approach the planner + investigations use. */
+function resolveAccessibleSites(
+  allSites: SiteRow[],
+  memberships: ReadonlyArray<{ site_id: string; include_children: boolean }>,
+): SiteRow[] {
+  const byParent = new Map<string | null, SiteRow[]>();
+  for (const s of allSites) {
+    const arr = byParent.get(s.parent_site_id) ?? [];
+    arr.push(s);
+    byParent.set(s.parent_site_id, arr);
+  }
+  const accessible = new Set<string>();
+  for (const m of memberships) {
+    if (accessible.has(m.site_id)) continue;
+    accessible.add(m.site_id);
+    if (m.include_children) {
+      const queue = [m.site_id];
+      while (queue.length > 0) {
+        const sid = queue.shift()!;
+        for (const child of byParent.get(sid) ?? []) {
+          if (!accessible.has(child.id)) {
+            accessible.add(child.id);
+            queue.push(child.id);
+          }
+        }
+      }
+    }
+  }
+  return allSites.filter((s) => accessible.has(s.id));
+}
+
 export default async function CapaPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
   const sp = await searchParams;
-  const { supabase, user, currentSiteId } = await requireUser();
+  const { supabase, user, profile, memberships, currentSiteId } = await requireUser();
 
   const tab: CapaTabKey =
     typeof sp.tab === "string" && (VALID_TABS as readonly string[]).includes(sp.tab)
       ? (sp.tab as CapaTabKey)
       : "mine";
 
+  const siteParam = pickFirst(sp.site); // "", "all", or a site_id
+  const ownerParam = pickFirst(sp.owner); // "", or a profile_id
+
   const canCreate = currentSiteId ? await can("capa:create", currentSiteId) : false;
   const canRead = currentSiteId ? await can("capa:complete", currentSiteId) : false;
 
   const today = new Date().toISOString().slice(0, 10);
+
+  // ---- Accessible sites + tree expansion (mirrors planner + investigations) ----
+  const { data: orgSites } = await supabase
+    .from("sites")
+    .select("id, name, parent_site_id")
+    .eq("org_id", profile.org_id)
+    .is("archived_at", null)
+    .order("name", { ascending: true });
+
+  const accessibleSites = resolveAccessibleSites(
+    (orgSites ?? []) as SiteRow[],
+    memberships.map((m) => ({
+      site_id: m.site_id,
+      include_children: m.include_children,
+    })),
+  );
+
+  // Resolve which siteIds the query restricts to.
+  let filterSiteIds: string[];
+  if (siteParam === "all") {
+    filterSiteIds = accessibleSites.map((s) => s.id);
+  } else if (siteParam !== "" && accessibleSites.some((s) => s.id === siteParam)) {
+    filterSiteIds = [siteParam];
+  } else {
+    filterSiteIds = currentSiteId ? [currentSiteId] : [];
+  }
 
   let counts: CapaKpiCounts = {
     active: 0,
@@ -51,6 +124,7 @@ export default async function CapaPage({
   let rows: CapaRow[] = [];
   let queryError: string | null = null;
   let members: CapaCreateMember[] = [];
+  let owners: Array<{ id: string; full_name: string | null; email: string }> = [];
 
   if (canCreate && currentSiteId) {
     const { data: siteMembersRaw } = await supabase
@@ -66,46 +140,52 @@ export default async function CapaPage({
       }));
   }
 
-  if (canRead && currentSiteId) {
+  // Owners list for the filter dropdown — distinct profiles holding any role
+  // on any of the accessible sites.
+  if (canRead && filterSiteIds.length > 0) {
+    const { data: ownerRows } = await supabase
+      .from("site_members")
+      .select("profile:profiles ( id, full_name, email )")
+      .in("site_id", filterSiteIds);
+    const seen = new Set<string>();
+    for (const m of ownerRows ?? []) {
+      if (!m.profile || seen.has(m.profile.id)) continue;
+      seen.add(m.profile.id);
+      owners.push({
+        id: m.profile.id,
+        full_name: m.profile.full_name,
+        email: m.profile.email,
+      });
+    }
+    owners.sort((a, b) =>
+      (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email),
+    );
+  }
+
+  if (canRead && filterSiteIds.length > 0) {
+    // Helper builds a base query with the resolved site filter + owner filter
+    // applied, so KPIs and tab counts respect the active filter chips.
+    const base = () => {
+      let q = supabase
+        .from("capas")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .in("site_id", filterSiteIds);
+      if (ownerParam) q = q.eq("owner_id", ownerParam);
+      return q;
+    };
+
     // KPI counts (head-only) + tab counts
     const [activeRes, pendingRes, overdueRes, closedRes, mineRes, allRes] =
       await Promise.all([
-        supabase
-          .from("capas")
-          .select("id", { count: "exact", head: true })
-          .is("deleted_at", null)
-          .eq("site_id", currentSiteId)
-          .in("status", ACTIVE_ENUM),
-        supabase
-          .from("capas")
-          .select("id", { count: "exact", head: true })
-          .is("deleted_at", null)
-          .eq("site_id", currentSiteId)
-          .eq("status", "pending_verification"),
-        supabase
-          .from("capas")
-          .select("id", { count: "exact", head: true })
-          .is("deleted_at", null)
-          .eq("site_id", currentSiteId)
+        base().in("status", ACTIVE_ENUM),
+        base().eq("status", "pending_verification"),
+        base()
           .not("status", "in", `(${CLOSED_STATUSES.join(",")})`)
           .lt("due_date", today),
-        supabase
-          .from("capas")
-          .select("id", { count: "exact", head: true })
-          .is("deleted_at", null)
-          .eq("site_id", currentSiteId)
-          .in("status", CLOSED_ENUM),
-        supabase
-          .from("capas")
-          .select("id", { count: "exact", head: true })
-          .is("deleted_at", null)
-          .eq("site_id", currentSiteId)
-          .eq("owner_id", user.id),
-        supabase
-          .from("capas")
-          .select("id", { count: "exact", head: true })
-          .is("deleted_at", null)
-          .eq("site_id", currentSiteId),
+        base().in("status", CLOSED_ENUM),
+        base().eq("owner_id", user.id),
+        base(),
       ]);
     counts = {
       active: activeRes.count ?? 0,
@@ -131,9 +211,11 @@ export default async function CapaPage({
          verifier:profiles!capas_verifier_id_fkey ( full_name, email )`
       )
       .is("deleted_at", null)
-      .eq("site_id", currentSiteId)
+      .in("site_id", filterSiteIds)
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(200);
+
+    if (ownerParam) q = q.eq("owner_id", ownerParam);
 
     if (tab === "mine") {
       q = q.eq("owner_id", user.id);
@@ -179,9 +261,6 @@ export default async function CapaPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Module 3
-          </p>
           <h1 className="text-2xl font-semibold">CAPA</h1>
           <p className="text-sm text-muted-foreground">
             Corrective and preventive actions. Owner ≠ verifier — enforced at UI,
@@ -199,7 +278,21 @@ export default async function CapaPage({
       </div>
 
       {canRead && <CapaKpiStrip counts={counts} />}
-      {canRead && <CapaTabs current={tab} counts={tabCounts} />}
+      {canRead && (
+        <CapaTabs
+          current={tab}
+          counts={tabCounts}
+          params={{ site: siteParam, owner: ownerParam }}
+        />
+      )}
+      {canRead && (
+        <CapaFilters
+          current={{ site: siteParam, owner: ownerParam, tab }}
+          sites={accessibleSites.map((s) => ({ id: s.id, name: s.name }))}
+          owners={owners}
+          currentUserId={user.id}
+        />
+      )}
 
       {!canRead && (
         <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
@@ -209,7 +302,7 @@ export default async function CapaPage({
 
       {queryError && <p className="text-sm text-destructive">{queryError}</p>}
 
-      {canRead && !queryError && <CapaList rows={rows} />}
+      {canRead && !queryError && <CapaList rows={rows} currentTab={tab} />}
 
       {canCreate && (
         <CapaCreateModal members={members} context={{ kind: "standalone" }} />

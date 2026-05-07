@@ -91,14 +91,23 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
       email: m.profile!.email,
     }));
 
-  // Activity timeline
-  const { data: actRaw } = await supabase
-    .from("activity_events")
-    .select("id, verb, payload, created_at, actor:actor_id ( full_name, email )")
-    .eq("capa_id", capa.id)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  const timeline: ActivityEvent[] = (actRaw ?? []).map((e) => ({
+  // Activity timeline — 2-source merge: activity_events + notifications keyed
+  // on capa_id. Both pre-sorted desc; merged + re-sorted in TS.
+  const [actRes, notifRes] = await Promise.all([
+    supabase
+      .from("activity_events")
+      .select("id, verb, payload, created_at, actor:actor_id ( full_name, email )")
+      .eq("capa_id", capa.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("notifications")
+      .select("id, kind, title, body, created_at")
+      .eq("capa_id", capa.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
+  const actEvents: ActivityEvent[] = (actRes.data ?? []).map((e) => ({
     id: e.id,
     verb: e.verb,
     payload: (e.payload ?? {}) as Record<string, unknown>,
@@ -106,6 +115,17 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
     actor_name: e.actor?.full_name ?? e.actor?.email ?? null,
     href: null,
   }));
+  const notifEvents: ActivityEvent[] = (notifRes.data ?? []).map((n) => ({
+    id: `notif-${n.id}`,
+    verb: `notification.${n.kind}`,
+    payload: { kind: n.kind, title: n.title, body: n.body } as Record<string, unknown>,
+    created_at: n.created_at,
+    actor_name: null, // notifications are system-generated → renders as "System"
+    href: null, // CAPA notifications target this page; no deep link needed
+  }));
+  const timeline: ActivityEvent[] = [...actEvents, ...notifEvents].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
 
   const basePath = `/capa/${capa.id}`;
   const editable = isOwner && status !== "pending_verification" && status !== "verified" && status !== "closed";
@@ -186,7 +206,12 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
               />
             )}
 
-          {showVerificationForm && <VerificationForm capaId={capa.id} />}
+          {showVerificationForm && (
+            <VerificationForm
+              capaId={capa.id}
+              ownerName={capa.owner!.full_name ?? capa.owner!.email}
+            />
+          )}
 
           <div className="rounded-md border bg-card p-4">
             <LinkedDocumentsSection

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { ShieldCheck, AlertTriangle, Clock, RefreshCcw, ChevronRight } from "lucide-react";
+import { ShieldCheck, AlertTriangle, Clock, RefreshCcw, ChevronRight, Info } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
@@ -76,7 +76,14 @@ const METHOD_OPTIONS: Array<{ value: string; label: string }> = [
  * RPC both re-check owner ≠ verifier. The DB CHECK constraint on capas
  * is the final defense if a row write somehow bypasses the RPC.
  */
-export function VerificationForm({ capaId }: { capaId: string }) {
+export function VerificationForm({
+  capaId,
+  ownerName,
+}: {
+  capaId: string;
+  /** Used in the partial-effective pre-submit info card. */
+  ownerName: string;
+}) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     verifyCapa,
     null
@@ -155,6 +162,7 @@ export function VerificationForm({ capaId }: { capaId: string }) {
                   id={`result-${opt.value}`}
                   value={opt.value}
                   className="mt-0.5"
+                  aria-describedby={`result-${opt.value}-desc`}
                 />
                 <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div>
@@ -164,7 +172,12 @@ export function VerificationForm({ capaId }: { capaId: string }) {
                       <InfoTooltip tip="capa_partial_effective" />
                     )}
                   </span>
-                  <p className="text-[11px] text-muted-foreground">{opt.hint}</p>
+                  <p
+                    id={`result-${opt.value}-desc`}
+                    className="text-[11px] text-muted-foreground"
+                  >
+                    {opt.hint}
+                  </p>
                 </div>
               </Label>
             );
@@ -203,6 +216,17 @@ export function VerificationForm({ capaId }: { capaId: string }) {
           />
           <p className="text-[11px] text-muted-foreground">
             CAPA stays in Pending Verification; system will surface it again on this date.
+          </p>
+        </div>
+      )}
+
+      {result === "partially_effective" && (
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+          <p>
+            Submitting this verification will <strong>create a follow-up CAPA</strong>{" "}
+            assigned back to <strong>{ownerName}</strong>. You&apos;ll be able to
+            edit its title, due date, and details after the verification completes.
           </p>
         </div>
       )}

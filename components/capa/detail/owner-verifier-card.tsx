@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { UserCheck, ShieldCheck, Crown } from "lucide-react";
 
 export function OwnerVerifierCard({
@@ -80,12 +81,16 @@ export function OwnerVerifierCard({
             </div>
           </div>
           {canReassignVerifier && status !== "verified" && status !== "closed" && (
-            <Link
-              href={`${basePath}?action=reassign-verifier`}
-              className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent"
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="mt-2 w-full"
             >
-              <UserCheck className="h-3 w-3" /> Reassign verifier
-            </Link>
+              <Link href={`${basePath}?action=reassign-verifier`}>
+                <UserCheck className="h-3 w-3" /> Reassign verifier
+              </Link>
+            </Button>
           )}
         </li>
       </ul>

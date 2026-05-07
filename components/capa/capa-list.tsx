@@ -13,7 +13,7 @@ import {
   CapaProgressBar,
 } from "@/components/capa/badges";
 import { DueDateChip } from "@/components/investigations/badges";
-import type { CapaStatus } from "@/lib/capa/types";
+import { CAPA_TAB_EMPTY_COPY, type CapaStatus, type CapaTabKey } from "@/lib/capa/types";
 
 export type CapaRow = {
   id: string;
@@ -28,11 +28,12 @@ export type CapaRow = {
   is_overdue: boolean;
 };
 
-export function CapaList({ rows }: { rows: CapaRow[] }) {
+export function CapaList({ rows, currentTab }: { rows: CapaRow[]; currentTab?: CapaTabKey }) {
   if (rows.length === 0) {
+    const copy = currentTab ? CAPA_TAB_EMPTY_COPY[currentTab] : "No CAPAs match this view.";
     return (
       <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
-        No CAPAs match this view.
+        {copy}
       </div>
     );
   }
