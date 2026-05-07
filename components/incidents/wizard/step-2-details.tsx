@@ -469,8 +469,16 @@ export function Step2Details(props: Props) {
         </ul>
       </section>
 
-      {state?.ok === false && state.error !== "Validation failed" && (
-        <p className="text-sm text-destructive">{state.error}</p>
+      {state?.ok === false && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+        >
+          <p className="font-medium">{step2ErrorTitle(state)}</p>
+          <p className="mt-0.5 text-xs text-destructive/80">
+            {step2ErrorHint(state)}
+          </p>
+        </div>
       )}
 
       <div className="flex items-center justify-between border-t pt-4">
@@ -491,4 +499,30 @@ export function Step2Details(props: Props) {
     </form>
     </TooltipProvider>
   );
+}
+
+// Translate the server action's ActionResult into a user-readable title.
+function step2ErrorTitle(state: { ok: false; error: string; fieldErrors?: Record<string, string[]> }): string {
+  if (state.error !== "Validation failed") return state.error;
+  const keys = Object.keys(state.fieldErrors ?? {});
+  if (keys.some((k) => k.startsWith("injured_persons"))) {
+    return "An injured person row is missing required info.";
+  }
+  if (keys.some((k) => k.startsWith("witnesses"))) {
+    return "A witness row is missing required info.";
+  }
+  if (keys.includes("likelihood") || keys.includes("consequence")) {
+    return "Pick a likelihood and consequence on the risk matrix.";
+  }
+  return "Some fields need fixing before continuing.";
+}
+
+// Render a hint pointing at the first failing field, falling back to a
+// general nudge when nothing's specific.
+function step2ErrorHint(state: { ok: false; error: string; fieldErrors?: Record<string, string[]> }): string {
+  const entries = Object.entries(state.fieldErrors ?? {});
+  if (entries.length === 0) return "Try again or scroll up to check each section.";
+  const [path, msgs] = entries[0];
+  const msg = msgs?.[0] ?? "Required";
+  return `${path.replace(/\./g, " → ")}: ${msg}`;
 }
