@@ -103,6 +103,25 @@ export default async function TemplateEditPage({ params }: { params: Params }) {
     );
   }
 
+  // Fetch the currently-published baseline (if any). The draft was cloned
+  // from this version; we pass its content to the editor so the publish
+  // dialog can compute a one-line diff suggestion. When the template has
+  // never been published, baseline is null and the dialog falls back to
+  // "Initial version of <name>".
+  let publishedHeader: TemplateNodeItem[] | null = null;
+  let publishedItems: TemplateNodeItem[] | null = null;
+  if (tmpl.current_version_id && tmpl.current_version_id !== draftVersionId) {
+    const { data: pub } = await supabase
+      .from("template_versions")
+      .select("header, items")
+      .eq("id", tmpl.current_version_id)
+      .maybeSingle();
+    if (pub) {
+      publishedHeader = (pub.header ?? []) as unknown as TemplateNodeItem[];
+      publishedItems = (pub.items ?? []) as unknown as TemplateNodeItem[];
+    }
+  }
+
   return (
     <TemplateEditor
       templateId={tmpl.id}
@@ -116,6 +135,8 @@ export default async function TemplateEditPage({ params }: { params: Params }) {
       initialTemplateData={
         (ver.template_data ?? { answer_sets: {} }) as unknown as TemplateData
       }
+      publishedHeader={publishedHeader}
+      publishedItems={publishedItems}
       canPublish={canPublish}
     />
   );

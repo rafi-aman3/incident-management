@@ -112,6 +112,30 @@ export function removeItem(
 }
 
 /**
+ * Count descendants of an item (children, grandchildren, etc.) without
+ * including the item itself. Mirrors the closure walk in `removeItem`
+ * so the "delete this section and N items inside?" confirm matches what
+ * the deletion will actually remove.
+ */
+export function countDescendants(
+  items: TemplateNodeItem[],
+  itemId: string
+): number {
+  const set = new Set<string>([itemId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const it of items) {
+      if (it.parent_id && set.has(it.parent_id) && !set.has(it.item_id)) {
+        set.add(it.item_id);
+        changed = true;
+      }
+    }
+  }
+  return set.size - 1;
+}
+
+/**
  * Patch a single item by id. The patch is shallow-merged at the top level;
  * `options` is merged separately to preserve unrelated keys.
  */
@@ -165,6 +189,40 @@ export function moveItem(
   const rewritten = new Map<string, number>();
   siblings.forEach((it, i) => rewritten.set(it.item_id, i + 1));
 
+  return items.map((it) => {
+    if (!rewritten.has(it.item_id)) return it;
+    return {
+      ...it,
+      options: { ...(it.options ?? {}), sort_order: rewritten.get(it.item_id) },
+    };
+  });
+}
+
+/**
+ * Reorder a sibling group (items sharing the same `parent_id`) given the
+ * new ID ordering from a drag-end event. Rewrites `sort_order` contiguously
+ * (1-indexed) so the order is stable across saves. Items not in the
+ * sibling group are returned unchanged. Unknown IDs are ignored.
+ */
+export function reorderSiblings(
+  items: TemplateNodeItem[],
+  parentId: string | undefined,
+  orderedIds: string[]
+): TemplateNodeItem[] {
+  const siblingSet = new Set(
+    items
+      .filter((it) =>
+        parentId ? it.parent_id === parentId : !it.parent_id
+      )
+      .map((it) => it.item_id)
+  );
+  const rewritten = new Map<string, number>();
+  let cursor = 1;
+  for (const id of orderedIds) {
+    if (siblingSet.has(id)) {
+      rewritten.set(id, cursor++);
+    }
+  }
   return items.map((it) => {
     if (!rewritten.has(it.item_id)) return it;
     return {

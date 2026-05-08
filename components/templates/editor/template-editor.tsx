@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -20,11 +20,38 @@ import {
   CalendarClock,
   AlertTriangle,
 } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TemplateStatusBadge } from "@/components/templates/badges";
 import { ChangeSummaryDialog } from "@/components/templates/editor/change-summary-dialog";
 import { InfoTooltip } from "@/components/info-tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { saveDraftVersion } from "@/app/(app)/templates/[id]/edit/actions";
 import type {
   TemplateNodeItem,
@@ -42,6 +69,8 @@ import {
   removeItem,
   updateItem,
   moveItem,
+  reorderSiblings,
+  countDescendants,
   buildTree,
   countAnswerablePerSection,
   ensureDefaultAnswerSet,
@@ -76,6 +105,11 @@ type Props = {
   initialHeader: TemplateNodeItem[];
   initialItems: TemplateNodeItem[];
   initialTemplateData: TemplateData;
+  /** Items from the currently-published version, used by the publish
+   *  dialog to pre-fill the change summary with a structural diff.
+   *  Null for first-publish. */
+  publishedHeader: TemplateNodeItem[] | null;
+  publishedItems: TemplateNodeItem[] | null;
   canPublish: boolean;
 };
 
@@ -99,6 +133,12 @@ export function TemplateEditor(props: Props) {
 
   const lastSaved = useRef<string>("");
   const initialKey = useRef<string>("");
+  // Per-attempt abort controller — used to mark stale autosave responses so
+  // their UI side-effects don't clobber a fresher state. Server actions
+  // don't natively honor signals, so we ALSO track the in-flight promise
+  // and have the publish path await it for server-side serialization.
+  const saveAbortRef = useRef<AbortController | null>(null);
+  const inFlightSaveRef = useRef<Promise<void> | null>(null);
 
   const activeArray = tab === "header" ? header : items;
   const setActiveArray = tab === "header" ? setHeader : setItems;
@@ -139,13 +179,15 @@ export function TemplateEditor(props: Props) {
     }
   }, [payloadKey]);
 
-  // Autosave
-  useEffect(() => {
-    if (!initialKey.current) return;
-    if (payloadKey === lastSaved.current) return;
-
+  // Run a save now, bypassing debounce. Used by both the autosave timer
+  // (after its 1s delay) and the manual Retry button when the indicator
+  // shows "Save failed".
+  const runSave = useCallback(async () => {
     setStatus("saving");
-    const t = window.setTimeout(async () => {
+    saveAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    saveAbortRef.current = ctrl;
+    const promise: Promise<void> = (async () => {
       const res = await saveDraftVersion({
         version_id: props.draftVersionId,
         template_id: props.templateId,
@@ -155,18 +197,24 @@ export function TemplateEditor(props: Props) {
         name,
         description: description || null,
       });
+      if (ctrl.signal.aborted) return;
       if (res.ok) {
         lastSaved.current = payloadKey;
         setStatus("saved");
-        window.setTimeout(() => setStatus("idle"), 1500);
+        window.setTimeout(() => {
+          if (!ctrl.signal.aborted) setStatus("idle");
+        }, 1500);
       } else {
         setStatus("error");
         toast.error(`Save failed: ${res.error}`);
       }
-    }, 1000);
-    return () => window.clearTimeout(t);
+    })();
+    inFlightSaveRef.current = promise;
+    promise.finally(() => {
+      if (inFlightSaveRef.current === promise) inFlightSaveRef.current = null;
+    });
+    return promise;
   }, [
-    payloadKey,
     props.draftVersionId,
     props.templateId,
     header,
@@ -174,7 +222,35 @@ export function TemplateEditor(props: Props) {
     templateData,
     name,
     description,
+    payloadKey,
   ]);
+
+  // Autosave — debounce 1s after the payloadKey changes.
+  useEffect(() => {
+    if (!initialKey.current) return;
+    if (payloadKey === lastSaved.current) return;
+    setStatus("saving");
+    const t = window.setTimeout(() => {
+      void runSave();
+    }, 1000);
+    return () => window.clearTimeout(t);
+  }, [payloadKey, runSave]);
+
+  // Publish click guard: cancel any pending debounced save (so a fresh
+  // edit doesn't fire mid-publish), then await any in-flight save so the
+  // RPC reads a fully-committed draft. Only then open the dialog.
+  async function openPublishDialog() {
+    saveAbortRef.current?.abort();
+    if (inFlightSaveRef.current) {
+      try {
+        await inFlightSaveRef.current;
+      } catch {
+        // If the save threw, surface it via the existing error toast and
+        // still let publish proceed — the user can choose to retry.
+      }
+    }
+    setPublishOpen(true);
+  }
 
   function handleAdd(type: MvpItemType, parentId?: string) {
     const { items: next, newItemId: id } = addItem(activeArray, type, parentId);
@@ -201,6 +277,58 @@ export function TemplateEditor(props: Props) {
 
   function handleMove(id: string, dir: "up" | "down") {
     setActiveArray(moveItem(activeArray, id, dir));
+    const item = activeArray.find((it) => it.item_id === id);
+    if (item) {
+      setDragAnnouncement(
+        `Moved ${item.label || "item"} ${dir === "up" ? "up" : "down"}.`
+      );
+    }
+  }
+
+  // ------------------------------------------------------------------ DnD
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const [dragAnnouncement, setDragAnnouncement] = useState("");
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeItem = activeArray.find((it) => it.item_id === active.id);
+    const overItem = activeArray.find((it) => it.item_id === over.id);
+    if (!activeItem || !overItem) return;
+
+    // Sibling-only constraint: cross-parent drops are rejected.
+    if (activeItem.parent_id !== overItem.parent_id) {
+      setDragAnnouncement(
+        `Can't move across sections. Drops are restricted to siblings.`
+      );
+      return;
+    }
+
+    const parentId = activeItem.parent_id;
+    const siblings = activeArray
+      .filter((it) =>
+        parentId ? it.parent_id === parentId : !it.parent_id,
+      )
+      .sort(
+        (a, b) =>
+          ((a.options?.sort_order as number) ?? 0) -
+          ((b.options?.sort_order as number) ?? 0),
+      );
+    const oldIndex = siblings.findIndex((it) => it.item_id === active.id);
+    const newIndex = siblings.findIndex((it) => it.item_id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const orderedIds = arrayMove(siblings, oldIndex, newIndex).map(
+      (it) => it.item_id,
+    );
+    setActiveArray(reorderSiblings(activeArray, parentId, orderedIds));
+    setDragAnnouncement(
+      `Moved ${activeItem.label || "item"} to position ${newIndex + 1} of ${siblings.length}.`,
+    );
   }
 
   function toggleCollapsed(id: string) {
@@ -229,6 +357,7 @@ export function TemplateEditor(props: Props) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              aria-label="Template name"
               className="w-full max-w-xl truncate border-none bg-transparent text-base font-semibold outline-none focus-visible:bg-accent/40 focus-visible:ring-1 focus-visible:ring-ring rounded px-1"
               maxLength={200}
             />
@@ -236,6 +365,15 @@ export function TemplateEditor(props: Props) {
               <TemplateStatusBadge status={props.templateStatus} />
               <span>Draft v{props.draftVersionNumber}</span>
               <SaveIndicator status={status} />
+              {status === "error" && (
+                <button
+                  type="button"
+                  onClick={() => void runSave()}
+                  className="inline-flex items-center rounded border border-destructive/30 px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+                >
+                  Retry
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -248,8 +386,15 @@ export function TemplateEditor(props: Props) {
           </Link>
           <button
             type="button"
-            onClick={() => setPublishOpen(true)}
-            disabled={!props.canPublish || items.length === 0}
+            onClick={openPublishDialog}
+            disabled={
+              !props.canPublish || items.length === 0 || status === "saving"
+            }
+            title={
+              status === "saving"
+                ? "Saving your latest changes — Publish becomes available again in a moment."
+                : undefined
+            }
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Publish v{props.draftVersionNumber}
@@ -263,9 +408,17 @@ export function TemplateEditor(props: Props) {
         {/* Left sidebar */}
         <aside className="flex w-72 shrink-0 flex-col border-r bg-card">
           <div className="border-b p-2">
-            <div className="flex rounded-md border bg-background p-0.5 text-xs font-medium">
+            <div
+              role="tablist"
+              aria-label="Editor section"
+              className="flex rounded-md border bg-background p-0.5 text-xs font-medium"
+            >
               <button
                 type="button"
+                role="tab"
+                id="editor-tab-body"
+                aria-selected={tab === "body"}
+                aria-controls="editor-tabpanel-tree"
                 onClick={() => setTab("body")}
                 className={cn(
                   "flex-1 rounded px-2 py-1",
@@ -276,6 +429,10 @@ export function TemplateEditor(props: Props) {
               </button>
               <button
                 type="button"
+                role="tab"
+                id="editor-tab-header"
+                aria-selected={tab === "header"}
+                aria-controls="editor-tabpanel-tree"
                 onClick={() => setTab("header")}
                 className={cn(
                   "flex-1 rounded px-2 py-1",
@@ -287,7 +444,15 @@ export function TemplateEditor(props: Props) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-2 py-2">
+          <div
+            id="editor-tabpanel-tree"
+            role="tabpanel"
+            aria-labelledby={tab === "body" ? "editor-tab-body" : "editor-tab-header"}
+            className="flex-1 overflow-y-auto px-2 py-2"
+          >
+            <span aria-live="polite" className="sr-only">
+              {dragAnnouncement}
+            </span>
             {tree.length === 0 ? (
               <div className="rounded-md border border-dashed p-6 text-center text-xs text-muted-foreground">
                 {tab === "body"
@@ -295,23 +460,34 @@ export function TemplateEditor(props: Props) {
                   : "No title-page items yet."}
               </div>
             ) : (
-              <ul className="space-y-1">
-                {tree.map((node) => (
-                  <TreeNode
-                    key={node.item.item_id}
-                    node={node}
-                    depth={0}
-                    selectedId={selectedId}
-                    onSelect={setSelectedId}
-                    onMove={handleMove}
-                    onRemove={handleRemove}
-                    onAddChild={(type, parentId) => handleAdd(type, parentId)}
-                    collapsed={collapsed}
-                    onToggleCollapsed={toggleCollapsed}
-                    sectionCounts={sectionCounts}
-                  />
-                ))}
-              </ul>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={tree.map((n) => n.item.item_id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <ul className="space-y-1">
+                    {tree.map((node) => (
+                      <TreeNode
+                        key={node.item.item_id}
+                        node={node}
+                        depth={0}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onMove={handleMove}
+                        onRemove={handleRemove}
+                        onAddChild={(type, parentId) => handleAdd(type, parentId)}
+                        collapsed={collapsed}
+                        onToggleCollapsed={toggleCollapsed}
+                        sectionCounts={sectionCounts}
+                      />
+                    ))}
+                  </ul>
+                </SortableContext>
+              </DndContext>
             )}
           </div>
 
@@ -348,6 +524,7 @@ export function TemplateEditor(props: Props) {
               <OptionsPanel
                 item={selectedItem}
                 templateData={templateData}
+                descendantCount={countDescendants(activeArray, selectedItem.item_id)}
                 onChange={(patch) => handleUpdate(selectedItem.item_id, patch)}
                 onTemplateDataChange={setTemplateData}
                 onRemove={() => handleRemove(selectedItem.item_id)}
@@ -367,6 +544,9 @@ export function TemplateEditor(props: Props) {
         templateId={props.templateId}
         draftVersionId={props.draftVersionId}
         nextVersionNumber={props.draftVersionNumber}
+        templateName={name || props.templateName}
+        publishedItems={props.publishedItems}
+        draftItems={items}
         onSuccess={() => {
           setPublishOpen(false);
           // After publish the template is no longer in draft — go to read-only
@@ -374,6 +554,58 @@ export function TemplateEditor(props: Props) {
         }}
       />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tree descendant count — recurse through the already-built tree node so we
+// don't re-walk items[] in render.
+// ---------------------------------------------------------------------------
+function countTreeDescendants(node: ItemTreeNode): number {
+  let n = node.children.length;
+  for (const c of node.children) n += countTreeDescendants(c);
+  return n;
+}
+
+// ---------------------------------------------------------------------------
+// Delete confirm
+// ---------------------------------------------------------------------------
+function DeleteItemConfirm({
+  itemLabel,
+  descendantCount,
+  onConfirm,
+  children,
+}: {
+  itemLabel: string | null;
+  descendantCount: number;
+  onConfirm: () => void;
+  children: React.ReactNode;
+}) {
+  const label = itemLabel || "this item";
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>{children}</AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {descendantCount > 0
+              ? `Delete this section and ${descendantCount} item${descendantCount === 1 ? "" : "s"} inside?`
+              : `Delete ${label}?`}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {descendantCount > 0
+              ? `“${label}” and everything nested under it will be removed from this draft. You can publish the change to keep, or discard it by reloading.`
+              : `This removes the item from your draft. You can publish to keep the change, or discard it by reloading.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>
+            {descendantCount > 0 ? "Delete section + nested items" : "Delete"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -427,8 +659,17 @@ function TreeNode({
   const isSelected = selectedId === node.item.item_id;
   const Icon = isMvpType(node.item.type) ? TYPE_META[node.item.type].icon : FileText;
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: node.item.item_id });
+  const style: React.CSSProperties | undefined = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        transition,
+      }
+    : undefined;
+
   return (
-    <li>
+    <li ref={setNodeRef} style={style} className={isDragging ? "opacity-60" : undefined}>
       <div
         className={cn(
           "group flex items-center gap-1 rounded-md px-1 py-1 hover:bg-accent",
@@ -440,6 +681,12 @@ function TreeNode({
           <button
             type="button"
             onClick={() => onToggleCollapsed(node.item.item_id)}
+            aria-expanded={!isCollapsed}
+            aria-label={
+              isCollapsed
+                ? `Expand ${node.item.label || "section"}`
+                : `Collapse ${node.item.label || "section"}`
+            }
             className="text-muted-foreground"
           >
             {isCollapsed ? (
@@ -451,11 +698,20 @@ function TreeNode({
         ) : (
           <span className="w-3" />
         )}
-        <GripVertical className="h-3 w-3 text-muted-foreground/40" />
-        <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Drag to reorder ${node.item.label || "item"}`}
+          className="touch-none rounded text-muted-foreground/40 hover:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+        >
+          <GripVertical className="h-3 w-3" />
+        </button>
+        <Icon aria-hidden="true" className="h-3 w-3 shrink-0 text-muted-foreground" />
         <button
           type="button"
           onClick={() => onSelect(node.item.item_id)}
+          aria-current={isSelected ? "true" : undefined}
           className="flex-1 truncate text-left text-xs"
         >
           {node.item.label || "(unlabeled)"}
@@ -482,43 +738,53 @@ function TreeNode({
           >
             ↓
           </button>
-          <button
-            type="button"
-            onClick={() => onRemove(node.item.item_id)}
-            className="text-muted-foreground hover:text-destructive"
-            aria-label="Delete"
+          <DeleteItemConfirm
+            itemLabel={node.item.label}
+            descendantCount={countTreeDescendants(node)}
+            onConfirm={() => onRemove(node.item.item_id)}
           >
-            <Trash2 className="h-3 w-3" />
-          </button>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-destructive"
+              aria-label={`Delete ${node.item.label || "item"}`}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </DeleteItemConfirm>
         </div>
       </div>
       {isContainer && !isCollapsed && (
-        <ul className="space-y-1">
-          {node.children.map((c) => (
-            <TreeNode
-              key={c.item.item_id}
-              node={c}
-              depth={depth + 1}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              onMove={onMove}
-              onRemove={onRemove}
-              onAddChild={onAddChild}
-              collapsed={collapsed}
-              onToggleCollapsed={onToggleCollapsed}
-              sectionCounts={sectionCounts}
-            />
-          ))}
-          <li
-            style={{ paddingLeft: `${0.25 + (depth + 1) * 0.75}rem` }}
-            className="flex items-center gap-1 px-1 pb-1"
-          >
-            <AddChildButton
-              parentType={node.item.type}
-              onAdd={(type) => onAddChild(type, node.item.item_id)}
-            />
-          </li>
-        </ul>
+        <SortableContext
+          items={node.children.map((c) => c.item.item_id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <ul className="space-y-1">
+            {node.children.map((c) => (
+              <TreeNode
+                key={c.item.item_id}
+                node={c}
+                depth={depth + 1}
+                selectedId={selectedId}
+                onSelect={onSelect}
+                onMove={onMove}
+                onRemove={onRemove}
+                onAddChild={onAddChild}
+                collapsed={collapsed}
+                onToggleCollapsed={onToggleCollapsed}
+                sectionCounts={sectionCounts}
+              />
+            ))}
+            <li
+              style={{ paddingLeft: `${0.25 + (depth + 1) * 0.75}rem` }}
+              className="flex items-center gap-1 px-1 pb-1"
+            >
+              <AddChildButton
+                parentType={node.item.type}
+                onAdd={(type) => onAddChild(type, node.item.item_id)}
+              />
+            </li>
+          </ul>
+        </SortableContext>
       )}
     </li>
   );
@@ -776,12 +1042,14 @@ function QuestionPreview({
 function OptionsPanel({
   item,
   templateData,
+  descendantCount,
   onChange,
   onTemplateDataChange,
   onRemove,
 }: {
   item: TemplateNodeItem;
   templateData: TemplateData;
+  descendantCount: number;
   onChange: (patch: Partial<TemplateNodeItem>) => void;
   onTemplateDataChange: (td: TemplateData) => void;
   onRemove: () => void;
@@ -851,13 +1119,18 @@ function OptionsPanel({
         />
       )}
 
-      <button
-        type="button"
-        onClick={onRemove}
-        className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+      <DeleteItemConfirm
+        itemLabel={item.label}
+        descendantCount={descendantCount}
+        onConfirm={onRemove}
       >
-        <Trash2 className="h-3 w-3" /> Delete item
-      </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+        >
+          <Trash2 className="h-3 w-3" /> Delete item
+        </button>
+      </DeleteItemConfirm>
     </div>
   );
 }

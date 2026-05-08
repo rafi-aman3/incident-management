@@ -7,6 +7,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   assignTemplate,
   unassignTemplate,
 } from "@/app/(app)/templates/[id]/assign/actions";
@@ -56,6 +67,7 @@ export function TemplateAssignForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   const initialSelected = new Set<string>(
     existing.map((e) => e.site_id)
@@ -103,12 +115,15 @@ export function TemplateAssignForm({
   }
 
   function handleSubmit() {
+    setFieldErrors({});
     const selections = buildSelections();
     if (selections.length === 0) {
+      setFieldErrors({ selections: ["Pick at least one site"] });
       toast.error("Pick at least one site");
       return;
     }
     if (scheduleKind === "custom" && !cron.trim()) {
+      setFieldErrors({ schedule_cron: ["Required for custom schedule"] });
       toast.error("Custom schedule needs a cron expression");
       return;
     }
@@ -129,6 +144,7 @@ export function TemplateAssignForm({
         );
         router.refresh();
       } else {
+        setFieldErrors(res.fieldErrors ?? {});
         toast.error(res.error);
       }
     });
@@ -182,7 +198,12 @@ export function TemplateAssignForm({
         </div>
 
         {!allSites && (
-          <ul className="mt-3 divide-y rounded-md border">
+          <ul
+            className="mt-3 divide-y rounded-md border"
+            aria-describedby={
+              fieldErrors.selections ? "selections-error" : undefined
+            }
+          >
             {sites.length === 0 && (
               <li className="px-4 py-3 text-sm text-muted-foreground">
                 No sites available. You need template:assign on at least one
@@ -228,6 +249,11 @@ export function TemplateAssignForm({
             })}
           </ul>
         )}
+        {fieldErrors.selections && (
+          <p id="selections-error" className="mt-2 text-xs text-destructive">
+            {fieldErrors.selections.join(" ")}
+          </p>
+        )}
       </div>
 
       <div className="rounded-lg border bg-card p-5 shadow-sm">
@@ -265,12 +291,25 @@ export function TemplateAssignForm({
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.start_time_local)}
+                aria-describedby={
+                  fieldErrors.start_time_local
+                    ? "start-time-error"
+                    : undefined
+                }
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Site-local timezone (24-hour). The runs cron schedules new
-                inspections at this hour each cycle.
+                Site-local timezone (24-hour).
               </p>
+              {fieldErrors.start_time_local && (
+                <p
+                  id="start-time-error"
+                  className="mt-1 text-[11px] text-destructive"
+                >
+                  {fieldErrors.start_time_local.join(" ")}
+                </p>
+              )}
             </div>
           )}
 
@@ -284,22 +323,29 @@ export function TemplateAssignForm({
                 value={cron}
                 onChange={(e) => setCron(e.target.value)}
                 placeholder="0 6 * * 1"
+                aria-invalid={Boolean(fieldErrors.schedule_cron)}
+                aria-describedby={
+                  fieldErrors.schedule_cron ? "cron-error" : undefined
+                }
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Standard 5-field cron (minute hour day month weekday). Stored
-                as-is; runs cron lands in v2.
+                Standard 5-field cron (minute hour day month weekday).
               </p>
+              {fieldErrors.schedule_cron && (
+                <p id="cron-error" className="mt-1 text-[11px] text-destructive">
+                  {fieldErrors.schedule_cron.join(" ")}
+                </p>
+              )}
             </div>
           )}
         </div>
 
-        <div className="mt-4 rounded-md border-l-4 border-warning/40 bg-warning/5 p-3 text-xs">
-          <strong>Note:</strong> the recurring-inspection auto-creation cron is
-          deferred — for now the schedule fields are stored on the assignment
-          row but inspections must be started manually via the Inspections
-          page.
-        </div>
+        <p className="mt-4 text-xs italic text-muted-foreground">
+          Schedules are stored for future automation; v1 inspections are
+          started manually from the{" "}
+          <span className="font-medium not-italic">Inspections</span> page.
+        </p>
       </div>
 
       <div className="flex items-center justify-between gap-2">
@@ -316,18 +362,41 @@ export function TemplateAssignForm({
       {existing.length > 0 && (
         <div className="rounded-lg border bg-card">
           <header className="flex items-center gap-2 border-b px-4 py-3">
-            <MapPinned className="h-4 w-4 text-muted-foreground" />
+            <MapPinned aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Active assignments</h2>
           </header>
-          <ul className="divide-y">
-            {existing.map((e) => (
-              <li
-                key={e.id}
-                className="flex items-center justify-between gap-3 px-4 py-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">{e.site_name}</p>
-                  <p className="text-xs text-muted-foreground">
+          <table className="w-full text-sm">
+            <caption className="sr-only">
+              Active template assignments for {templateName}
+            </caption>
+            <thead>
+              <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
+                <th scope="col" className="px-4 py-2 text-left font-medium">
+                  Site
+                </th>
+                <th scope="col" className="px-4 py-2 text-left font-medium">
+                  Schedule
+                </th>
+                <th scope="col" className="px-4 py-2 text-left font-medium">
+                  Pinned version
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {existing.map((e) => (
+                <tr key={e.id}>
+                  <th scope="row" className="px-4 py-3 text-left font-medium">
+                    {e.site_name}
+                    {e.include_children && (
+                      <span className="ml-1 text-[10px] uppercase text-muted-foreground">
+                        + children
+                      </span>
+                    )}
+                  </th>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
                     {e.schedule_kind === "on_demand"
                       ? "On demand"
                       : `${e.schedule_kind}${
@@ -335,23 +404,56 @@ export function TemplateAssignForm({
                             ? ` @ ${e.start_time_local.slice(0, 5)}`
                             : ""
                         }${e.schedule_cron ? ` (${e.schedule_cron})` : ""}`}
-                    {e.include_children ? " · includes children" : ""}
+                  </td>
+                  <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
                     {e.template_version_number
-                      ? ` · pinned to v${e.template_version_number}`
-                      : ""}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleUnassign(e.id)}
-                  disabled={pending}
-                  className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                >
-                  <Trash2 className="h-3 w-3" /> Remove
-                </button>
-              </li>
-            ))}
-          </ul>
+                      ? `v${e.template_version_number}`
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          aria-label={`Remove assignment from ${e.site_name}`}
+                          className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3 w-3" /> Remove
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Remove assignment from {e.site_name}?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            <span className="font-medium text-foreground">
+                              {templateName}
+                            </span>{" "}
+                            will no longer be available to start at{" "}
+                            <span className="font-medium text-foreground">
+                              {e.site_name}
+                            </span>
+                            . Inspections already in progress against the
+                            pinned version stay running and unaffected.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleUnassign(e.id)}
+                          >
+                            Remove
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

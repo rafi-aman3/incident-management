@@ -180,7 +180,30 @@ Then `pnpm db:seed` to repopulate.
 
 ## Known incomplete edges (tracked, not blockers)
 
-- Drag-and-drop reorder is keyboard-only (↑↓); full @dnd-kit cross-section drag is v2.
+- Cross-parent reparenting via DnD is deferred — sibling-only reorder is supported in 6f via @dnd-kit/sortable + the existing ↑/↓ buttons.
 - Recurring-inspection auto-creation cron is not wired — schedule fields are stored but not yet triggering runs. Plan note in §15.
 - Library presets are static seed (14 templates); real SafetyCulture API import is v2.
 - Item types beyond the MVP 8 (`textsingle`, `address`, `dynamicfield`, `list`, `slider`, `checkbox`, `drawing`) render as "Unsupported in v1" placeholders if a preset contains them. None of the 14 seeded templates use those types.
+
+---
+
+## Phase 6f — Templates polish checkpoints (added 2026-05-08)
+
+Re-run all of the above first, then walk these new affordances. ~5 min.
+
+1. **Loading skeletons.** Hard-refresh `/templates`, `/templates/browse`, `/templates/[id]`, `/templates/[id]/edit`, `/templates/[id]/assign`. Each route paints a skeleton matching the post-load layout (no blank flash, no layout shift).
+2. **Error boundary retry.** Open DevTools → Network → throttle to "Offline" → load `/templates` — see the destructive brand error card with **Try again** + **Browse system presets**. Toggle online → click Try again → page recovers.
+3. **Tree DnD via pointer.** On `/templates/[id]/edit`, grab the GripVertical handle on a question and drag it past a sibling. The order updates with a 4px activation delay so a click-to-select doesn't fire a drag. Autosave shows **Saving… → Saved**.
+4. **Tree DnD via keyboard.** Tab to focus a GripVertical handle (visible focus ring on the handle). Press Space to pick up — `aria-live` polite region announces "Moved <label> to position X of Y." Use ↑/↓ to move, Space again to drop. Escape cancels mid-drag.
+5. **Cross-parent drop is rejected.** Try dragging a question from Section A onto a question inside Section B. The drop snaps back; aria-live announces "Can't move across sections."
+6. **Tree delete confirm.** Click the trash icon on a section that has 3 children. AlertDialog opens with "Delete this section and 3 items inside?" Cancel keeps the section; Delete removes it + all children.
+7. **Assignment Remove confirm.** On `/templates/[id]/assign`, click Remove on an active assignment row. AlertDialog opens with "Remove assignment from <site>?" + the snapshot-rule reassurance copy.
+8. **Active-assignments table.** Same page — confirm the active list renders as a `<table>` with Site / Schedule / Pinned version / Actions columns. The screen reader reads each row as `<site name>, <schedule>, v<N>` with row scope.
+9. **ChangeSummaryDialog auto-suggestion.** In the editor, add 2 items, rename a section, then click Publish. The change-summary textarea opens pre-filled with `Added 2 items, renamed 1.` Edit freely before submit. (For first publish: textarea opens pre-filled with `Initial version of <template name>.`)
+10. **Autosave-vs-publish race.** Type rapidly into the template name input → without waiting, click Publish. The Publish button is disabled while status is "Saving…" — when the save completes, the dialog opens with the latest state reflected in the diff suggestion. No silent overwrite.
+11. **Save-failed Retry.** Block `/templates/[id]/edit/actions` POST in DevTools → make an edit → SaveIndicator flips to "Save failed" with a Retry button. Unblock + click Retry → status returns to "Saved".
+12. **Snapshot-rule callout.** With at least one in-flight inspection on a prior version, visit `/templates/[id]`. A warning-tinted card surfaces: "N inspection(s) still running on a prior version" with a "View running inspections →" link to `/inspections?template=<id>&status=in_progress`.
+13. **Version sidebar `aria-current`.** On `/templates/[id]?version=N`, the active row in the version sidebar is wrapped in `<nav aria-label="Version history">` and the link has `aria-current="page"` (visible via DevTools / VoiceOver: "current page, version N").
+14. **Editor tab a11y.** In the builder, the Body / Title-page switcher is `role="tablist"` with each tab `role="tab"` + `aria-selected`. The tree below has `role="tabpanel"` + `aria-labelledby` matching the active tab. Switching tabs preserves the tree-panel id binding.
+
+✅ All 14 pass: 6f is shippable.
