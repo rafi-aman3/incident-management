@@ -175,17 +175,17 @@
 
 ---
 
-## Open questions
+## Open questions — all resolved 2026-05-08
 
-| # | Question | Recommendation |
+| # | Question | Resolution |
 |---|---|---|
-| 1 | **AssetTypeaheadField inline-create** — modal-in-place vs. `?returnTo=` redirect that re-hydrates wizard state? | **Modal-in-place.** Wizard state lives in client component state inside the existing 3-step Report Wizard; a returnTo redirect would require serializing that state into searchParams, which is fragile (file uploads, deeply nested fields). A nested `<Dialog>` with a slimmed `<AssetForm>` (no SDS picker — we don't want modal-in-modal) keeps state intact and matches the in-flight 6c/6f pattern of using shadcn dialog primitives. |
-| 2 | **DocumentLinkPicker upload→link orphan** — hard-rollback (delete the doc on link failure) vs. soft-warning (keep the doc, surface a CTA)? | **Soft-warning.** A successfully uploaded doc may be useful even if this particular link failed (e.g., the user can still link it manually from a different surface). Hard-rollback would require either a transactional RPC (out of polish scope) or a client-side `archiveDocument` chase that itself may fail. The soft-warning matches the 6g per-file upload pattern and is honest with the user. |
-| 3 | **AssetForm field-level errors** — full Zod `fieldErrors` threaded through `ActionResult` (like 6f's `assignTemplate`), or just a curated list of the 2–3 most likely fields (name + site)? | **Full Zod fieldErrors.** The `ActionResult` shape already supports it; the action just isn't returning the `fieldErrors` map today. Cheapest, most uniform with 6f. |
-| 4 | **Document detail per-parent-type fetch** — parallelize with `Promise.all` (≤7 concurrent client-side queries), or batch into a single `get_document_link_labels_v1` RPC that returns all labels in one round-trip? | **`Promise.all`.** RPC introduces schema/RPC overhead for a polish PR. The 7 queries are RLS-bound, run in <100ms each on warm Supabase, and are bounded by the 7 parent types. Parallelizing is a one-line shape fix that gets us 6× the latency win without touching the database. |
-| 5 | **Asset detail "Mark inspected"** — keep fire-and-forget (current shipped behavior) or wrap in a confirm modal that captures an optional note? | **Keep fire-and-forget for v1, log as v2 candidate.** A note field is nice-to-have but Mark inspected is an undo-able timestamp update (the user can edit the date in `/resources/assets/[id]/edit`). Confirm modal is friction without a strong reason. The IMS_PLANNING.md asset-inspection-detail v2 entry already covers this. |
-| 6 | **Documents list `loading.tsx` shape** — render the cards-shape or branch on `?view=cards\|table`? | **Render cards-shape.** Cards is the default + the more visually distinctive layout; if `?view=table` is set the skeleton briefly renders the wrong shape but the actual paint takes over within the cold-load window. Branching on a search-param inside `loading.tsx` is fine but adds complexity for a one-render-cycle benefit. |
+| 1 | AssetTypeaheadField inline-create | **Modal-in-place.** Open a `<Dialog>` containing a slimmed `<AssetForm>` (no SDS picker, since we'd be modal-in-modal). Wizard state survives, new asset auto-selects via the existing `onSelect` path. |
+| 2 | DocumentLinkPicker upload→link orphan | **Soft-warning + CTA.** Warning toast naming the orphan + "View in /resources/documents" CTA. The doc may legitimately still be useful; user decides whether to keep or archive. Matches 6g per-file resilience. |
+| 3 | AssetForm field-level errors | **Full Zod `fieldErrors`.** Wire all `ActionResult.fieldErrors` keys to per-field `<p>` + `aria-invalid` + `aria-describedby`. Mirrors 6f's `assignTemplate` shape. |
+| 4 | Document detail per-parent-type fetch | **`Promise.all` parallelize.** One-line shape fix — wrap the 7 queries in `Promise.all`. ~6× latency win on cold load; no schema/RPC change. |
+| 5 | Asset detail "Mark inspected" | **Keep fire-and-forget.** Single click sets `last_inspected_at = now()`. Undo-able via `/resources/assets/[id]/edit`. Note-capture lands in v2 alongside asset-inspection FK. |
+| 6 | Documents list `loading.tsx` shape | **Cards-shape.** Cards is the default + visually distinctive; `?view=table` cold-load briefly mismatches but actual paint takes over within the window. |
 
 ---
 
-**Plan author note:** the original 06h stub from 2026-05-06 has been wholly replaced by this re-audit. All 17 DoD items above replace the 8 in the prior version. All 6 open questions have a recommendation; awaiting user direction before coding.
+**Plan author note:** the original 06h stub from 2026-05-06 has been wholly replaced by this re-audit. All 17 DoD items above replace the 8 in the prior version. All 6 open questions resolved 2026-05-08; coding can start.
