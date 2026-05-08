@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveStep4 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { StepFooter } from "./wizard-chrome";
+import { StepFooter, StepFormError } from "./wizard-chrome";
 
 type Department = { name: string; areas: string[] };
 
@@ -121,9 +121,10 @@ export function Step4Departments({ initial }: { initial: Department[] }) {
 
       <input type="hidden" name="departments_json" value={JSON.stringify(cleaned)} />
 
-      {state?.ok === false && (
-        <p className="text-sm text-destructive">{state.error}</p>
-      )}
+      <StepFormError
+        message={state?.ok === false ? state.error : undefined}
+        isPending={isPending}
+      />
 
       <StepFooter prevHref="/admin/site-setup/3" isPending={isPending} primaryDisabled={cleaned.length === 0} />
     </form>

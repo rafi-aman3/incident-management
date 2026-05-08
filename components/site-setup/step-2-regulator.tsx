@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { saveStep2 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { StepFooter } from "./wizard-chrome";
+import { StepFooter, StepFormError } from "./wizard-chrome";
 
 type Props = {
   country: "US" | "GB";
@@ -32,9 +32,10 @@ export function Step2Regulator({ country, initialRegulator }: Props) {
         <RegOption value="both" title="Both (rare — multi-jurisdiction site)" body="Show every report and fire every applicable clock." />
       </RadioGroup>
 
-      {state?.ok === false && (
-        <p className="text-sm text-destructive">{state.error}</p>
-      )}
+      <StepFormError
+        message={state?.ok === false ? state.error : undefined}
+        isPending={isPending}
+      />
 
       <StepFooter prevHref="/admin/site-setup/1" isPending={isPending} />
     </form>

@@ -81,6 +81,8 @@ export default async function AdminPage() {
   const roles = rolesRes.count ?? 0;
   const pendingInvitations = pendingInvitationsRes.count ?? 0;
 
+  const isBootstrap = activeSites === 0;
+
   return (
     <div className="space-y-8">
       <div>
@@ -90,7 +92,20 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      {isBootstrap ? (
+        <p className="rounded-md border border-dashed bg-card/50 px-4 py-2.5 text-xs text-muted-foreground">
+          Org just created — get started with the{" "}
+          <Link
+            href="/admin/site-setup"
+            className="font-medium text-brand underline underline-offset-2 hover:no-underline"
+          >
+            Site setup wizard
+          </Link>{" "}
+          below.
+        </p>
+      ) : null}
+
+      <section aria-label="Admin counts" className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <KpiTile
           label="Active sites"
           value={activeSites}
@@ -113,9 +128,12 @@ export default async function AdminPage() {
           tone="muted"
           href="/admin/invitations"
         />
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
+      <section
+        aria-label="Admin sections"
+        className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4"
+      >
         <AdminCard
           title="Sites"
           body="Rename, edit address, re-parent, archive. Edit annual hours used by OSHA 300A."
@@ -140,15 +158,18 @@ export default async function AdminPage() {
           href="/admin/invitations"
           available
         />
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <nav
+        aria-label="Admin tools"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-2"
+      >
         <Link
           href="/admin/site-setup"
           className="group flex items-center justify-between rounded-lg border bg-card p-4 hover:border-primary/40 hover:bg-accent/40"
         >
           <div className="flex items-start gap-3">
-            <Sparkles className="mt-0.5 h-5 w-5 text-primary" />
+            <Sparkles className="mt-0.5 h-5 w-5 text-primary" aria-hidden />
             <div>
               <p className="font-medium">Site setup wizard</p>
               <p className="text-sm text-muted-foreground">
@@ -156,14 +177,17 @@ export default async function AdminPage() {
               </p>
             </div>
           </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          <ArrowRight
+            className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+            aria-hidden
+          />
         </Link>
         <Link
           href="/admin/demo"
           className="group flex items-center justify-between rounded-lg border bg-card p-4 hover:border-primary/40 hover:bg-accent/40"
         >
           <div className="flex items-start gap-3">
-            <Database className="mt-0.5 h-5 w-5 text-primary" />
+            <Database className="mt-0.5 h-5 w-5 text-primary" aria-hidden />
             <div>
               <p className="font-medium">Demo affordances</p>
               <p className="text-sm text-muted-foreground">
@@ -171,9 +195,12 @@ export default async function AdminPage() {
               </p>
             </div>
           </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          <ArrowRight
+            className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+            aria-hidden
+          />
         </Link>
-      </div>
+      </nav>
     </div>
   );
 }

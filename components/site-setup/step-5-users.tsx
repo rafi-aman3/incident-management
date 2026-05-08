@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { saveStep5 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { StepFooter } from "./wizard-chrome";
+import { StepFooter, StepFormError } from "./wizard-chrome";
 
 export type SiteMember = {
   profile_id: string;
@@ -52,9 +52,10 @@ export function Step5Users({ members }: { members: SiteMember[] }) {
         </ul>
       )}
 
-      {state?.ok === false && (
-        <p className="text-sm text-destructive">{state.error}</p>
-      )}
+      <StepFormError
+        message={state?.ok === false ? state.error : undefined}
+        isPending={isPending}
+      />
 
       <StepFooter prevHref="/admin/site-setup/4" isPending={isPending} />
     </form>

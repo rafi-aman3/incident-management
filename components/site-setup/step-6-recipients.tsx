@@ -14,7 +14,7 @@ import {
 import { saveStep6 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
 import { NOTIFICATION_KINDS, type NotificationKind } from "@/lib/site-setup/schemas";
-import { StepFooter } from "./wizard-chrome";
+import { StepFooter, StepFormError } from "./wizard-chrome";
 
 export type ProfileChoice = { id: string; full_name: string | null; email: string };
 export type RecipientRow = {
@@ -169,9 +169,10 @@ export function Step6Recipients({
 
       <input type="hidden" name="recipients_json" value={JSON.stringify(payload)} />
 
-      {state?.ok === false && state.error !== "Validation failed" && (
-        <p className="text-sm text-destructive">{state.error}</p>
-      )}
+      <StepFormError
+        message={state?.ok === false ? state.error : undefined}
+        isPending={isPending}
+      />
 
       <StepFooter
         prevHref="/admin/site-setup/5"
