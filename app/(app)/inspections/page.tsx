@@ -3,6 +3,7 @@ import { Play } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { InspectionList, type InspectionRow } from "@/components/inspections/inspection-list";
+import { InspectionListFilters } from "@/components/inspections/inspection-list-filters";
 import {
   StartInspectionDialog,
   type StartTemplateOption,
@@ -12,12 +13,6 @@ import type { IndustryEnum } from "@/lib/templates/industry-map";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-const STATUS_OPTIONS: { value: InspectionStatus | ""; label: string }[] = [
-  { value: "", label: "All statuses" },
-  { value: "in_progress", label: "In progress" },
-  { value: "completed", label: "Completed" },
-  { value: "abandoned", label: "Abandoned" },
-];
 const STATUS_VALUES: ReadonlyArray<InspectionStatus> = [
   "draft",
   "in_progress",
@@ -69,7 +64,6 @@ export default async function InspectionsPage({
       : null;
 
   let rows: InspectionRow[] = [];
-  let listError: string | null = null;
 
   if (canRead && currentSiteId) {
     let query = supabase
@@ -87,24 +81,21 @@ export default async function InspectionsPage({
     if (templateParam) query = query.eq("template_id", templateParam);
     if (q) query = query.ilike("title", `%${q}%`);
     const { data, error } = await query.returns<InspectionRowQuery[]>();
-    if (error) {
-      listError = error.message;
-    } else {
-      rows = (data ?? []).map((r) => {
-        const tmpl = Array.isArray(r.template) ? r.template[0] : r.template;
-        const ins = Array.isArray(r.inspector) ? r.inspector[0] : r.inspector;
-        return {
-          id: r.id,
-          ref_code: r.ref_code,
-          title: r.title,
-          template_name: tmpl?.name ?? null,
-          status: r.status,
-          is_failed: r.is_failed,
-          conducted_at: r.conducted_at,
-          inspector: ins ?? null,
-        };
-      });
-    }
+    if (error) throw error;
+    rows = (data ?? []).map((r) => {
+      const tmpl = Array.isArray(r.template) ? r.template[0] : r.template;
+      const ins = Array.isArray(r.inspector) ? r.inspector[0] : r.inspector;
+      return {
+        id: r.id,
+        ref_code: r.ref_code,
+        title: r.title,
+        template_name: tmpl?.name ?? null,
+        status: r.status,
+        is_failed: r.is_failed,
+        conducted_at: r.conducted_at,
+        inspector: ins ?? null,
+      };
+    });
   }
 
   // Templates available for "Start Inspection" — filter by:
@@ -144,9 +135,6 @@ export default async function InspectionsPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Module 5
-          </p>
           <h1 className="text-2xl font-semibold">Inspections</h1>
           <p className="text-sm text-muted-foreground">
             Run a checklist on the floor. Failed responses become findings —
@@ -163,7 +151,7 @@ export default async function InspectionsPage({
         )}
       </div>
 
-      <Filters status={statusParam} q={q} />
+      <InspectionListFilters />
 
       {!canRead && (
         <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
@@ -171,48 +159,13 @@ export default async function InspectionsPage({
         </div>
       )}
 
-      {listError && <p className="text-sm text-destructive">{listError}</p>}
-
-      {canRead && !listError && <InspectionList rows={rows} />}
+      {canRead && (
+        <section aria-label="Inspections">
+          <InspectionList rows={rows} />
+        </section>
+      )}
 
       <StartInspectionDialog options={startOptions} siteId={currentSiteId} />
     </div>
-  );
-}
-
-function Filters({
-  status,
-  q,
-}: {
-  status: InspectionStatus | null;
-  q: string;
-}) {
-  return (
-    <form className="flex flex-wrap items-center gap-2">
-      <input
-        type="search"
-        name="q"
-        defaultValue={q}
-        placeholder="Search inspection title"
-        className="h-9 min-w-[220px] flex-1 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      />
-      <select
-        name="status"
-        defaultValue={status ?? ""}
-        className="h-9 rounded-md border bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {STATUS_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <button
-        type="submit"
-        className="inline-flex items-center rounded-md border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
-      >
-        Apply
-      </button>
-    </form>
   );
 }

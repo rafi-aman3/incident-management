@@ -154,6 +154,7 @@ export default async function FindingDetailPage({ params }: { params: Params }) 
 
         <FindingActionsCard
           findingId={f.id}
+          inspectionId={inspectionId}
           status={f.status}
           canResolve={canResolve}
           canEscalate={canEscalate}

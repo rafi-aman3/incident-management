@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -23,6 +23,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { SignatureCanvas } from "@/components/inspections/runner/signature-canvas";
 import { MediaUploader } from "@/components/inspections/runner/media-uploader";
+import {
+  NetworkIndicator,
+  type SaveStatus,
+} from "@/components/inspections/runner/network-indicator";
 import { InfoTooltip } from "@/components/info-tooltip";
 import {
   saveInspectionAnswer,
@@ -63,6 +67,15 @@ type Props = {
   initialAnswers: AnswerMap;
 };
 
+type PendingSave = {
+  timer: ReturnType<typeof setTimeout>;
+  scope: "header" | "body";
+  itemId: string;
+  answer: InspectionAnswer;
+};
+
+const SAVE_DEBOUNCE_MS = 1000;
+
 export function InspectionRunner(props: Props) {
   const router = useRouter();
   const [headerResponses, setHeaderResponses] = useState<AnswerMap>(
@@ -76,6 +89,98 @@ export function InspectionRunner(props: Props) {
   const [flaggedComments, setFlaggedComments] = useState<Record<string, string>>(
     {}
   );
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
+  // Per-item debounced save: while the user is rapidly editing one item
+  // (toggling a question, retyping a textarea after blur, etc.) we coalesce
+  // network calls to one per SAVE_DEBOUNCE_MS. Latest payload wins.
+  const pendingSaves = useRef(new Map<string, PendingSave>());
+  const inFlightSaves = useRef(new Set<Promise<unknown>>());
+
+  const refreshIdleStatus = useCallback(() => {
+    if (
+      inFlightSaves.current.size === 0 &&
+      pendingSaves.current.size === 0
+    ) {
+      setSaveStatus((prev) => (prev === "error" ? prev : "saved"));
+    }
+  }, []);
+
+  const runSave = useCallback(
+    async (
+      scope: "header" | "body",
+      itemId: string,
+      answer: InspectionAnswer,
+    ): Promise<void> => {
+      setSaveStatus("saving");
+      const promise = saveInspectionAnswer({
+        inspection_id: props.inspectionId,
+        item_id: itemId,
+        scope,
+        answer,
+      });
+      inFlightSaves.current.add(promise);
+      try {
+        const res = await promise;
+        if (res.ok) {
+          setLastSavedAt(new Date());
+        } else {
+          setSaveStatus("error");
+          toast.error(`Save failed: ${res.error}`);
+          return;
+        }
+      } catch (e) {
+        setSaveStatus("error");
+        toast.error(
+          `Save failed: ${e instanceof Error ? e.message : "unknown error"}`,
+        );
+        return;
+      } finally {
+        inFlightSaves.current.delete(promise);
+      }
+      refreshIdleStatus();
+    },
+    [props.inspectionId, refreshIdleStatus],
+  );
+
+  const queueSave = useCallback(
+    (scope: "header" | "body", itemId: string, answer: InspectionAnswer) => {
+      const key = `${scope}:${itemId}`;
+      const existing = pendingSaves.current.get(key);
+      if (existing) clearTimeout(existing.timer);
+      setSaveStatus("saving");
+      const timer = setTimeout(() => {
+        pendingSaves.current.delete(key);
+        void runSave(scope, itemId, answer);
+      }, SAVE_DEBOUNCE_MS);
+      pendingSaves.current.set(key, { timer, scope, itemId, answer });
+    },
+    [runSave],
+  );
+
+  const flushPending = useCallback(async (): Promise<void> => {
+    const entries = Array.from(pendingSaves.current.values());
+    pendingSaves.current.clear();
+    for (const e of entries) clearTimeout(e.timer);
+    await Promise.all(
+      entries.map((e) => runSave(e.scope, e.itemId, e.answer)),
+    );
+    // Wait on any other in-flight saves (e.g. flushed during typing).
+    if (inFlightSaves.current.size > 0) {
+      await Promise.allSettled(Array.from(inFlightSaves.current));
+    }
+  }, [runSave]);
+
+  // Cancel any pending debounce timers when the runner unmounts so we don't
+  // fire saves into the void after navigation.
+  useEffect(() => {
+    const pending = pendingSaves.current;
+    return () => {
+      for (const e of pending.values()) clearTimeout(e.timer);
+      pending.clear();
+    };
+  }, []);
 
   // One-time auto-populate: if a header text item is empty and isn't yet
   // answered, fill it with the inspector name. Same for the first
@@ -106,17 +211,9 @@ export function InspectionRunner(props: Props) {
     }
     if (Object.keys(updates).length > 0) {
       setHeaderResponses((prev) => ({ ...prev, ...updates }));
-      // Persist auto-populates to the server too
-      Promise.all(
-        Object.entries(updates).map(([itemId, answer]) =>
-          saveInspectionAnswer({
-            inspection_id: props.inspectionId,
-            item_id: itemId,
-            scope: "header",
-            answer,
-          })
-        )
-      );
+      for (const [itemId, answer] of Object.entries(updates)) {
+        void runSave("header", itemId, answer);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -134,17 +231,7 @@ export function InspectionRunner(props: Props) {
     } else {
       setAnswers((p) => ({ ...p, [itemId]: answer }));
     }
-    // Fire-and-forget; the runner's local state is the source of truth
-    // until the user submits (the server-side complete RPC re-reads the
-    // JSONB blob).
-    saveInspectionAnswer({
-      inspection_id: props.inspectionId,
-      item_id: itemId,
-      scope,
-      answer,
-    }).then((res) => {
-      if (!res.ok) toast.error(`Save failed: ${res.error}`);
-    });
+    queueSave(scope, itemId, answer);
   }
 
   function handleSubmit() {
@@ -176,18 +263,17 @@ export function InspectionRunner(props: Props) {
   function submitNow() {
     setFlaggedDialogOpen(false);
     setSubmitting(async () => {
-      // Persist any flagged-item notes the user entered
+      // Flush any debounced answer saves before completing — otherwise the
+      // server-side complete RPC could read a stale JSONB blob.
+      await flushPending();
+      // Persist any flagged-item notes the user entered (immediate, not
+      // debounced — we're about to call complete).
       const failed = findFailedAnswers(props.items, answers);
       for (const f of failed) {
         const c = flaggedComments[f.item.item_id];
         if (c !== undefined && c !== f.answer.notes) {
           const next = { ...f.answer, notes: c };
-          await saveInspectionAnswer({
-            inspection_id: props.inspectionId,
-            item_id: f.item.item_id,
-            scope: "body",
-            answer: next,
-          });
+          await runSave("body", f.item.item_id, next);
         }
       }
       const res = await completeInspection(props.inspectionId);
@@ -208,7 +294,7 @@ export function InspectionRunner(props: Props) {
           <div className="flex items-center gap-3 min-w-0">
             <Link
               href="/inspections"
-              className="inline-flex items-center gap-1 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground sm:h-8 sm:w-8"
               aria-label="Back to inspections"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -224,9 +310,9 @@ export function InspectionRunner(props: Props) {
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60 sm:min-h-0 sm:px-3 sm:py-1.5"
           >
-            <Send className="h-3 w-3" /> Submit
+            <Send className="h-4 w-4 sm:h-3 sm:w-3" /> Submit
           </button>
         </div>
         <div className="mt-2 flex items-center gap-3">
@@ -239,6 +325,7 @@ export function InspectionRunner(props: Props) {
           <span className="text-xs tabular-nums text-muted-foreground">
             {progress.answered}/{progress.total}
           </span>
+          <NetworkIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
         </div>
       </div>
 
