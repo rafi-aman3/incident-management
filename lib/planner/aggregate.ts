@@ -6,6 +6,10 @@
  * sites the viewer can read.
  *
  * Per plans/05-planner.md §B3 (resolved Q1: app-level over Postgres union).
+ *
+ * Phase 6i: each fetcher returns `{ kind, events, failed }` so the page
+ * can surface a quiet "1 source failed to load" pill without giving up
+ * the existing per-source `[]`-on-error swallow contract.
  */
 
 import type { createClient } from "@/lib/supabase/server";
@@ -30,9 +34,21 @@ export type AggregateInput = {
   kinds?: PlannerEventKind[];
 };
 
+export type AggregateResult = {
+  events: PlannerEvent[];
+  /** Source kinds whose query errored — page renders a warning pill. */
+  failedKinds: PlannerEventKind[];
+};
+
+type SourceResult = {
+  kind: PlannerEventKind;
+  events: PlannerEvent[];
+  failed: boolean;
+};
+
 export async function aggregatePlannerEvents(
   input: AggregateInput,
-): Promise<PlannerEvent[]> {
+): Promise<AggregateResult> {
   const wanted = new Set<PlannerEventKind>(
     input.kinds && input.kinds.length > 0 ? input.kinds : PLANNER_EVENT_KINDS,
   );
@@ -41,7 +57,7 @@ export async function aggregatePlannerEvents(
   const endIso = input.end.toISOString();
   const nowIso = new Date().toISOString();
 
-  const tasks: Array<Promise<PlannerEvent[]>> = [];
+  const tasks: Array<Promise<SourceResult>> = [];
 
   if (wanted.has("incident")) {
     tasks.push(fetchIncidents(input.supabase, startIso, endIso, input.siteIds));
@@ -65,16 +81,23 @@ export async function aggregatePlannerEvents(
     tasks.push(fetchRegulatoryDeadlines(input.supabase, startIso, endIso, input.siteIds));
   }
 
-  const grouped = await Promise.all(tasks);
-  const merged = grouped.flat();
+  const results = await Promise.all(tasks);
+  const events: PlannerEvent[] = [];
+  const failedKinds: PlannerEventKind[] = [];
 
-  merged.sort((a, b) => a.date.localeCompare(b.date));
-  return merged;
+  for (const r of results) {
+    if (r.failed) failedKinds.push(r.kind);
+    if (r.events.length > 0) events.push(...r.events);
+  }
+
+  events.sort((a, b) => a.date.localeCompare(b.date));
+  return { events, failedKinds };
 }
 
 // ---------------------------------------------------------------------------
-// Per-source fetchers. Each returns an empty array on error rather than
-// throwing — one source failing should not blank the whole calendar.
+// Per-source fetchers. Each returns `{ kind, events, failed }`. On error
+// `events` is `[]` (existing swallow contract) and `failed` is true so the
+// orchestrator can list the kind in `failedKinds` for the UI pill.
 // ---------------------------------------------------------------------------
 
 type SiteRef = { id: string; name: string | null };
@@ -86,7 +109,7 @@ async function fetchIncidents(
   startIso: string,
   endIso: string,
   siteIds: string[],
-): Promise<PlannerEvent[]> {
+): Promise<SourceResult> {
   let q = supabase
     .from("incidents")
     .select("id, ref_code, title, severity, occurred_at, site_id, site:sites(id, name)")
@@ -97,9 +120,9 @@ async function fetchIncidents(
   if (siteIds.length > 0) q = q.in("site_id", siteIds);
 
   const { data, error } = await q;
-  if (error || !data) return [];
+  if (error || !data) return { kind: "incident", events: [], failed: !!error };
 
-  return data.map((row) => {
+  const events = data.map((row) => {
     const site = siteOf(row.site as SiteRef | SiteRef[] | null);
     const refLabel = row.ref_code ? `${row.ref_code} · ` : "";
     return {
@@ -113,6 +136,7 @@ async function fetchIncidents(
       severity: (row.severity as Severity | null) ?? null,
     };
   });
+  return { kind: "incident", events, failed: false };
 }
 
 async function fetchInspectionsStarted(
@@ -120,7 +144,7 @@ async function fetchInspectionsStarted(
   startIso: string,
   endIso: string,
   siteIds: string[],
-): Promise<PlannerEvent[]> {
+): Promise<SourceResult> {
   let q = supabase
     .from("inspections")
     .select("id, ref_code, title, started_at, site_id, site:sites(id, name)")
@@ -131,9 +155,9 @@ async function fetchInspectionsStarted(
   if (siteIds.length > 0) q = q.in("site_id", siteIds);
 
   const { data, error } = await q;
-  if (error || !data) return [];
+  if (error || !data) return { kind: "inspection_started", events: [], failed: !!error };
 
-  return data.map((row) => {
+  const events = data.map((row) => {
     const site = siteOf(row.site as SiteRef | SiteRef[] | null);
     return {
       id: `inspection_started:${row.id}`,
@@ -145,6 +169,7 @@ async function fetchInspectionsStarted(
       site_name: site?.name ?? null,
     };
   });
+  return { kind: "inspection_started", events, failed: false };
 }
 
 async function fetchInspectionsCompleted(
@@ -152,7 +177,7 @@ async function fetchInspectionsCompleted(
   startIso: string,
   endIso: string,
   siteIds: string[],
-): Promise<PlannerEvent[]> {
+): Promise<SourceResult> {
   let q = supabase
     .from("inspections")
     .select("id, ref_code, title, completed_at, is_failed, site_id, site:sites(id, name)")
@@ -164,9 +189,9 @@ async function fetchInspectionsCompleted(
   if (siteIds.length > 0) q = q.in("site_id", siteIds);
 
   const { data, error } = await q;
-  if (error || !data) return [];
+  if (error || !data) return { kind: "inspection_completed", events: [], failed: !!error };
 
-  return data.map((row) => {
+  const events = data.map((row) => {
     const site = siteOf(row.site as SiteRef | SiteRef[] | null);
     const failed = !!row.is_failed;
     return {
@@ -180,6 +205,7 @@ async function fetchInspectionsCompleted(
       is_failed: failed,
     };
   });
+  return { kind: "inspection_completed", events, failed: false };
 }
 
 async function fetchCapaDue(
@@ -188,7 +214,7 @@ async function fetchCapaDue(
   endIso: string,
   siteIds: string[],
   nowIso: string,
-): Promise<PlannerEvent[]> {
+): Promise<SourceResult> {
   let q = supabase
     .from("capas")
     .select("id, ref_code, title, due_date, status, site_id, site:sites(id, name)")
@@ -201,9 +227,9 @@ async function fetchCapaDue(
   if (siteIds.length > 0) q = q.in("site_id", siteIds);
 
   const { data, error } = await q;
-  if (error || !data) return [];
+  if (error || !data) return { kind: "capa_due", events: [], failed: !!error };
 
-  return data.map((row) => {
+  const events = data.map((row) => {
     const site = siteOf(row.site as SiteRef | SiteRef[] | null);
     const refLabel = row.ref_code ? `${row.ref_code} · ` : "";
     return {
@@ -217,6 +243,7 @@ async function fetchCapaDue(
       is_overdue: row.due_date! < nowIso,
     };
   });
+  return { kind: "capa_due", events, failed: false };
 }
 
 async function fetchAssetPmDue(
@@ -225,7 +252,7 @@ async function fetchAssetPmDue(
   endIso: string,
   siteIds: string[],
   nowIso: string,
-): Promise<PlannerEvent[]> {
+): Promise<SourceResult> {
   let q = supabase
     .from("assets")
     .select("id, name, kind, next_pm_at, status, site_id, site:sites(id, name)")
@@ -238,9 +265,9 @@ async function fetchAssetPmDue(
   if (siteIds.length > 0) q = q.in("site_id", siteIds);
 
   const { data, error } = await q;
-  if (error || !data) return [];
+  if (error || !data) return { kind: "asset_pm_due", events: [], failed: !!error };
 
-  return data.map((row) => {
+  const events = data.map((row) => {
     const site = siteOf(row.site as SiteRef | SiteRef[] | null);
     return {
       id: `asset_pm_due:${row.id}`,
@@ -253,6 +280,7 @@ async function fetchAssetPmDue(
       is_overdue: row.next_pm_at! < nowIso,
     };
   });
+  return { kind: "asset_pm_due", events, failed: false };
 }
 
 async function fetchInvestigationDue(
@@ -261,7 +289,7 @@ async function fetchInvestigationDue(
   endIso: string,
   siteIds: string[],
   nowIso: string,
-): Promise<PlannerEvent[]> {
+): Promise<SourceResult> {
   let q = supabase
     .from("investigations")
     .select(
@@ -276,9 +304,9 @@ async function fetchInvestigationDue(
   if (siteIds.length > 0) q = q.in("site_id", siteIds);
 
   const { data, error } = await q;
-  if (error || !data) return [];
+  if (error || !data) return { kind: "investigation_due", events: [], failed: !!error };
 
-  return data.map((row) => {
+  const events = data.map((row) => {
     const site = siteOf(row.site as SiteRef | SiteRef[] | null);
     const incident = Array.isArray(row.incident) ? row.incident[0] : row.incident;
     const refLabel = row.ref_code ? `${row.ref_code} · ` : "";
@@ -294,6 +322,7 @@ async function fetchInvestigationDue(
       is_overdue: row.due_date! < nowIso,
     };
   });
+  return { kind: "investigation_due", events, failed: false };
 }
 
 async function fetchRegulatoryDeadlines(
@@ -301,7 +330,7 @@ async function fetchRegulatoryDeadlines(
   startIso: string,
   endIso: string,
   siteIds: string[],
-): Promise<PlannerEvent[]> {
+): Promise<SourceResult> {
   let q = supabase
     .from("notifications")
     .select("id, title, deadline_at, incident_id, capa_id, site_id, site:sites(id, name)")
@@ -313,9 +342,9 @@ async function fetchRegulatoryDeadlines(
   if (siteIds.length > 0) q = q.in("site_id", siteIds);
 
   const { data, error } = await q;
-  if (error || !data) return [];
+  if (error || !data) return { kind: "regulatory_deadline", events: [], failed: !!error };
 
-  return data.map((row) => {
+  const events = data.map((row) => {
     const site = siteOf(row.site as SiteRef | SiteRef[] | null);
     const href = row.incident_id
       ? `/incidents/${row.incident_id}`
@@ -332,4 +361,5 @@ async function fetchRegulatoryDeadlines(
       site_name: site?.name ?? null,
     };
   });
+  return { kind: "regulatory_deadline", events, failed: false };
 }

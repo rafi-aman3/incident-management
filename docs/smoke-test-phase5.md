@@ -104,6 +104,26 @@ Demo accounts (password `Demo!2026`):
 
 ---
 
+## Polish (Phase 6i) — added 2026-05-08
+
+These checkpoints validate the 6i polish PR. Run after the Phase 5 happy-path
+above passes.
+
+1. **Eyebrow gone.** Land on `/planner` → no `Module 5` text above the title (matches the eyebrow drops on /incidents through /resources).
+2. **Loading shell.** DevTools → Network → throttle to "Slow 3G" → click between Month / Week / Day → calendar grid skeleton renders during navigation; filter row stays visible.
+3. **Error shell.** Temporarily throw inside `requireUser()` (or revoke `sites` SELECT on the user role) → page renders the brand destructive-bordered card with **Try again** + **Back to dashboard**; clicking Try again re-runs the page.
+4. **Per-source failure pill.** Temporarily revoke SELECT on one source table (e.g. `revoke select on capas from authenticated;`) → reload planner → calendar still renders; warning pill appears above the grid: "1 source failed to load (CAPA due) — refresh to retry". Restore the grant after testing.
+5. **All-kinds-disabled empty state.** Click every event-type chip until they're all off → empty pill below the grid reads "All event types are hidden." with a **Show all** link → clicking restores every kind (URL has zero `?<kind>=0` params).
+6. **Filtered-down empty state.** Toggle off only `Incident` and `CAPA due` while in a month with no other events → empty pill reads "No events match the active filters." with a **Clear filters** link → clicking restores all kinds.
+7. **No-accessible-sites empty card.** Sign in as a user with zero `site_members` rows (or temporarily delete the rows for a test user) → planner renders the "No sites available" card with a Back-to-dashboard link, no calendar grid.
+8. **Mobile horizontal scroll.** DevTools → device toolbar → iPhone SE (375px) → page body has no horizontal scroll; the calendar gets its own horizontal scroll context (touch-drag works).
+9. **Calendar-grid a11y.** With VoiceOver / NVDA on, Tab into the calendar → screen reader announces the grid's outer label ("Planner month grid"); arrow into a cell → reads "Tuesday, May 12, 2026, 3 events" before walking into the chips. View toggle reads as a radio group ("Calendar view, Month, selected" / "Week" / "Day").
+10. **EventChip a11y.** Tab to any chip → screen reader announces the full label (e.g. "INC-0042 · Forklift collision — May 12, 2026, 9:00 AM · Houston").
+11. **Day view back link.** From month view, click "+N more" on a busy day → land on day view with header showing date + event count + (when single-site) site name + a "Back to month" link → clicking returns to month with date + filters preserved in the URL.
+12. **Site-Select fallback.** Sign in as a user whose `currentSiteId` cookie is unset (clear the cookie) → planner renders without a "Cannot find SelectItem with value 'current'" warning in DevTools console.
+
+---
+
 If any step fails, stop and fix before proceeding. Phase 5 has no
 schema migrations after the perm key, so failures here typically mean
 either (a) the aggregator query shape needs adjusting, (b) the URL
