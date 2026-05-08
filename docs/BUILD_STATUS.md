@@ -132,6 +132,34 @@ Smoke test: `docs/smoke-test-phase3.md` extended with 14 new 6f checkpoints (loa
 
 `pnpm tsc --noEmit` clean. Plan: `plans/06f-templates-polish.md`.
 
+## Phase 6g — Inspections polish
+
+Merged 2026-05-08 (PR #20). Plan re-audited on kickoff against shipped surfaces (replaces the 2026-05-06 TBD stub) — same precedent as 6c/6d/6e/6f. User answered all 6 open questions before coding (most consequentially Q2 brought the full network indicator with last-saved timestamp into the PR scope rather than deferring to a v2 PWA-mode).
+
+**The only mobile-first surface in V1.** Runner must work cleanly on a 375px viewport with one thumb, photo upload must tolerate per-file errors without nuking the batch, signature pad needs labels and a name input that screen readers can find, and tap targets across the runner must hit the 44px mobile spec from `docs/design.md` §8.1.
+
+State coverage: 7 new state files — `loading.tsx` + `error.tsx` at all 3 routes (`/inspections`, `/inspections/[id]`, `/inspections/[id]/findings/[findingId]`) + brand `not-found.tsx` at `/inspections/[id]`. List page now `throw`s on query failure so `error.tsx` catches it (replaces the bare `<p className="text-destructive">` rendering). "Module 5" eyebrow dropped from `/inspections` (matches 6b–6f sequencing).
+
+**Runner save debounce + state tracking** (`components/inspections/runner/inspection-runner.tsx`): per-`(scope, item_id)` 1s debounce keyed via a `pendingSaves` Map ref; latest payload wins. New `runSave()` callback drives `saveStatus` + `lastSavedAt`; `flushPending()` runs at the start of `submitNow()` so the `complete_inspection_v1` RPC never reads a stale JSONB blob. `inFlightSaves` Set ref tracks promises across debounce + auto-populate paths so the indicator only flips to "saved" when the queue is fully drained. The auto-populate effect on mount now goes through `runSave()` for status parity instead of fire-and-forget `Promise.all`.
+
+**NetworkIndicator** (new `components/inspections/runner/network-indicator.tsx`): pill in the sticky runner topbar that subscribes to `online` / `offline` window events + `setInterval(15s)` to refresh the relative-time label. Cycles 5 states: Saving… (spinner) / Saved Xs ago (online + idle) / Offline — last saved Xm ago (offline + has prior save) / Offline (offline + never saved) / Save failed (last save errored, online). Tone changes neutral → warning → destructive across the cycle.
+
+**Photo upload resilience** (`components/inspections/runner/media-uploader.tsx`): refactored the upload loop into per-file `UploadOutcome` (`{ ok: true, uploadId, fileName, storagePath, previewUrl } | { ok: false, fileName, error }`) — one bad file no longer aborts the batch and discards previously-successful uploads. Per-file `AbortController` with a 30s timeout via `Promise.race(uploadPromise, abortPromise)` — supabase-js storage `upload()` doesn't honor an `AbortSignal` natively (its `FileOptions` type has no `signal` field), so the underlying request may still complete in the background, but the user-facing queue stops blocking and the file is reported as failed. Successes + failures are collected separately; success toast reads "Uploaded N of M" (or "Photo uploaded" / "Uploaded N photos" when N === total), per-failure error toasts. Camera + Upload buttons get descriptive `aria-label`s ("Capture photo from camera" / "Upload images from device") and ≥44px tap targets on mobile (collapse to compact at `sm:`).
+
+**FindingActionsCard rewrite** (`components/inspections/finding-actions-card.tsx`): Mark Resolved + Escalate split into two separate `<AlertDialog>` confirms (re-using the primitive shipped in 6c). Resolution-notes textarea moves *inline into the Mark Resolved dialog body* (still optional, max 2000 chars) — no separate notes UI in the card. Both action buttons get descriptive `aria-label`s. The `resolveFinding` server action now requires `inspection_id`, fixes the pre-existing wrong `revalidatePath` (was `/inspections/${finding_id}` — never a valid URL), and `redirect`s to the parent `/inspections/[id]` on success — mirrors `escalateFindingToIncident`'s pattern.
+
+**List page polish** (`components/inspections/inspection-list-filters.tsx` new + `app/(app)/inspections/page.tsx` simplified): URL-driven filter component mirrors `template-library-filters.tsx` — status select fires nav on `change`, search input on `blur` / Enter (no Apply button anywhere). Pre-existing `?template=<uuid>` filter from 6f preserved. `<section aria-label="Inspections">` wraps the table. Inline Resume / Continue draft chip on `in_progress` / `draft` rows in `inspection-list.tsx`.
+
+**Signature pad a11y** (`components/inspections/runner/signature-canvas.tsx`): `<label htmlFor>` on the printed-name input (uses `useId()` to avoid id collisions when multiple signatures render in one inspection); `role="img"` + `aria-label="Signature drawing area"` on the canvas; `aria-label="Clear signature"` on the Clear button. Save button hits 44px on mobile.
+
+**Runner topbar tap targets**: Submit button + back-arrow link both hit `min-h-[44px]` on mobile; collapse to compact desktop sizes at the `sm:` breakpoint. Icon scales accordingly.
+
+Smoke test: `docs/smoke-test-phase3.md` extended with 15 new 6g checkpoints (loading skeletons / error retry / not-found / per-file upload tolerance / AbortController stalled-upload / save debounce / network indicator state cycling × 5 / signature a11y / 44px tap targets / Mark Resolved AlertDialog / Escalate AlertDialog / list filter auto-submit / Resume chip / findings panel aria-label / Module 5 eyebrow removal).
+
+**Not in this PR (deferred to v2):** PWA / native-offline mode (online-with-tolerance only — AbortController + per-file errors + network indicator are the v1 ceiling); per-file upload progress % (would require switching to XHR + signed-URL uploads); GPS / geo-tagging on photos; live multi-inspector collaboration; linked-CAPA surfacing on the finding detail; section-header sticky-on-scroll in the runner (interacts with the existing sticky topbar, needs design validation at 375px); explicit "Save & exit" CTA (the silent-autosave-back-arrow is the contract — adding a CTA would suggest the back arrow does NOT save, misleading).
+
+`pnpm tsc --noEmit` clean. `pnpm lint` matches the 40/16 baseline (no new violations introduced — pre-existing React 19 / Next 16 stricter `react-hooks/set-state-in-effect` warnings on patterns that ship across templates / admin / etc.). Plan: `plans/06g-inspections-polish.md`.
+
 ## Phase 11 — Sites + Members + Roles (org admin console)
 
 Reserved 2026-05-07; user scope absorbs the Members half of the original Phase 8 reservation (Phase 8 stays = Settings/account preferences only). Closes the Supabase-SQL-editor gap for every org-admin task. Reclaims the 4 dormant perm keys (`site:configure / member:invite / member:manage / role:edit`) declared in `init.sql` line 119–124 since Phase 0 but never granted to any default role.
@@ -206,4 +234,4 @@ Phase 11 closes. Plan: `plans/11c-roles-and-invitations.md`.
 
 ## Workflow notes
 
-Modules 6g–6j (Inspections → Admin) queued. User kicks off each module with "start phase 6 <module>". Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Modules 6h–6j (Resources → Planner → Admin) queued. User kicks off each module with "start phase 6 <module>". Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
