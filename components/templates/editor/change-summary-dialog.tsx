@@ -13,6 +13,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { publishTemplateVersion } from "@/app/(app)/templates/[id]/edit/actions";
+import { suggestChangeSummary } from "@/lib/templates/diff-summary";
+import type { TemplateNodeItem } from "@/lib/templates/types";
 
 export function ChangeSummaryDialog({
   open,
@@ -20,6 +22,9 @@ export function ChangeSummaryDialog({
   templateId,
   draftVersionId,
   nextVersionNumber,
+  templateName,
+  publishedItems,
+  draftItems,
   onSuccess,
 }: {
   open: boolean;
@@ -27,15 +32,27 @@ export function ChangeSummaryDialog({
   templateId: string;
   draftVersionId: string;
   nextVersionNumber: number;
+  templateName: string;
+  /** Items[] from the previously-published version, or null for first publish. */
+  publishedItems: TemplateNodeItem[] | null;
+  /** Items[] currently in the draft (live editor state). */
+  draftItems: TemplateNodeItem[];
   onSuccess: () => void;
 }) {
   const [summary, setSummary] = useState("");
   const [pending, startTransition] = useTransition();
 
-  // Reset on close
+  // Pre-fill on open with a computed diff summary the author can edit.
+  // Reset on close so a re-open recomputes against the latest draft state.
   useEffect(() => {
-    if (!open) setSummary("");
-  }, [open]);
+    if (open) {
+      setSummary(
+        suggestChangeSummary(publishedItems ?? [], draftItems, templateName)
+      );
+    } else {
+      setSummary("");
+    }
+  }, [open, publishedItems, draftItems, templateName]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,6 +95,10 @@ export function ChangeSummaryDialog({
             >
               What changed?
             </label>
+            <p className="mt-0.5 mb-2 text-[11px] text-muted-foreground">
+              Pre-filled from a structural diff. Edit freely — your text is
+              what reviewers see in the version history.
+            </p>
             <Textarea
               id="change_summary"
               value={summary}

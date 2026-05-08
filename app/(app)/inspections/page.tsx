@@ -63,6 +63,10 @@ export default async function InspectionsPage({
       ? (sp.status as InspectionStatus)
       : null;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
+  const templateParam =
+    typeof sp.template === "string" && sp.template.length > 0
+      ? sp.template
+      : null;
 
   let rows: InspectionRow[] = [];
   let listError: string | null = null;
@@ -80,6 +84,7 @@ export default async function InspectionsPage({
       .order("conducted_at", { ascending: false, nullsFirst: false })
       .limit(200);
     if (statusParam) query = query.eq("status", statusParam);
+    if (templateParam) query = query.eq("template_id", templateParam);
     if (q) query = query.ilike("title", `%${q}%`);
     const { data, error } = await query.returns<InspectionRowQuery[]>();
     if (error) {

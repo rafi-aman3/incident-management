@@ -40,16 +40,26 @@ export async function assignTemplate(input: {
 }): Promise<ActionResult<{ count: number }>> {
   const parsed = AssignSchema.safeParse(input);
   if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.length === 0 ? "_form" : String(issue.path[0]);
+      (fieldErrors[key] ??= []).push(issue.message);
+    }
     return {
       ok: false,
       error: parsed.error.issues[0]?.message ?? "Invalid input",
+      fieldErrors,
     };
   }
   if (
     parsed.data.schedule_kind === "custom" &&
     !parsed.data.schedule_cron?.trim()
   ) {
-    return { ok: false, error: "Custom schedule requires a cron expression" };
+    return {
+      ok: false,
+      error: "Custom schedule requires a cron expression",
+      fieldErrors: { schedule_cron: ["Required for custom schedule"] },
+    };
   }
 
   const { supabase, user } = await requireUser();

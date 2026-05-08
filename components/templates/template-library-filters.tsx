@@ -76,10 +76,16 @@ export function TemplateLibraryFilters({ mode }: { mode: Mode }) {
         />
       </form>
 
-      {/* Industry pills */}
-      <div className="flex flex-wrap items-center gap-1">
+      {/* Industry pills — single-select filter (radiogroup pattern) */}
+      <div
+        role="radiogroup"
+        aria-label="Filter by industry"
+        className="flex flex-wrap items-center gap-1"
+      >
         <button
           type="button"
+          role="radio"
+          aria-checked={!currentIndustry}
           onClick={() => setParam("industry", null)}
           className={cn(
             "rounded-full border px-2.5 py-1 text-xs font-medium",
@@ -94,6 +100,8 @@ export function TemplateLibraryFilters({ mode }: { mode: Mode }) {
           <button
             key={ind}
             type="button"
+            role="radio"
+            aria-checked={currentIndustry === ind}
             onClick={() => setParam("industry", ind)}
             className={cn(
               "rounded-full border px-2.5 py-1 text-xs font-medium",
@@ -110,6 +118,7 @@ export function TemplateLibraryFilters({ mode }: { mode: Mode }) {
       {mode === "browse" && (
         <button
           type="button"
+          aria-pressed={currentFeatured}
           onClick={() => setParam("featured", currentFeatured ? null : "1")}
           className={cn(
             "rounded-full border px-2.5 py-1 text-xs font-medium",

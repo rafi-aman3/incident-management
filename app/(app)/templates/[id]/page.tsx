@@ -102,6 +102,23 @@ export default async function TemplateViewerPage({
     }
   }
 
+  // Snapshot-rule callout: count in-flight inspections that snapshotted a
+  // prior version of this template (template_version_id != selectedVersion.id).
+  // Templates are versioned; mid-cycle edits never silently rewrite history,
+  // so we surface this to the viewer so they understand what running on the
+  // prior version means.
+  let priorVersionInFlightCount = 0;
+  if (selectedVersion) {
+    const { count } = await supabase
+      .from("inspections")
+      .select("id", { count: "exact", head: true })
+      .eq("template_id", tmpl.id)
+      .eq("status", "in_progress")
+      .neq("template_version_id", selectedVersion.id)
+      .is("deleted_at", null);
+    priorVersionInFlightCount = count ?? 0;
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -153,9 +170,44 @@ export default async function TemplateViewerPage({
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         {/* Read-only checklist preview */}
         <div className="space-y-4">
+          {priorVersionInFlightCount > 0 && (
+            <div className="flex items-start justify-between gap-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs">
+              <p>
+                <span className="font-medium text-foreground">
+                  {priorVersionInFlightCount} inspection
+                  {priorVersionInFlightCount === 1 ? " is" : "s are"} still
+                  running on a prior version.
+                </span>{" "}
+                Templates are versioned, so in-flight inspections keep their
+                original snapshot — your published changes don&apos;t apply
+                until those finish or are abandoned.
+              </p>
+              <Link
+                href={`/inspections?template=${tmpl.id}&status=in_progress`}
+                className="shrink-0 whitespace-nowrap font-medium text-warning hover:underline"
+              >
+                View running inspections →
+              </Link>
+            </div>
+          )}
           {!selectedVersion ? (
             <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
               No published version yet. Edit the draft to add items, then publish.
+            </div>
+          ) : items.length === 0 && header.length === 0 ? (
+            <div className="rounded-md border border-dashed p-12 text-center">
+              <p className="text-sm font-medium">No items in this version yet</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Open the editor to add a section and your first question.
+              </p>
+              {canEdit && !tmpl.is_system_preset && (
+                <Link
+                  href={`/templates/${tmpl.id}/edit`}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Open editor
+                </Link>
+              )}
             </div>
           ) : (
             <ChecklistPreview
@@ -169,53 +221,57 @@ export default async function TemplateViewerPage({
         {/* Versions panel */}
         <aside className="rounded-lg border bg-card">
           <div className="flex items-center gap-2 border-b px-4 py-3">
-            <History className="h-4 w-4 text-muted-foreground" />
+            <History aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Versions</h2>
             <InfoTooltip tip="template_versions_audit" />
           </div>
-          <ul className="divide-y">
-            {versionList.length === 0 && (
-              <li className="px-4 py-3 text-sm text-muted-foreground">
-                No versions yet.
-              </li>
-            )}
-            {versionList.map((v) => (
-              <li
-                key={v.id}
-                className={
-                  selectedVersion?.id === v.id ? "bg-primary/5" : undefined
-                }
-              >
-                <Link
-                  href={`/templates/${tmpl.id}?version=${v.version_number}`}
-                  className="block px-4 py-3 hover:bg-accent"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <VersionBadge versionNumber={v.version_number} />
-                      <TemplateStatusBadge status={v.status} showDot={false} />
-                    </div>
-                    {v.published_at && (
-                      <span className="text-[11px] text-muted-foreground tabular-nums">
-                        {new Date(v.published_at).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                  {v.change_summary && (
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                      {v.change_summary}
-                    </p>
-                  )}
-                  {v.published_by && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      by{" "}
-                      {v.published_by.full_name ?? v.published_by.email}
-                    </p>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <nav aria-label="Version history">
+            <ul className="divide-y">
+              {versionList.length === 0 && (
+                <li className="px-4 py-3 text-sm text-muted-foreground">
+                  No versions yet.
+                </li>
+              )}
+              {versionList.map((v) => {
+                const active = selectedVersion?.id === v.id;
+                return (
+                  <li
+                    key={v.id}
+                    className={active ? "bg-primary/5" : undefined}
+                  >
+                    <Link
+                      href={`/templates/${tmpl.id}?version=${v.version_number}`}
+                      aria-current={active ? "page" : undefined}
+                      className="block px-4 py-3 hover:bg-accent"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <VersionBadge versionNumber={v.version_number} />
+                          <TemplateStatusBadge status={v.status} showDot={false} />
+                        </div>
+                        {v.published_at && (
+                          <span className="text-[11px] text-muted-foreground tabular-nums">
+                            {new Date(v.published_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      {v.change_summary && (
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                          {v.change_summary}
+                        </p>
+                      )}
+                      {v.published_by && (
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          by{" "}
+                          {v.published_by.full_name ?? v.published_by.email}
+                        </p>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
         </aside>
       </div>
     </div>

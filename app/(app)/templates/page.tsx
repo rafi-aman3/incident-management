@@ -138,9 +138,6 @@ export default async function TemplatesPage({
 function Header() {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-        Module 4
-      </p>
       <h1 className="text-2xl font-semibold">Templates</h1>
       <p className="text-sm text-muted-foreground">
         Org-scoped checklist templates. Import from the library or build your
