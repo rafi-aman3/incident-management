@@ -35,13 +35,42 @@ export async function enableDemoMode(): Promise<ActionResult> {
 // ---------------------------------------------------------------------------
 // Reset all transactional rows for the current org back to the seed state.
 // Wraps reset_demo_data_v1 RPC; the RPC refuses unless orgs.is_demo=true.
+//
+// 6j hardening: requires the caller to type the exact org name as a
+// forcing-function guard (mirrors <ArchiveSiteDialog> Stripe-style). Server
+// validates against orgs.name independently of the client gate, so a curl
+// bypass still requires the typed name.
 // ---------------------------------------------------------------------------
 export async function resetDemoData(
   _prev: ActionResult | null,
-  _fd: FormData
+  fd: FormData
 ): Promise<ActionResult> {
   const { supabase, profile, currentSiteId } = await requireUser();
   await requirePermission("demo:reset", currentSiteId);
+
+  const confirmName = String(fd.get("confirm_name") ?? "");
+  const expectedName = String(fd.get("expected_name") ?? "");
+
+  if (!expectedName) {
+    return { ok: false, error: "Missing expected org name" };
+  }
+
+  // Re-fetch the org name server-side rather than trusting expected_name —
+  // the form passes expected_name as a hint, but the source of truth is the DB.
+  const { data: org } = await supabase
+    .from("orgs")
+    .select("name")
+    .eq("id", profile.org_id)
+    .single();
+  if (!org) return { ok: false, error: "Couldn't load your org" };
+
+  if (confirmName !== org.name) {
+    return {
+      ok: false,
+      error: "Type the org name exactly to confirm",
+      fieldErrors: { confirm_name: ["Type the org name exactly to confirm"] },
+    };
+  }
 
   const { error } = await supabase.rpc("reset_demo_data_v1", {
     p_org_id: profile.org_id,

@@ -5,7 +5,7 @@ import { CheckCircle2, AlertCircle } from "lucide-react";
 import { launchSite } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
 import type { NotificationKind } from "@/lib/site-setup/schemas";
-import { StepFooter } from "./wizard-chrome";
+import { StepFooter, StepFormError } from "./wizard-chrome";
 
 type Summary = {
   name: string;
@@ -90,9 +90,10 @@ export function Step7Confirm({ summary }: { summary: Summary }) {
         </div>
       )}
 
-      {state?.ok === false && (
-        <p className="text-sm text-destructive">{state.error}</p>
-      )}
+      <StepFormError
+        message={state?.ok === false ? state.error : undefined}
+        isPending={isPending}
+      />
 
       <StepFooter prevHref="/admin/site-setup/6" isPending={isPending} primaryLabel="Launch site" />
     </form>

@@ -23,6 +23,7 @@ export default async function DemoAffordancesPage() {
     .single();
 
   const isDemo = !!org?.is_demo;
+  const orgName = org?.name ?? "";
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -31,7 +32,7 @@ export default async function DemoAffordancesPage() {
           href="/admin"
           className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline"
         >
-          <ArrowLeft className="h-3 w-3" /> Admin
+          <ArrowLeft className="h-3 w-3" aria-hidden /> Admin
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Demo affordances</h1>
         <p className="text-sm text-muted-foreground">
@@ -42,12 +43,15 @@ export default async function DemoAffordancesPage() {
       </div>
 
       {!isDemo && (
-        <div className="rounded-md border-l-4 border-warning bg-warning/5 p-4">
+        <div
+          role="status"
+          className="rounded-md border-l-4 border-warning bg-warning/5 p-4"
+        >
           <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 text-warning" />
+            <AlertTriangle className="mt-0.5 h-4 w-4 text-warning" aria-hidden />
             <div>
               <p className="text-sm font-semibold">
-                {org?.name ?? "This org"} is not flagged as a demo org
+                {orgName || "This org"} is not flagged as a demo org
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 The destructive RPCs will refuse until you opt in. Flip the flag
@@ -61,7 +65,7 @@ export default async function DemoAffordancesPage() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <section aria-label="Demo affordances" className="grid gap-3 sm:grid-cols-3">
         <Card
           title="Trigger banner"
           body="Inserts a fake OSHA 8-hour notification with a 1-hour deadline. Visible to you only — perfect for a screencap."
@@ -81,9 +85,9 @@ export default async function DemoAffordancesPage() {
           body="Wipes all transactional rows back to seed state. Sites, members, and roles are preserved. Re-run pnpm db:seed afterwards."
           destructive
         >
-          <ResetDataButton />
+          <ResetDataButton orgName={orgName} />
         </Card>
-      </div>
+      </section>
 
       <div className="rounded-md border bg-muted/30 p-4 text-xs text-muted-foreground">
         Behind the scenes: each button calls an RPC defined in the Phase 2

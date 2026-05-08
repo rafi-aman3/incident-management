@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { AlertTriangle, Check, RotateCcw } from "lucide-react";
 import { SETUP_STEPS, type SetupProgress, type SetupStepNumber } from "@/lib/site-setup/steps";
 import { cn } from "@/lib/utils";
 
@@ -37,8 +37,17 @@ export function ProgressDots({
   currentStep: SetupStepNumber;
   progress: SetupProgress;
 }) {
+  const completedCount = SETUP_STEPS.filter((s) => Boolean(progress[s.progressKey])).length;
   return (
-    <ol className="flex items-center gap-2" aria-label="Setup progress">
+    <ol
+      className="flex items-center gap-2"
+      role="progressbar"
+      aria-label="Setup progress"
+      aria-valuenow={completedCount}
+      aria-valuemin={0}
+      aria-valuemax={SETUP_STEPS.length}
+      aria-valuetext={`Step ${currentStep} of ${SETUP_STEPS.length} · ${completedCount} complete`}
+    >
       {SETUP_STEPS.map((step) => {
         const isDone = Boolean(progress[step.progressKey]);
         const isCurrent = step.number === currentStep;
@@ -67,43 +76,95 @@ export function StepList({
   progress: SetupProgress;
 }) {
   return (
-    <ol className="space-y-1 text-sm">
-      {SETUP_STEPS.map((step) => {
-        const isDone = Boolean(progress[step.progressKey]);
-        const isCurrent = step.number === currentStep;
-        const reachable = isDone || isCurrent || step.number <= currentStep;
-        return (
-          <li key={step.number}>
-            <Link
-              href={reachable ? `/admin/site-setup/${step.number}` : "#"}
-              aria-disabled={!reachable}
-              tabIndex={reachable ? 0 : -1}
-              className={cn(
-                "flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors",
-                reachable && !isCurrent && "hover:bg-accent",
-                isCurrent && "bg-accent font-medium",
-                !reachable && "cursor-not-allowed opacity-50"
-              )}
-            >
-              <span
+    <nav aria-label="Site setup steps">
+      <ol className="space-y-1 text-sm">
+        {SETUP_STEPS.map((step) => {
+          const isDone = Boolean(progress[step.progressKey]);
+          const isCurrent = step.number === currentStep;
+          const reachable = isDone || isCurrent || step.number <= currentStep;
+          const stateLabel = isDone
+            ? "complete"
+            : isCurrent
+              ? "current"
+              : reachable
+                ? "not yet started"
+                : "not yet available";
+          return (
+            <li key={step.number}>
+              <Link
+                href={reachable ? `/admin/site-setup/${step.number}` : "#"}
+                aria-disabled={!reachable}
+                aria-current={isCurrent ? "step" : undefined}
+                aria-label={`Step ${step.number}: ${step.title}, ${stateLabel}`}
+                tabIndex={reachable ? 0 : -1}
                 className={cn(
-                  "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
-                  isDone && "bg-success text-white",
-                  !isDone && isCurrent && "bg-primary text-primary-foreground",
-                  !isDone && !isCurrent && "bg-muted text-muted-foreground"
+                  "flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors",
+                  reachable && !isCurrent && "hover:bg-accent",
+                  isCurrent && "bg-accent font-medium",
+                  !reachable && "cursor-not-allowed opacity-50"
                 )}
               >
-                {isDone ? <Check className="h-3 w-3" /> : step.number}
-              </span>
-              <span className="leading-tight">
-                <span className="block">{step.title}</span>
-                <span className="block text-xs text-muted-foreground">{step.description}</span>
-              </span>
-            </Link>
-          </li>
-        );
-      })}
-    </ol>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                    isDone && "bg-success text-white",
+                    !isDone && isCurrent && "bg-primary text-primary-foreground",
+                    !isDone && !isCurrent && "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {isDone ? <Check className="h-3 w-3" /> : step.number}
+                </span>
+                <span className="leading-tight">
+                  <span className="block">{step.title}</span>
+                  <span className="block text-xs text-muted-foreground">{step.description}</span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+/**
+ * Inline form-level error for the wizard's per-step forms with a Retry
+ * button (mirrors the 6c–6h Retry pattern). Re-submits the same form by
+ * type=submit + form=<formId>; relies on useActionState retaining values.
+ *
+ * Renders nothing when there's no error or the error is "Validation failed"
+ * (those surface as fieldErrors below the relevant input).
+ */
+export function StepFormError({
+  message,
+  isPending,
+  formId,
+}: {
+  message: string | undefined;
+  isPending: boolean;
+  formId?: string;
+}) {
+  if (!message || message === "Validation failed") return null;
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+      <div className="flex-1 min-w-0">
+        <p className="text-destructive">{message}</p>
+      </div>
+      <button
+        type="submit"
+        form={formId}
+        disabled={isPending}
+        className="inline-flex items-center gap-1 rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/15 disabled:opacity-50"
+      >
+        <RotateCcw className="h-3 w-3" aria-hidden />
+        {isPending ? "Retrying…" : "Retry"}
+      </button>
+    </div>
   );
 }
 

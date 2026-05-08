@@ -84,12 +84,17 @@ export function AcceptInvitationCard({ branch }: { branch: Branch }) {
     return (
       <Card>
         <Header
-          icon={<ShieldCheck className="h-7 w-7 text-emerald-500" />}
+          icon={<ShieldCheck className="h-7 w-7 text-emerald-500" aria-hidden />}
           title="Already accepted"
           subtitle="You already used this invitation. Head to your dashboard."
         />
         <Button asChild className="w-full">
-          <Link href="/dashboard">Go to dashboard</Link>
+          <Link
+            href="/dashboard"
+            aria-label="Go to dashboard (this invitation has already been accepted)"
+          >
+            Go to dashboard
+          </Link>
         </Button>
       </Card>
     );
@@ -100,7 +105,7 @@ export function AcceptInvitationCard({ branch }: { branch: Branch }) {
     return (
       <Card>
         <Header
-          icon={<Mail className="h-7 w-7 text-primary" />}
+          icon={<Mail className="h-7 w-7 text-primary" aria-hidden />}
           title={`You're invited to ${branch.siteName}`}
           subtitle={
             branch.inviterName
@@ -115,9 +120,10 @@ export function AcceptInvitationCard({ branch }: { branch: Branch }) {
           <Button asChild className="w-full">
             <Link
               href={`/login?redirect_to=${encodeURIComponent(redirectTo)}&email=${encodeURIComponent(branch.email)}`}
+              aria-label={`Log in or sign up to accept invitation to ${branch.siteName}`}
             >
               Log in or sign up
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </Button>
         </div>
@@ -129,7 +135,7 @@ export function AcceptInvitationCard({ branch }: { branch: Branch }) {
     return (
       <Card>
         <Header
-          icon={<AlertTriangle className="h-7 w-7 text-amber-500" />}
+          icon={<AlertTriangle className="h-7 w-7 text-amber-500" aria-hidden />}
           title="Wrong account"
           subtitle={`This invitation is for ${branch.email}. You're signed in as ${branch.currentEmail}.`}
         />
@@ -138,7 +144,12 @@ export function AcceptInvitationCard({ branch }: { branch: Branch }) {
         </p>
         <div className="space-y-2">
           <form action={signOut}>
-            <Button type="submit" variant="outline" className="w-full">
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full"
+              aria-label={`Sign out (this invitation is for ${branch.email}, not ${branch.currentEmail})`}
+            >
               Sign out
             </Button>
           </form>
@@ -172,7 +183,7 @@ function ReadyCard({
   return (
     <Card>
       <Header
-        icon={<ShieldCheck className="h-7 w-7 text-primary" />}
+        icon={<ShieldCheck className="h-7 w-7 text-primary" aria-hidden />}
         title={`Accept invitation to ${branch.siteName}?`}
         subtitle={
           branch.inviterName
@@ -187,9 +198,14 @@ function ReadyCard({
       </p>
       <form action={formAction} className="space-y-2">
         <input type="hidden" name="token" value={branch.token} />
-        <Button type="submit" className="w-full" disabled={isPending}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isPending}
+          aria-label={`Accept invitation to ${branch.siteName} as ${branch.roleName}`}
+        >
           {isPending ? "Accepting…" : "Accept and continue"}
-          {!isPending && <ArrowRight className="h-4 w-4" />}
+          {!isPending && <ArrowRight className="h-4 w-4" aria-hidden />}
         </Button>
       </form>
     </Card>

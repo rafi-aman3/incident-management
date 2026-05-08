@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { saveStep1 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { StepFooter } from "./wizard-chrome";
+import { StepFooter, StepFormError } from "./wizard-chrome";
 
 const TIMEZONE_HINTS = [
   { value: "America/Chicago", label: "America/Chicago" },
@@ -101,9 +101,10 @@ export function Step1Basics({ initial }: { initial: Initial }) {
         </div>
       </div>
 
-      {state?.ok === false && state.error !== "Validation failed" && (
-        <p className="text-sm text-destructive">{state.error}</p>
-      )}
+      <StepFormError
+        message={state?.ok === false ? state.error : undefined}
+        isPending={isPending}
+      />
 
       <StepFooter prevHref={null} isPending={isPending} />
     </form>

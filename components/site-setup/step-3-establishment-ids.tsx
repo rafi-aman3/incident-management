@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveStep3 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { StepFooter } from "./wizard-chrome";
+import { StepFooter, StepFormError } from "./wizard-chrome";
 
 type Initial = {
   country: "US" | "GB";
@@ -99,9 +99,10 @@ export function Step3EstablishmentIds({ initial }: { initial: Initial }) {
       </label>
       <input type="hidden" name="skipped" value={String(skipped)} />
 
-      {state?.ok === false && state.error !== "Validation failed" && (
-        <p className="text-sm text-destructive">{state.error}</p>
-      )}
+      <StepFormError
+        message={state?.ok === false ? state.error : undefined}
+        isPending={isPending}
+      />
 
       <StepFooter prevHref="/admin/site-setup/2" isPending={isPending} />
     </form>
