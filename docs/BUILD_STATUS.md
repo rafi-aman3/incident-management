@@ -160,6 +160,39 @@ Smoke test: `docs/smoke-test-phase3.md` extended with 15 new 6g checkpoints (loa
 
 `pnpm tsc --noEmit` clean. `pnpm lint` matches the 40/16 baseline (no new violations introduced — pre-existing React 19 / Next 16 stricter `react-hooks/set-state-in-effect` warnings on patterns that ship across templates / admin / etc.). Plan: `plans/06g-inspections-polish.md`.
 
+## Phase 6h — Resources polish
+
+Merged 2026-05-08 (PR #21). Plan re-audited on kickoff against shipped surfaces (replaces the 2026-05-06 TBD stub) — same precedent as 6c/6d/6e/6f/6g. User answered all 6 open questions before coding; **Q1 brought an in-place `<InlineAssetCreateDialog>` into 6h scope** (the `<AssetTypeaheadField>` "+ Register a new asset" link previously navigated away from the wizard, destroying Step 2 form state).
+
+State coverage: 13 new state files — `loading.tsx` + `error.tsx` at the 4 list/detail routes (`/resources/assets`, `/resources/assets/[id]`, `/resources/documents`, `/resources/documents/[id]`); `not-found.tsx` at the 2 `[id]` detail routes; lightweight `loading.tsx` at the 3 form routes (`assets/new`, `assets/[id]/edit`, `documents/new`). `/resources/assets/page.tsx` now `throw`s on Supabase query failure so `error.tsx` catches it (replaces the bare `<p text-destructive>` rendering). "Module 4 · Resources" eyebrow dropped on both list pages.
+
+**Asset detail tab nav** (`app/(app)/resources/assets/[id]/page.tsx`): migrated to `<nav role="tablist">` + per-tab `role="tab"` + `aria-selected` + `aria-controls`; tab bodies wrapped in `role="tabpanel"` + `aria-labelledby`. Mirrors the 6f templates editor tab pattern. Per-tab Supabase errors (incidents / inspections / documents) now render through a new `TabError` component (rounded destructive-bordered alert with AlertTriangle icon) instead of the bare red `<p>`.
+
+**`<AssetTypeaheadField>` rewrite** (`components/assets/asset-typeahead-field.tsx`): the cross-cutting picker mounted in the incident wizard's Step 2 (property_damage / unsafe_condition / dangerous_occurrence). Full WAI-ARIA combobox 1.2 pattern: input gets `role="combobox"` + `aria-expanded` + `aria-controls` + `aria-haspopup="listbox"` + `aria-autocomplete="list"` + `aria-activedescendant`; results list `role="listbox"`; per-row `role="option"` + `aria-selected`. Keyboard nav: ↑ / ↓ moves the active descendant, Enter picks, **ESC closes the dropdown without dismissing the parent wizard dialog** (was a real foot-gun before). The "+ Register a new asset" anchor that navigated away from the wizard is replaced with `<InlineAssetCreateDialog>` — a slimmed `AssetForm` (name + kind + location + condition; site is fixed to the wizard's `siteId`; SDS picker dropped to avoid modal-in-modal). On create-success the new asset auto-selects in the typeahead pill via the existing `onSelect` path (no reload, no wizard state loss). Per Q1: modal-in-place over `?returnTo=` redirect, since serializing wizard state into searchParams is fragile (file uploads, deeply-nested fields).
+
+**New server action** `createAssetInline` in `lib/actions/assets.ts`: sibling to `createAssetAction` but **does not redirect** on success — instead returns `{ id, ref_code, name }` so the typeahead can hydrate its picked-pill in place. Reuses the existing `createAsset()` core (which already returns Zod `fieldErrors` via `flatten().fieldErrors`) and just chases the new asset's `ref_code` for the label.
+
+**`<AssetForm>` field-level errors** (`components/assets/asset-form.tsx`): server `fieldErrors` (already returned by `createAsset` / `updateAsset`) wired through to per-field `<p>` + `aria-invalid` + `aria-describedby`. Mirrors 6f's `assignTemplate` shape. Help text under `last_inspected_at` and `next_pm_at` clarifies the relative semantics ("when this asset was last walked" / "next preventive-maintenance date — overdue dates surface in red on the list").
+
+**`<DocumentLinkPicker>` hardening** (`components/documents/document-link-picker.tsx`, the cross-cutting workhorse mounted in 5+ contexts):
+- Upload tab: form state resets on success (`file` / `name` / `type` / `expiry` / `notes` cleared) so a second submit doesn't silently re-upload the same file.
+- **Orphan recovery (per Q2):** if `createDocument` succeeds but `linkDocument` fails (or throws), surface a `toast.warning` (not error) naming the doc + a "View document" action that routes to `/resources/documents/[newId]` (10s duration). The doc may legitimately still be useful elsewhere; user decides whether to keep or archive. Matches 6g's per-file resilience pattern; soft-warning over hard-rollback because the rollback itself can fail.
+- Library-tab archived-filter audit-correction: the audit flagged a missing `archived_at IS NULL` filter, but `listOrgDocuments` already enforces it server-side (`lib/actions/documents.ts:73`). No fix needed — flag the audit as wrong in the plan.
+
+**`<DocumentDetailActions>` edit-metadata reset** (`components/documents/document-detail-actions.tsx`): re-seeds form state from `initial` whenever the dialog opens via a keyed `useEffect`, so a re-open after Cancel shows the live snapshot rather than the previously-edited (then-cancelled) values.
+
+**Perf** (`/resources/documents/[id]/page.tsx`): the 7 sequential per-parent-type label queries (incidents / investigations / capas / assets / sites / inspections / inspection_findings) parallelize via `Promise.all`. ~6× latency cut on heavily-linked documents. Per Q4: `Promise.all` over a single batched RPC because the 7 queries are RLS-bound, run in <100ms each on warm Supabase, and parallelizing is a no-schema, no-RPC shape fix. Type uses `PromiseLike<T>[]` to match supabase-js's `PostgrestBuilder` return type (its `.then()` chain returns `PromiseLike`, not `Promise`).
+
+**A11y polish on shared primitives:** AssetList table `<Table aria-label="Assets">` + `<TableHead scope="col">` on every column (same on the Documents table view); AssetActions dropdown trigger `aria-label="Change asset condition"` (icon-only ChevronDown becomes purely decorative).
+
+**Empty-state copy refinements:** AssetList branches cold-empty CTA ("No assets yet — register your first asset to get started", with a Register button when `canCreate`) vs. filtered-zero hint ("No assets match these filters. Adjust the filters to see more."). Document detail linked-from sidebar replaces technical "Pickers across the app reference this document by id" with user-readable "This document hasn't been linked to any records yet. Use the picker on an incident, asset, CAPA, or inspection to link it."
+
+Smoke test: `docs/smoke-test-phase4.md` extended with 18 new 6h checkpoints (loading skeletons / error retry / not-found / Module 4 drop / cold-empty + filtered-zero copy / tab a11y / dropdown a11y / table a11y / combobox keyboard + inline-create wizard-state-survives / fieldErrors / picker form-reset + orphan-warning / edit-metadata reset / linked-from copy / parallel label fetch / per-tab error styling).
+
+**Not in this PR (deferred to v2):** document versioning · approvals / e-signatures / forced ack · SDS Manager API integration · asset PM cron auto-trigger · asset hierarchy / parent-child · bulk actions on either list · `'use cache'` migration on tab-fetch queries · asset Inspections-tab population (no `inspections.asset_id` FK in V1) · multi-file upload in `document-upload-form.tsx` or DocumentLinkPicker upload tab.
+
+`pnpm tsc --noEmit` clean. `pnpm lint` 42/16 (baseline 40/16) — +2 are the standard "setState in effect on dialog-open" pattern that already ships across `change-role-dialog.tsx`, `archive-site-dialog.tsx`, `template-library-filters.tsx` in the existing baseline. Plan: `plans/06h-resources-polish.md`.
+
 ## Phase 11 — Sites + Members + Roles (org admin console)
 
 Reserved 2026-05-07; user scope absorbs the Members half of the original Phase 8 reservation (Phase 8 stays = Settings/account preferences only). Closes the Supabase-SQL-editor gap for every org-admin task. Reclaims the 4 dormant perm keys (`site:configure / member:invite / member:manage / role:edit`) declared in `init.sql` line 119–124 since Phase 0 but never granted to any default role.
@@ -234,4 +267,4 @@ Phase 11 closes. Plan: `plans/11c-roles-and-invitations.md`.
 
 ## Workflow notes
 
-Modules 6h–6j (Resources → Planner → Admin) queued. User kicks off each module with "start phase 6 <module>". Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Modules 6i–6j (Planner → Admin) queued. User kicks off each module with "start phase 6 <module>". Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
