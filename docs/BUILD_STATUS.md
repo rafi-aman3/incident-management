@@ -237,7 +237,88 @@ Smoke test: `docs/smoke-test-phase5.md` extended with 12 new 6i polish checkpoin
 
 `pnpm tsc --noEmit` clean. `pnpm lint` 42/16 (matches the 6h baseline; no new findings in `planner/*` files). Plan: `plans/06i-planner-polish.md`.
 
-## Phase 11 — Sites + Members + Roles (org admin console)
+## Phase 6j — Admin polish
+
+Merged 2026-05-08 (PR #23). **Last per-module polish PR — Phase 6 closes here.** Plan re-audited on kickoff against shipped reality (replaces the 2026-05-06 stub written before Phase 11 shipped sites + members + roles + invitations + public `/invite/[token]` 2026-05-07/08, multiplying the admin surface ~3× from 4 routes to 12). User answered all 6 open questions as "proceed with recommendations" — every Q resolved scope-conservatively, no scope expansion.
+
+**State coverage** — 7 new state files: `app/(app)/admin/error.tsx` (only `loading.tsx` existed); `app/(app)/admin/demo/{loading,error}.tsx`; `app/(app)/admin/site-setup/{loading,error}.tsx` (covers the redirector + per-step page via parent boundary); `app/(app)/admin/sites/new/{loading,error}.tsx`. **`/(auth)/invite/[token]/error.tsx` intentionally skipped** per Phase 11c precedent — the page renders 7 branch-typed errors (`not_found` / `expired` / `revoked` / `accepted` / `unauth` / `mismatch` / `ready`); a generic error.tsx would only fire on `requireUser`-style throws that don't apply to a public unauth route.
+
+**Demo Reset hardening** (`components/admin/demo-buttons.tsx` + `app/(app)/admin/demo/actions.ts`):
+- `<ResetDataButton>` migrated from plain Dialog to AlertDialog primitive (mirrors 6c–6h destructive-action precedent — AlertDialog used wherever the action is destructive).
+- Stripe-style "Type `<orgName>` to confirm" guard added (mirrors the shipped `<ArchiveSiteDialog>` from 11a — same Input + disabled-action pattern, same independent server validation).
+- `resetDemoData` server action re-fetches `orgs.name` server-side (not trusting the client-passed `expected_name` hint) and validates `confirm_name` against it; returns `{ ok: false, fieldErrors: { confirm_name: [...] } }` on mismatch via the standard ActionResult shape — a curl bypass with `confirm_name=wrong` still requires the typed name.
+- Dialog title now names the org explicitly: "Wipe all transactional data for `<orgName>`?" (was implicit before).
+
+**`/admin` landing** (`app/(app)/admin/page.tsx`):
+- Bootstrap-empty hint: 1-line note "Org just created — get started with the Site setup wizard below." appears above the KPI tiles when `activeSites === 0`. Per Q4: keep zeros visible, add directional nudge.
+- KPI tiles wrapped in `<section aria-label="Admin counts">`; admin cards in `<section aria-label="Admin sections">`; deep-link tiles (Site setup wizard + Demo affordances) in `<nav aria-label="Admin tools">`.
+- Deep-link grid bumped from `sm:grid-cols-2` only to `sm:grid-cols-2 md:grid-cols-2` so md (768–1024px) gets 2 columns instead of stacking.
+- Decorative icons get `aria-hidden`.
+
+**`/admin/demo`** (`app/(app)/admin/demo/page.tsx`):
+- 3-card grid wrapped in `<section aria-label="Demo affordances">`.
+- is_demo warning callout gets `role="status"` (mirrors 6e Reports `<HseRecordCard>` + 6c Investigations save-failed indicator pattern).
+- Decorative `ArrowLeft` + `AlertTriangle` icons get `aria-hidden`.
+
+**`/admin/site-setup` wizard a11y** (`components/site-setup/wizard-chrome.tsx`):
+- `<ProgressDots>`: existing `<ol>` gains `role="progressbar"` + `aria-valuenow={completedCount}` + `aria-valuemin={0}` + `aria-valuemax={7}` + `aria-valuetext="Step N of 7 · M complete"`. The role="progressbar" override on `<ol>` is intentional — ARIA roles always override the implicit element role.
+- `<StepList>`: wrapped in `<nav aria-label="Site setup steps">`. Per-step Link gets `aria-current="step"` on the active step + `aria-label="Step N: <title>, <state>"` where state is one of `complete` / `current` / `not yet started` / `not yet available`.
+- New `<StepFormError>` component: inline `role="alert"` with a Retry button (mirrors the 6c/6d/6e/6g/6h Retry pattern). Re-submits the same form via `<button type="submit">`; relies on `useActionState` retaining values. Skips render when message is undefined or "Validation failed" (those surface as fieldErrors below the relevant input).
+- All 7 step components (basics → regulator → establishment-ids → departments → users → recipients → confirm) migrated from bare `<p text-destructive>{state.error}</p>` to `<StepFormError message={...} isPending={isPending} />`.
+
+**`/(auth)/invite/[token]` CTA labels** (`components/admin/accept-invitation-card.tsx`):
+- Per-branch CTA `aria-label`s with site/role context: "Go to dashboard (this invitation has already been accepted)" · "Log in or sign up to accept invitation to `<siteName>`" · "Sign out (this invitation is for `<email>`, not `<currentEmail>`)" · "Accept invitation to `<siteName>` as `<roleName>`".
+- All branch icons (`ShieldCheck` / `Mail` / `AlertTriangle` / `ArrowRight`) get `aria-hidden`.
+- **Audit correction:** plan claimed branch headings were `<h2>` needing bump to `<h1>` — wrong, page already uses `<h1>` (line 221 of accept-invitation-card.tsx). Q2 simpler-fix recommendation (CTA aria-labels only) was correct.
+
+**Smoke test:** new `docs/smoke-test-admin.md` is a thin umbrella index pointing at the existing `smoke-test-phase11a.md` / `smoke-test-phase11b.md` / `smoke-test-phase11c.md` per-feature deep-dives, plus a 6j-only polish section (state files / Reset hardening / wizard a11y / invite a11y). Per Q6: thin index over rewalk; the per-feature guides stay authoritative for RBAC + perm + RPC + audit-trail coverage.
+
+**Audit findings that turned out clean (no fix needed):**
+- Plan flagged a stale "Email invitations ship in Phase 11c" placeholder card on `/admin/members` — verified zero occurrences. 11c-merge correctly replaced it with live `<InviteMemberDialog>`.
+- Plan flagged an unused `Sparkles` import on `/admin/demo/page.tsx` — wrong; `Sparkles` is imported by `components/admin/demo-buttons.tsx` and used by `<LoadSampleChainButton>`. Skipped.
+
+**Deferred to v2 (logged):** new admin pages (org info / billing / SSO / SCIM / IDP / audit-trail viewer); org settings page; member-invite flow rework; Phase 11 RPC behavior changes; pathway-picker re-integration (already shipped per re-audit); demo-cleanup last-run surface (Vercel Cron isn't shipped); `?action=new` URL-sync regression hunt.
+
+`pnpm tsc --noEmit` clean. `pnpm lint` 42/14 — **2 warnings BETTER than the 42/16 6h baseline**; the AlertDialog migration cleaned up 2 setState-in-effect warnings on the previous Dialog implementation. The 1 remaining warning in `demo-buttons.tsx:105` is the same setState-in-effect-on-success pattern that already shipped on the previous Dialog (line number shifted from the migration; not a new finding). Plan: `plans/06j-admin-polish.md`.
+
+---
+
+## Phase 6 — Closed 2026-05-08
+
+**V1 polish-complete.** All 12 module-level polish PRs merged across 10 routes + global app shell:
+
+| # | Module | PR | Merged |
+|---|---|---|---|
+| 1 | Dashboard | [#7](https://github.com/rafi-aman3/incident-management/pull/7) | 2026-05-06 |
+| 2 | Sidebar (global) | [#8](https://github.com/rafi-aman3/incident-management/pull/8) | 2026-05-06 |
+| 3 | Topbar (global) | [#9](https://github.com/rafi-aman3/incident-management/pull/9) | 2026-05-07 |
+| 4 | Incidents | [#10](https://github.com/rafi-aman3/incident-management/pull/10) | 2026-05-07 |
+| 5 | Investigations | [#11](https://github.com/rafi-aman3/incident-management/pull/11) | 2026-05-07 |
+| 6 | CAPA | [#17](https://github.com/rafi-aman3/incident-management/pull/17) | 2026-05-08 |
+| 7 | Reports | [#18](https://github.com/rafi-aman3/incident-management/pull/18) | 2026-05-08 |
+| 8 | Templates | [#19](https://github.com/rafi-aman3/incident-management/pull/19) | 2026-05-08 |
+| 9 | Inspections | [#20](https://github.com/rafi-aman3/incident-management/pull/20) | 2026-05-08 |
+| 10 | Resources | [#21](https://github.com/rafi-aman3/incident-management/pull/21) | 2026-05-08 |
+| 11 | Planner | [#22](https://github.com/rafi-aman3/incident-management/pull/22) | 2026-05-08 |
+| 12 | Admin | [#23](https://github.com/rafi-aman3/incident-management/pull/23) | 2026-05-08 |
+
+**Cross-cutting outcomes:**
+- Every shipped page has loading + error state coverage at appropriate boundaries (`/(auth)/invite/[token]/error.tsx` intentionally skipped per branch-typed errors precedent).
+- Calendar grid (Planner), Kanban (Investigations), 5×5 risk matrix (Incidents), template-builder tree (Templates), and inspection runner all have real WAI-ARIA roles + screen-reader announcements.
+- Destructive-action confirms across the app use the AlertDialog primitive (introduced 6c) — not plain Dialog.
+- Stripe-style type-the-name guard pattern shipped on `<ArchiveSiteDialog>` (11a) and `<ResetDataButton>` (6j) — both validate server-side independently of the client gate.
+- Save-failed Retry pattern appears on every long-form surface (5-Why, Findings, CAPA progress, Annual Hours, Templates autosave, Inspection runner, Site-setup wizard) — re-uses `useActionState`'s retained form state.
+- Empty-state copy differentiates org-fresh / filtered-down / all-disabled / no-permissions where applicable; no "No data" stubs remain.
+- 35-route audit corrected ~6 cross-cutting issues (Site Select null-currentSite radix warning · per-source aggregator failure visibility · radix grid keyboard a11y · token consistency on the few `text-amber-*` literals that drifted · stale Phase 11c placeholders · etc.).
+- `pnpm tsc --noEmit` clean across the closeout. `pnpm lint` baseline holds at 42/14 (improved from 42/16 mid-phase).
+
+**Roadmap (post-Phase-6):**
+- **Phase 7** = global search backend (consumes the 6l Cmd+K search shell + adds the `⌘K` shortcut + an `/api/search` endpoint with per-module result types).
+- **Phase 8** = Settings (account preferences only — Members moved to Phase 11 in the 2026-05-07 scope adjustment).
+- **Phase 9** = Argus AI assistant (stub plan claimed during 6b at `plans/09-argus-ai-assistant.md`).
+- **Phase 10** = Safety Bulletin step + then-on-top wizard 3→4 step restructure.
+
+---
 
 Reserved 2026-05-07; user scope absorbs the Members half of the original Phase 8 reservation (Phase 8 stays = Settings/account preferences only). Closes the Supabase-SQL-editor gap for every org-admin task. Reclaims the 4 dormant perm keys (`site:configure / member:invite / member:manage / role:edit`) declared in `init.sql` line 119–124 since Phase 0 but never granted to any default role.
 
@@ -311,4 +392,4 @@ Phase 11 closes. Plan: `plans/11c-roles-and-invitations.md`.
 
 ## Workflow notes
 
-Module 6j (Admin) queued — last per-module polish PR before Phase 6 closes. User kicks off each module with "start phase 6 <module>". Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+All Phase 6 polish PRs merged 2026-05-08 — V1 demo polish-complete. Next per the deferred roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 8 (Settings) → Phase 9 (Argus AI) → Phase 10 (Safety Bulletin + wizard restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.

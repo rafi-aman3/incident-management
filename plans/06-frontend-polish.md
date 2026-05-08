@@ -1,6 +1,27 @@
 # Phase 6 — Frontend Polish (page-by-page)
 
-**Status:** drafted 2026-05-06, immediately after Phase 5 merge / V1 feature-complete
+**Status:** **CLOSED 2026-05-08.** All 12 module-level polish PRs merged. V1 demo polish-complete.
+
+| # | Module | PR | Plan |
+|---|---|---|---|
+| 1 | Dashboard | [#7](https://github.com/rafi-aman3/incident-management/pull/7) | [`06a-dashboard-polish.md`](06a-dashboard-polish.md) |
+| 2 | Sidebar (global) | [#8](https://github.com/rafi-aman3/incident-management/pull/8) | [`06k-sidebar-polish.md`](06k-sidebar-polish.md) |
+| 3 | Topbar (global) | [#9](https://github.com/rafi-aman3/incident-management/pull/9) | [`06l-topbar-polish.md`](06l-topbar-polish.md) |
+| 4 | Incidents | [#10](https://github.com/rafi-aman3/incident-management/pull/10) | [`06b-incidents-polish.md`](06b-incidents-polish.md) |
+| 5 | Investigations | [#11](https://github.com/rafi-aman3/incident-management/pull/11) | [`06c-investigations-polish.md`](06c-investigations-polish.md) |
+| 6 | CAPA | [#17](https://github.com/rafi-aman3/incident-management/pull/17) | [`06d-capa-polish.md`](06d-capa-polish.md) |
+| 7 | Reports | [#18](https://github.com/rafi-aman3/incident-management/pull/18) | [`06e-reports-polish.md`](06e-reports-polish.md) |
+| 8 | Templates | [#19](https://github.com/rafi-aman3/incident-management/pull/19) | [`06f-templates-polish.md`](06f-templates-polish.md) |
+| 9 | Inspections | [#20](https://github.com/rafi-aman3/incident-management/pull/20) | [`06g-inspections-polish.md`](06g-inspections-polish.md) |
+| 10 | Resources | [#21](https://github.com/rafi-aman3/incident-management/pull/21) | [`06h-resources-polish.md`](06h-resources-polish.md) |
+| 11 | Planner | [#22](https://github.com/rafi-aman3/incident-management/pull/22) | [`06i-planner-polish.md`](06i-planner-polish.md) |
+| 12 | Admin | [#23](https://github.com/rafi-aman3/incident-management/pull/23) | [`06j-admin-polish.md`](06j-admin-polish.md) |
+
+See [`docs/BUILD_STATUS.md`](../docs/BUILD_STATUS.md) §"Phase 6 — Closed 2026-05-08" for the cross-cutting outcomes summary. Roadmap continues at Phase 7 (global search backend → consumes the 6l shell) → 8 (Settings) → 9 (Argus AI) → 10 (Safety Bulletin).
+
+---
+
+**Original status (preserved for record):** drafted 2026-05-06, immediately after Phase 5 merge / V1 feature-complete
 **Goal:** A page-by-page polish + small-functional-gap pass across every shipped V1 surface (10 modules · 35 routes). Each module ships as its own PR. The bar is consistency to `docs/design.md` tokens, complete state coverage (empty / loading / error), keyboard + a11y correctness, copy quality, dark-mode parity, and Cache Components correctness. Small functional gaps surfaced during the audit (missing empty-state CTA, broken keyboard trap, dead deep-link, missing tooltip, etc.) are fixed in-line — anything bigger gets logged in `docs/SPEC.md` §15 as a v2 item and skipped.
 **Estimated duration:** ~2 weeks (10 module PRs, ~1 day each on average; reports + templates are heavier)
 **Depends on:** Phase 0–5 (all merged on `main` 2026-05-06). No new schema, no new RPCs, no new perm keys (unless an audit surfaces a missing gate, in which case it's logged + slotted into the relevant module PR).
