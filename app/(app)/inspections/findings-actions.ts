@@ -12,11 +12,13 @@ import type { ActionResult } from "@/lib/incidents/schemas";
 // ---------------------------------------------------------------------------
 const ResolveSchema = z.object({
   finding_id: z.string().uuid(),
+  inspection_id: z.string().uuid(),
   notes: z.string().trim().max(2000).optional(),
 });
 
 export async function resolveFinding(input: {
   finding_id: string;
+  inspection_id: string;
   notes?: string;
 }): Promise<ActionResult> {
   const parsed = ResolveSchema.safeParse(input);
@@ -28,10 +30,13 @@ export async function resolveFinding(input: {
   // Look up site for the perm check
   const { data: f } = await supabase
     .from("inspection_findings")
-    .select("site_id, status, comment")
+    .select("site_id, inspection_id, status, comment")
     .eq("id", parsed.data.finding_id)
     .maybeSingle();
   if (!f) return { ok: false, error: "Finding not found" };
+  if (f.inspection_id !== parsed.data.inspection_id) {
+    return { ok: false, error: "Finding does not belong to this inspection" };
+  }
   if (f.status === "resolved" || f.status === "escalated_to_incident") {
     return { ok: false, error: "Finding is already finalized" };
   }
@@ -57,8 +62,11 @@ export async function resolveFinding(input: {
     .eq("id", parsed.data.finding_id);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath(`/inspections/${parsed.data.finding_id}`);
-  return { ok: true };
+  revalidatePath(
+    `/inspections/${parsed.data.inspection_id}/findings/${parsed.data.finding_id}`,
+  );
+  revalidatePath(`/inspections/${parsed.data.inspection_id}`);
+  redirect(`/inspections/${parsed.data.inspection_id}`);
 }
 
 // ---------------------------------------------------------------------------

@@ -74,6 +74,11 @@ export function InspectionList({ rows }: { rows: InspectionRow[] }) {
                 >
                   {row.title}
                 </Link>
+                {(row.status === "in_progress" || row.status === "draft") && (
+                  <span className="ml-2 inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    {row.status === "draft" ? "Continue draft" : "Resume"}
+                  </span>
+                )}
                 {row.is_failed && row.status === "completed" && (
                   <span className="ml-2 inline-flex items-center rounded-md border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
                     Has findings

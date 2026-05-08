@@ -12,6 +12,17 @@ import {
 import type { InspectionAnswerUpload } from "@/lib/templates/types";
 
 const MAX_BYTES = 25 * 1024 * 1024;
+const UPLOAD_TIMEOUT_MS = 30_000;
+
+type UploadOutcome =
+  | {
+      ok: true;
+      uploadId: string;
+      fileName: string;
+      storagePath: string;
+      previewUrl: string;
+    }
+  | { ok: false; fileName: string; error: string };
 
 export function MediaUploader({
   inspectionId,
@@ -31,48 +42,110 @@ export function MediaUploader({
   const [busy, setBusy] = useState(false);
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
+  async function uploadOne(file: File): Promise<UploadOutcome> {
+    if (file.size > MAX_BYTES) {
+      return { ok: false, fileName: file.name, error: "exceeds 25 MB" };
+    }
+    if (!file.type.startsWith("image/")) {
+      return {
+        ok: false,
+        fileName: file.name,
+        error: "only image files are supported",
+      };
+    }
+
+    const supabase = createClient();
+    const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+    const safe = `${crypto.randomUUID()}.${ext}`;
+    const path = `${inspectionId}/${safe}`;
+
+    // supabase-js storage upload doesn't honor an AbortSignal directly, so we
+    // race the upload against a timeout that rejects after UPLOAD_TIMEOUT_MS.
+    // The underlying request may still complete in the background, but we
+    // stop waiting and surface a failure for this file.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+    try {
+      const uploadPromise = supabase.storage
+        .from("inspection-uploads")
+        .upload(path, file, { upsert: false, contentType: file.type });
+      const abortPromise = new Promise<never>((_, reject) => {
+        controller.signal.addEventListener("abort", () =>
+          reject(new Error("upload stalled — timed out after 30s")),
+        );
+      });
+      const { error: upErr } = await Promise.race([uploadPromise, abortPromise]);
+      if (upErr) return { ok: false, fileName: file.name, error: upErr.message };
+
+      const res = await attachInspectionUpload({
+        inspection_id: inspectionId,
+        item_id: itemId,
+        storage_path: path,
+        file_name: file.name,
+        mime_type: file.type,
+        size_bytes: file.size,
+      });
+      if (!res.ok) return { ok: false, fileName: file.name, error: res.error };
+
+      return {
+        ok: true,
+        uploadId: res.data!.id,
+        fileName: file.name,
+        storagePath: path,
+        previewUrl: URL.createObjectURL(file),
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        fileName: file.name,
+        error: e instanceof Error ? e.message : "Upload failed",
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function uploadFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
+    const list = Array.from(files);
     setBusy(true);
-    const supabase = createClient();
-    const next: InspectionAnswerUpload[] = [];
     try {
-      for (const file of Array.from(files)) {
-        if (file.size > MAX_BYTES) {
-          throw new Error(`${file.name} exceeds 25 MB`);
+      const successes: InspectionAnswerUpload[] = [];
+      const newPreviews: Record<string, string> = {};
+      const failures: { fileName: string; error: string }[] = [];
+
+      for (const file of list) {
+        const outcome = await uploadOne(file);
+        if (outcome.ok) {
+          successes.push({
+            id: outcome.uploadId,
+            name: outcome.fileName,
+            storage_path: outcome.storagePath,
+          });
+          newPreviews[outcome.uploadId] = outcome.previewUrl;
+        } else {
+          failures.push({ fileName: outcome.fileName, error: outcome.error });
         }
-        if (!file.type.startsWith("image/")) {
-          throw new Error(`${file.name}: only images are supported`);
-        }
-        const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-        const safe = `${crypto.randomUUID()}.${ext}`;
-        const path = `${inspectionId}/${safe}`;
-        const { error: upErr } = await supabase.storage
-          .from("inspection-uploads")
-          .upload(path, file, { upsert: false, contentType: file.type });
-        if (upErr) throw upErr;
-        const res = await attachInspectionUpload({
-          inspection_id: inspectionId,
-          item_id: itemId,
-          storage_path: path,
-          file_name: file.name,
-          mime_type: file.type,
-          size_bytes: file.size,
-        });
-        if (!res.ok) throw new Error(res.error);
-        const upload: InspectionAnswerUpload = {
-          id: res.data!.id,
-          name: file.name,
-          storage_path: path,
-        };
-        next.push(upload);
-        setPreviews((p) => ({ ...p, [upload.id]: URL.createObjectURL(file) }));
       }
-      onChange([...uploads, ...next]);
+
+      if (successes.length > 0) {
+        setPreviews((p) => ({ ...p, ...newPreviews }));
+        onChange([...uploads, ...successes]);
+        toast.success(
+          successes.length === list.length
+            ? successes.length === 1
+              ? "Photo uploaded"
+              : `Uploaded ${successes.length} photos`
+            : `Uploaded ${successes.length} of ${list.length}`,
+        );
+      }
+
+      for (const f of failures) {
+        toast.error(`${f.fileName}: ${f.error}`);
+      }
+
       if (fileRef.current) fileRef.current.value = "";
       if (cameraRef.current) cameraRef.current.value = "";
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -116,17 +189,20 @@ export function MediaUploader({
           type="button"
           disabled={disabled || busy}
           onClick={() => cameraRef.current?.click()}
-          className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50 sm:hidden"
+          aria-label="Capture photo from camera"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border bg-background px-3 py-2.5 text-sm font-medium hover:bg-accent disabled:opacity-50 sm:hidden sm:min-h-0 sm:py-1.5 sm:text-xs"
         >
-          <Camera className="h-3 w-3" /> Capture photo
+          <Camera className="h-4 w-4" /> Capture photo
         </button>
         <button
           type="button"
           disabled={disabled || busy}
           onClick={() => fileRef.current?.click()}
-          className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+          aria-label="Upload images from device"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border bg-background px-3 py-2.5 text-sm font-medium hover:bg-accent disabled:opacity-50 sm:min-h-0 sm:py-1.5 sm:text-xs"
         >
-          <Upload className="h-3 w-3" /> {busy ? "Uploading…" : "Upload images"}
+          <Upload className="h-4 w-4 sm:h-3 sm:w-3" />{" "}
+          {busy ? "Uploading…" : "Upload images"}
         </button>
       </div>
 
@@ -156,8 +232,8 @@ export function MediaUploader({
                 <button
                   type="button"
                   onClick={() => handleRemove(u.id)}
-                  className="absolute right-1 top-1 rounded-md bg-background/80 p-1 text-destructive opacity-0 transition group-hover:opacity-100"
-                  aria-label="Remove"
+                  className="absolute right-1 top-1 rounded-md bg-background/80 p-1 text-destructive opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+                  aria-label={`Remove ${u.name}`}
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>

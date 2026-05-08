@@ -207,3 +207,32 @@ Re-run all of the above first, then walk these new affordances. ~5 min.
 14. **Editor tab a11y.** In the builder, the Body / Title-page switcher is `role="tablist"` with each tab `role="tab"` + `aria-selected`. The tree below has `role="tabpanel"` + `aria-labelledby` matching the active tab. Switching tabs preserves the tree-panel id binding.
 
 ✅ All 14 pass: 6f is shippable.
+
+---
+
+## Phase 6g — Inspections polish checkpoints (added 2026-05-08)
+
+Re-run the prior steps first, then walk these. Best on a 375px viewport (DevTools → Toggle device toolbar → iPhone SE) since the runner is the only mobile-first surface in V1.
+
+1. **Loading skeletons.** Hard-refresh `/inspections`, `/inspections/[id]` (both runner and report variants), `/inspections/[id]/findings/[findingId]`. Each route paints a skeleton matching the post-load layout — no blank flash, no layout shift.
+2. **Error boundary retry.** DevTools → Network → throttle to "Offline" → load `/inspections`. The destructive brand error card renders with **Try again** + **Back to dashboard**. Toggle online → click Try again → page recovers.
+3. **`/inspections/[id]` not-found.** Navigate to `/inspections/00000000-0000-0000-0000-000000000000`. The dashed not-found card surfaces with a "Back to inspections" CTA.
+4. **Per-file upload tolerance.** In the runner, on a media item, attach 3 image files where one is an invalid type (e.g. a `.txt` renamed `.png` so the MIME mismatches) or oversize (>25 MB). Toast reports "Uploaded 2 of 3" + an error toast for the rejected file. The 2 successes persist in the upload grid; refresh confirms.
+5. **AbortController stalled-upload.** DevTools → Network → "Slow 3G" + "Offline" toggle mid-upload. After 30s the upload reports "upload stalled — timed out after 30s" as a per-file failure toast. Other queued files in the same batch continue (or fail independently).
+6. **Save debounce.** On a runner text-response item, click into a textarea → blur out → wait 1s → see the network indicator flip from "Saving…" → "Saved Xs ago." If you blur again before the 1s elapses, only one network call fires (verify in the Network tab — `/inspections` server action, payload merged).
+7. **Network indicator state cycling.**
+   - **Online + saving:** Click a question button → pill shows "Saving…" with the spinner.
+   - **Online + saved:** ~1s after the last commit → pill shows "Saved <relative>".
+   - **Offline + last saved:** DevTools → Offline → pill flips to "Offline — last saved Xs ago."
+   - **Offline + never saved:** Hard-refresh while offline → pill shows "Offline."
+   - **Relative time refresh:** Wait 15+ seconds — the relative-time string updates in place (e.g. "Saved 12s ago" → "Saved 27s ago").
+8. **Signature pad a11y.** On a signature item: VoiceOver / TalkBack announces "Printed name, edit text" on the input (label is wired) and "Signature drawing area, image" on the canvas. The Clear button announces "Clear signature, button."
+9. **44px tap targets at 375px.** Inspect the runner Submit button + media-uploader Camera/Upload buttons in DevTools → confirm `min-height: 44px` on mobile (`sm:` breakpoint shrinks them on desktop). Sausage-finger test: tap each comfortably with a thumb.
+10. **AlertDialog: Mark Resolved.** On a finding detail, click "Mark resolved." The AlertDialog body has the "Resolution notes (optional)" textarea inline. Type a note → confirm → page redirects to the parent `/inspections/[id]`. The finding now shows the green "Resolved" pill with the appended note in the comment.
+11. **AlertDialog: Escalate.** On a different finding, click "Escalate to incident." Confirm. Page redirects to `/incidents/<newId>` with a draft incident pre-populated from the finding. Original finding shows "Escalated" pill on `/inspections/[id]`.
+12. **List filters auto-submit.** On `/inspections`, change the status select → URL updates immediately to `?status=in_progress`, list refreshes. Type into the search box → blur (or press Enter) → URL updates to `?q=...`. No "Apply" button anywhere.
+13. **Resume-vs-Continue chip.** With one in-progress and one completed inspection visible in `/inspections`, the in-progress row shows a "Resume" pill next to the title; completed rows show only the existing "Has findings" pill where applicable.
+14. **Findings panel `aria-label`.** On a completed-with-findings `/inspections/[id]`, screen reader announces the findings region as "Findings from this inspection, region" before listing the items.
+15. **Module 5 eyebrow gone.** `/inspections` page header shows just "Inspections" + sub-copy — no "Module 5" tag.
+
+✅ All 15 pass: 6g is shippable.

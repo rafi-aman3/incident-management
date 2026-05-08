@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { PenLine, Trash2 } from "lucide-react";
 
 /**
@@ -20,6 +20,7 @@ export function SignatureCanvas({
   saved: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nameInputId = useId();
   const [name, setName] = useState(initialName ?? "");
   const drawing = useRef(false);
   const lastPoint = useRef<{ x: number; y: number } | null>(null);
@@ -122,9 +123,13 @@ export function SignatureCanvas({
 
   return (
     <div className="space-y-2">
+      <label htmlFor={nameInputId} className="block text-xs font-medium text-muted-foreground">
+        Printed name
+      </label>
       <input
+        id={nameInputId}
         type="text"
-        placeholder="Name"
+        placeholder="Type your full name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         className="w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -139,12 +144,15 @@ export function SignatureCanvas({
           onPointerLeave={up}
           className="block h-32 w-full touch-none"
           style={{ touchAction: "none" }}
+          role="img"
+          aria-label="Signature drawing area"
         />
       </div>
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={clearCanvas}
+          aria-label="Clear signature"
           className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <Trash2 className="h-3 w-3" /> Clear
@@ -153,9 +161,10 @@ export function SignatureCanvas({
           type="button"
           onClick={save}
           disabled={!isDirty || !name.trim() || pending}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0 sm:py-1.5 sm:text-xs"
         >
-          <PenLine className="h-3 w-3" /> {pending ? "Saving..." : "Save signature"}
+          <PenLine className="h-4 w-4 sm:h-3 sm:w-3" />{" "}
+          {pending ? "Saving..." : "Save signature"}
         </button>
       </div>
     </div>

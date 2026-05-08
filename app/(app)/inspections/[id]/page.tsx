@@ -181,7 +181,10 @@ export default async function InspectionDetailPage({
       </div>
 
       {ins.status === "completed" && findingList.length > 0 && (
-        <section className="rounded-lg border bg-card">
+        <section
+          aria-label="Findings from this inspection"
+          className="rounded-lg border bg-card"
+        >
           <header className="flex items-center gap-2 border-b px-4 py-3">
             <FileBarChart className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Findings</h2>
