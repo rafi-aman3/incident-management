@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Settings } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { trir, dart, severityRate, formatKpi, isDartCase } from "@/lib/format/kpi";
@@ -28,66 +28,80 @@ export default async function Osha300APage({
   const canEditHours = currentSiteId
     ? await can("report:edit_hours", currentSiteId)
     : false;
+  const canConfigureSite = currentSiteId
+    ? await can("site:configure", currentSiteId)
+    : false;
 
-  let siteName = "—";
-  let address: string | null = null;
-  let establishmentId: string | null = null;
-  let naics: string | null = null;
-  let hoursWorked: number | null = null;
-  let cases: Osha300SourceRow[] = [];
-
-  if (canRead && currentSiteId) {
-    const yearStart = `${year}-01-01`;
-    const yearEnd = `${year + 1}-01-01`;
-
-    const [siteRes, hoursRes, casesRes] = await Promise.all([
-      supabase
-        .from("sites")
-        .select("name, address, osha_establishment_id, naics_code")
-        .eq("id", currentSiteId)
-        .single(),
-      supabase
-        .from("site_annual_hours")
-        .select("hours_worked")
-        .eq("site_id", currentSiteId)
-        .eq("year", year)
-        .maybeSingle(),
-      supabase
-        .from("incidents")
-        .select(
-          `id, ref_code, occurred_at, area, location, description,
-           injured_persons (
-             name, job_title, body_parts, injury_nature, object_substance,
-             days_away, days_restricted, fatality, treatment
-           )`
-        )
-        .eq("site_id", currentSiteId)
-        .eq("osha_recordable", true)
-        .eq("is_sandbox", false)
-        .is("deleted_at", null)
-        .gte("occurred_at", yearStart)
-        .lt("occurred_at", yearEnd),
-    ]);
-
-    if (siteRes.data) {
-      siteName = siteRes.data.name;
-      address = siteRes.data.address;
-      establishmentId = siteRes.data.osha_establishment_id;
-      naics = siteRes.data.naics_code;
-    }
-    hoursWorked = hoursRes.data?.hours_worked ?? null;
-
-    cases = (casesRes.data ?? []).flatMap((inc) =>
-      (inc.injured_persons ?? []).map((ip) => ({
-        case_number: inc.ref_code,
-        occurred_at: inc.occurred_at,
-        area: inc.area,
-        location: inc.location,
-        description: inc.description,
-        injured: ip,
-      }))
+  if (!canRead || !currentSiteId) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Link
+            href="/reports"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline"
+          >
+            <ArrowLeft className="h-3 w-3" /> Reports
+          </Link>
+          <h1 className="mt-1 text-2xl font-semibold">
+            OSHA 300A Annual Summary — {year}
+          </h1>
+        </div>
+        <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
+          You don&apos;t have access to OSHA 300A data on this site.
+        </div>
+      </div>
     );
   }
+
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year + 1}-01-01`;
+
+  const [siteRes, hoursRes, casesRes] = await Promise.all([
+    supabase
+      .from("sites")
+      .select("name, address, osha_establishment_id, naics_code")
+      .eq("id", currentSiteId)
+      .single(),
+    supabase
+      .from("site_annual_hours")
+      .select("hours_worked")
+      .eq("site_id", currentSiteId)
+      .eq("year", year)
+      .maybeSingle(),
+    supabase
+      .from("incidents")
+      .select(
+        `id, ref_code, occurred_at, area, location, description,
+         injured_persons (
+           name, job_title, body_parts, injury_nature, object_substance,
+           days_away, days_restricted, fatality, treatment
+         )`
+      )
+      .eq("site_id", currentSiteId)
+      .eq("osha_recordable", true)
+      .eq("is_sandbox", false)
+      .is("deleted_at", null)
+      .gte("occurred_at", yearStart)
+      .lt("occurred_at", yearEnd),
+  ]);
+
+  const siteName: string = siteRes.data?.name ?? "—";
+  const address: string | null = siteRes.data?.address ?? null;
+  const establishmentId: string | null =
+    siteRes.data?.osha_establishment_id ?? null;
+  const naics: string | null = siteRes.data?.naics_code ?? null;
+  const hoursWorked: number | null = hoursRes.data?.hours_worked ?? null;
+
+  const cases: Osha300SourceRow[] = (casesRes.data ?? []).flatMap((inc) =>
+    (inc.injured_persons ?? []).map((ip) => ({
+      case_number: inc.ref_code,
+      occurred_at: inc.occurred_at,
+      area: inc.area,
+      location: inc.location,
+      description: inc.description,
+      injured: ip,
+    }))
+  );
 
   const log = cases.map(deriveOsha300Row);
 
@@ -137,8 +151,10 @@ export default async function Osha300APage({
             <InfoTooltip tip="ita_deadline" />
           </p>
         </div>
-        <PrintButton />
-
+        <div className="flex items-center gap-2">
+          <YearPicker current={year} />
+          <PrintButton />
+        </div>
       </div>
 
       {/* Establishment info */}
@@ -149,8 +165,20 @@ export default async function Osha300APage({
         <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
           <Kv label="Name" value={siteName} />
           <Kv label="Address" value={address ?? "—"} />
-          <Kv label="OSHA establishment ID" value={establishmentId ?? "(unset)"} />
-          <Kv label="NAICS code" value={naics ?? "(unset)"} />
+          <Kv
+            label="OSHA establishment ID"
+            value={establishmentId ?? "(unset)"}
+            missing={!establishmentId}
+            siteId={currentSiteId}
+            canConfigureSite={canConfigureSite}
+          />
+          <Kv
+            label="NAICS code"
+            value={naics ?? "(unset)"}
+            missing={!naics}
+            siteId={currentSiteId}
+            canConfigureSite={canConfigureSite}
+          />
         </div>
       </div>
 
@@ -238,7 +266,10 @@ export default async function Osha300APage({
 
       {/* Death count callout */}
       {deaths > 0 && (
-        <div className="rounded-md border-l-4 border-destructive bg-destructive/5 p-3 text-sm">
+        <div
+          role="status"
+          className="rounded-md border-l-4 border-destructive bg-destructive/5 p-3 text-sm"
+        >
           <p className="font-medium">{deaths} fatality{deaths === 1 ? "" : "ies"}</p>
           <p className="text-[11px] text-muted-foreground">
             Fatalities count toward TRIR and must be reported separately on the 300A.
@@ -259,11 +290,55 @@ export default async function Osha300APage({
   );
 }
 
-function Kv({ label, value }: { label: string; value: string }) {
+function Kv({
+  label,
+  value,
+  missing,
+  siteId,
+  canConfigureSite,
+}: {
+  label: string;
+  value: string;
+  missing?: boolean;
+  siteId?: string;
+  canConfigureSite?: boolean;
+}) {
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="font-medium">{value}</p>
+      {missing && canConfigureSite && siteId && (
+        <Link
+          href={`/admin/sites/${siteId}#osha-section`}
+          className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-primary hover:underline print:hidden"
+        >
+          <Settings className="h-3 w-3" /> Configure
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function YearPicker({ current }: { current: number }) {
+  const now = new Date().getFullYear();
+  const years = [now, now - 1, now - 2, now - 3];
+  return (
+    <div className="flex items-center gap-1 rounded-md border p-0.5 text-xs print:hidden">
+      {years.map((y) => {
+        const active = y === current;
+        return (
+          <Link
+            key={y}
+            href={`/reports/osha-300a?year=${y}`}
+            aria-current={active ? "page" : undefined}
+            className={`rounded px-2 py-1 font-medium tabular-nums ${
+              active ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+            }`}
+          >
+            {y}
+          </Link>
+        );
+      })}
     </div>
   );
 }

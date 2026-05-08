@@ -9,6 +9,7 @@ import {
   type F2508Source,
 } from "@/lib/format/riddorF2508";
 import { PrintButton } from "@/components/reports/print-button";
+import { PdfErrorBanner } from "@/components/reports/pdf-error-banner";
 import {
   HseRecordCard,
   type HseRecord,
@@ -17,27 +18,27 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 type Params = Promise<{ incidentId: string }>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function RiddorF2508Page({ params }: { params: Params }) {
+export default async function RiddorF2508Page({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: SearchParams;
+}) {
   const { incidentId } = await params;
-  const { supabase, currentSiteId } = await requireUser();
+  const sp = await searchParams;
+  const pdfErrorCode =
+    typeof sp.pdf_error === "string" ? sp.pdf_error : null;
+  const { supabase } = await requireUser();
 
-  const canRead = currentSiteId
-    ? await can("incident:read_site", currentSiteId)
-    : false;
-  const canExport = currentSiteId
-    ? await can("report:export", currentSiteId)
-    : false;
-  const canEditRecord = currentSiteId
-    ? await can("notification:hse_record_edit", currentSiteId)
-    : false;
-
-  if (!canRead) notFound();
-
+  // Fetch incident first (RLS-bound), then guard via the incident's site_id
+  // so multi-site users with cookie on the "wrong" site don't 404.
   const { data: incident, error } = await supabase
     .from("incidents")
     .select(
-      `id, ref_code, occurred_at, area, location, description,
+      `id, site_id, ref_code, occurred_at, area, location, description,
        dangerous_occurrence_kind, riddor_reportable, is_sandbox,
        site:site_id ( name, address, country ),
        injured_persons (
@@ -52,6 +53,14 @@ export default async function RiddorF2508Page({ params }: { params: Params }) {
   if (error || !incident || !incident.site) notFound();
   // RIDDOR is UK-only — 404 for non-GB sites per ui-flow §8.17.
   if (incident.site.country !== "GB") notFound();
+
+  const canRead = await can("incident:read_site", incident.site_id);
+  const canExport = await can("report:export", incident.site_id);
+  const canEditRecord = await can(
+    "notification:hse_record_edit",
+    incident.site_id
+  );
+  if (!canRead) notFound();
 
   const ip = (incident.injured_persons ?? [])[0];
   const extraCount = (incident.injured_persons ?? []).length - 1;
@@ -124,6 +133,11 @@ export default async function RiddorF2508Page({ params }: { params: Params }) {
             2013. Death / specified injury → phone HSE immediately + F2508
             within 10 days.
           </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            <strong className="font-semibold text-foreground">This is a record.</strong>{" "}
+            Submit through the HSE online portal — HSE doesn&apos;t accept this
+            PDF.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <PrintButton />
@@ -137,6 +151,8 @@ export default async function RiddorF2508Page({ params }: { params: Params }) {
           )}
         </div>
       </div>
+
+      <PdfErrorBanner code={pdfErrorCode} />
 
       {!incident.riddor_reportable && (
         <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs">
@@ -176,6 +192,10 @@ export default async function RiddorF2508Page({ params }: { params: Params }) {
         record={record}
         canEdit={canEditRecord}
       />
+
+      <p className="text-[11px] text-muted-foreground print:hidden">
+        Retain this record for 3 years per RIDDOR 2013, Reg. 12.
+      </p>
     </div>
     </TooltipProvider>
   );
@@ -190,9 +210,9 @@ function FieldGroup({
 }) {
   return (
     <div className="border-b last:border-b-0">
-      <p className="bg-muted/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide">
+      <h2 className="bg-muted/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide">
         {label}
-      </p>
+      </h2>
       <ul className="divide-y">
         {fields.map((f) => (
           <li

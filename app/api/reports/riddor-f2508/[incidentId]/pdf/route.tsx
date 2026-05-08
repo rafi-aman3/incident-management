@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
@@ -11,17 +12,12 @@ type Params = Promise<{ incidentId: string }>;
 
 export async function GET(_req: Request, { params }: { params: Params }) {
   const { incidentId } = await params;
-  const { supabase, currentSiteId } = await requireUser();
-
-  if (!currentSiteId) return new NextResponse("No active site", { status: 400 });
-  if (!(await can("report:export", currentSiteId))) {
-    return new NextResponse("Forbidden", { status: 403 });
-  }
+  const { supabase } = await requireUser();
 
   const { data: incident, error } = await supabase
     .from("incidents")
     .select(
-      `id, ref_code, occurred_at, area, location, description,
+      `id, site_id, ref_code, occurred_at, area, location, description,
        dangerous_occurrence_kind, riddor_reportable,
        site:site_id ( name, address, country ),
        injured_persons (
@@ -34,10 +30,13 @@ export async function GET(_req: Request, { params }: { params: Params }) {
     .single();
 
   if (error || !incident || !incident.site) {
-    return new NextResponse("Incident not found", { status: 404 });
+    redirect(`/reports?pdf_error=not_found`);
   }
   if (incident.site.country !== "GB") {
-    return new NextResponse("RIDDOR is UK-only", { status: 404 });
+    redirect(`/reports?pdf_error=not_riddor_jurisdiction`);
+  }
+  if (!(await can("report:export", incident.site_id))) {
+    redirect(`/reports/riddor-f2508/${incident.id}?pdf_error=forbidden`);
   }
 
   const ip = (incident.injured_persons ?? [])[0];
@@ -67,14 +66,17 @@ export async function GET(_req: Request, { params }: { params: Params }) {
     },
   };
 
-  const buffer = await renderToBuffer(<RiddorF2508Pdf source={source} />);
-  const fileName = `riddor-f2508-${incident.ref_code ?? incident.id}.pdf`;
-
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="${fileName}"`,
-      "cache-control": "no-store",
-    },
-  });
+  try {
+    const buffer = await renderToBuffer(<RiddorF2508Pdf source={source} />);
+    const fileName = `riddor-f2508-${incident.ref_code ?? incident.id}.pdf`;
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        "content-type": "application/pdf",
+        "content-disposition": `attachment; filename="${fileName}"`,
+        "cache-control": "no-store",
+      },
+    });
+  } catch {
+    redirect(`/reports/riddor-f2508/${incident.id}?pdf_error=render_failed`);
+  }
 }

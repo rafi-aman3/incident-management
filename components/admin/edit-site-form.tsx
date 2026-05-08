@@ -159,7 +159,7 @@ export function EditSiteForm({
       </div>
 
       {isUS && (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div id="osha-section" className="grid grid-cols-1 gap-5 md:grid-cols-2 scroll-mt-20">
           <div className="space-y-2">
             <Label htmlFor="osha_establishment_id">OSHA establishment ID (optional)</Label>
             <Input
