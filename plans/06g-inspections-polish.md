@@ -7,26 +7,29 @@
 **Pages covered:** `/inspections`, `/inspections/[id]` (dual-mode runner OR completed report), `/inspections/[id]/findings/[findingId]`
 
 > **What this PR ships:**
-> - `loading.tsx` + `error.tsx` at all 3 routes (none exist — verified 2026-05-08).
+> - `loading.tsx` + `error.tsx` at all 3 routes (none exist — verified 2026-05-08); `not-found.tsx` at `/inspections/[id]`.
 > - **Photo upload resilience**: per-file error handling so one bad file no longer aborts the batch (real bug at `media-uploader.tsx:62`); `AbortController` per-file + 30s timeout; batch-count progress feedback ("3 of 5 uploaded").
 > - **Save debounce on answer commits**: `saveInspectionAnswer()` is fire-and-forget on every keystroke today (`inspection-runner.tsx:140, 185`); add a 1s debounce so a typing user doesn't fire a request per keystroke.
+> - **Network indicator in the runner topbar with last-saved timestamp** (resolved per Q2): tracks `lastSavedAt` + watches `navigator.onLine` via the standard `online` / `offline` window events; renders compact pill cycling between "Saving…" / "Saved 12s ago" / "Offline — last saved 2m ago" / "Offline" (never-saved). Mobile-first: lives in the existing sticky topbar at 375px without breaking the progress-bar row.
+> - **`<AlertDialog>` confirm on Mark Resolved** in `FindingActionsCard` (resolved per Q4): wraps the action with the optional notes textarea inline in the dialog body. Matches the destructive-action precedent from 6c/6f.
 > - **Signature pad a11y**: name input gains a `<label htmlFor>`; canvas gains `aria-label="Signature drawing area"`; clear button aria-label confirmed.
 > - **Tap targets ≥44px on mobile** for the runner's primary action buttons + `MediaUploader` Camera / Upload buttons (currently `py-1.5` ≈ 28px total, below spec).
 > - **Icon-only buttons** in `MediaUploader` (Camera, Upload, Remove) get `aria-label`.
 > - **`<AlertDialog>` confirm on Escalate-to-Incident** in `FindingActionsCard` — destructive (creates a new incident row) but currently fire-and-forget. Reuse the 6c primitive at `components/ui/alert-dialog.tsx`.
 > - **"Module 5" eyebrow drop** on `/inspections` (matches 6b/6c/6d/6e/6f sequencing).
-> - **List-page filter form**: status select + search auto-submit on change (currently the form has an "Apply" button that has no clear submit semantics; the filters should behave like every other 6c/6d/6f filter strip — URL-driven, no Apply button).
+> - **List-page filter form** (resolved per Q5): status select + search auto-submit on change. The "Apply" button is dropped to match every other 6c/6d/6f filter strip — URL-driven via `useRouter().push()`.
 > - **List `aria-label`s** on the inspections table + findings panel on the dual-mode detail.
-> - **Already-resolved finding redirect**: when a finding is marked resolved or escalated, redirect to the parent inspection detail rather than staying on the finding page (the action's revalidation re-fetches but the URL stays — small UX gap).
+> - **Already-resolved finding redirect**: when a finding is marked resolved or escalated, redirect to the parent inspection (Mark Resolved → `/inspections/[id]`) or to the new incident (Escalate → `/incidents/[newId]`) rather than staying on the finding page.
 
 > **Not in this PR (deferred to v2 with §15 entry as needed):**
-> - **No PWA / native-offline mode.** Online-with-tolerance only — the AbortController + per-file error handling above is the v1 ceiling. Full offline queue (IndexedDB-backed retry on reconnect) is v2.
+> - **No PWA / native-offline mode.** Online-with-tolerance only — the AbortController + per-file error handling + network indicator above are the v1 ceiling. Full offline queue (IndexedDB-backed retry on reconnect) is v2.
 > - **No per-file upload progress %.** Supabase JS doesn't expose native upload progress for the storage client; the polish here is batch-count ("3 of 5"), not a per-file progress bar (would require switching to XHR + signed-URL uploads — that's a refactor).
 > - **No GPS / geo-tagging on photos.** Per `IMS_PLANNING.md` §15.5.4.
 > - **No live multi-inspector collaboration.** Single user per inspection.
-> - **No auto-redirect-after-Mark-Resolved scroll-to-CAPA.** Surfacing a linked CAPA on the finding page (when one was created from this finding) is a nice-to-have but not the polish bar — will scope post-PR if it ships fast.
+> - **No linked-CAPA surfacing on the finding detail.** Out of scope — would query `capas` for records linked to this finding and render an inline link. Worth scoping post-PR if it ships fast.
 > - **No section-header sticky-on-scroll** in the runner. Long checklists do scroll headers out of view, but adding `sticky top-[3.5rem]` interacts with the existing sticky topbar and needs design validation against the 375px viewport before shipping.
-> - **No "Save & exit" CTA.** Auto-save is transparent; the back arrow exits silently. Adding a confirm or a toast-on-first-save is judgment-call territory — open question below.
+> - **No "Save & exit" CTA.** Auto-save stays silent (per Q1) — adding a CTA would suggest the back arrow does NOT save, which is misleading.
+> - **No SaveIndicator in the runner topbar** (per Q1). The new network indicator (per Q2) carries the save-state signal — no separate SaveIndicator needed.
 
 ---
 
@@ -70,7 +73,7 @@
 | Mode dispatch | Server-side at line 107: status `in_progress` / `draft` → runner; else report. Perm-gated. ✅ | — |
 | Sticky progress bar | `sticky top-0 z-10` (line 206). ✅ | — |
 | Section headers | Not sticky. Long checklists scroll headers off. | **Defer** (interacts with the existing sticky topbar at 375px; needs design validation). |
-| "Save & exit" / network indicator | No explicit affordance. Auto-save is silent. No online/offline indicator. | Open question — see Q3 below. |
+| "Save & exit" / network indicator | No explicit affordance. Auto-save stays silent (per Q1). **Network indicator with last-saved timestamp ships** (per Q2): lives in the existing sticky topbar; tracks `navigator.onLine` + last successful-save timestamp. | New small component `components/inspections/runner/network-indicator.tsx`: subscribes to `online` + `offline` window events, accepts `lastSavedAt: Date | null` + `status: SaveStatus` from the runner, renders the cycling pill. Updates the relative-time label every 15s via `setInterval` while mounted. |
 | Double-submit guard | Submit button disables while `submitting` (line 226). ✅ Two-tab race: server RPC `complete_inspection_v1` is idempotent — second call rejects silently. Acceptable. | — |
 
 ### 3. `/inspections/[id]/findings/[findingId]`
@@ -81,7 +84,7 @@
 | 3. Loading | ❌ No `loading.tsx`. | Add skeleton (header + content grid + sidebar action card). |
 | 4. Error state | ❌ No `error.tsx`. ✅ `notFound()` wired (line 46). | Add `error.tsx`. |
 | 6. A11y | ✅ Resolution-notes textarea has `<label htmlFor>` (line ~58). ❌ Mark Resolved + Escalate buttons (`finding-actions-card.tsx:72–89`) lack descriptive `aria-label`. | Add `aria-label="Mark this finding resolved with optional notes"` + `aria-label="Escalate this finding to a new incident"`. |
-| 7. Form-error UX | `useTransition()` guards pending state ✅. ❌ Escalate is destructive (creates a new incident row + redirects) with no confirm modal. ❌ Already-resolved branch surfaces a finalized pill (lines 144–152) — correct. | Wrap Escalate in `<AlertDialog>`: "Create a new incident from this finding? A draft incident ref will be generated and you'll land on the new incident's detail page." Cancel default; brand-purple confirm. |
+| 7. Form-error UX | `useTransition()` guards pending state ✅. ❌ Escalate is destructive (creates a new incident row + redirects) with no confirm modal. ❌ Mark Resolved fires immediately with no confirm — per Q4 we add a confirm with the optional notes inline. ❌ Already-resolved branch surfaces a finalized pill (lines 144–152) — correct. | Wrap Escalate in `<AlertDialog>`: "Create a new incident from this finding? A draft incident ref will be generated and you'll land on the new incident's detail page." Cancel default; brand-purple confirm. Wrap Mark Resolved in a separate `<AlertDialog>` whose body contains the existing "Resolution notes (optional)" textarea — keeps the optional-notes flow but adds the destructive-action precedent. |
 | Post-action navigation | After `resolveFinding` or `escalateFindingToIncident`, the page stays on the finding URL (action revalidates but browser doesn't redirect). User has to use browser back. | After Mark Resolved: redirect to the parent `/inspections/[id]` (the inspection's findings panel). After Escalate: redirect to `/incidents/[newId]` (server action already returns the incident id; just `redirect(...)` after the RPC). |
 
 ---
@@ -120,30 +123,34 @@ This is ~30 lines of refactor inside the existing component; no new file needed.
 3. Photo upload tolerates per-file failure: a 5-file upload where file 3 fails reports "Uploaded 4 of 5" + 1 error toast; the 4 successes are persisted.
 4. AbortController per-file with a 30s timeout fires on stalled uploads.
 5. `saveInspectionAnswer` debounced 1s; verified by typing "asdf" into a text-response question and observing only one network request after the typing settles.
-6. Signature canvas has `aria-label`; name input has `<label htmlFor>`.
-7. Runner Submit + media-uploader Camera/Upload buttons hit ≥44px on mobile (verified at 375px viewport).
-8. Escalate-to-Incident gated by `<AlertDialog>` confirm.
-9. Mark Resolved redirects to parent inspection; Escalate redirects to new incident.
-10. List-page filters auto-submit on change (no "Apply" button).
-11. "Module 5" eyebrow dropped from `/inspections`.
-12. `pnpm tsc --noEmit` clean.
-13. Smoke-test: extend `docs/smoke-test-phase3.md` with 8 new 6g checkpoints (loading skeletons / error retry / per-file upload error / AbortController stall recovery / save debounce / signature a11y / Escalate confirm / post-action redirects).
-14. PR description includes:
-    - 30s screen recording of runner on 375px viewport (one-thumb scroll + photo capture + signature + complete).
-    - Network-drop demo: Network throttle to "Slow 3G" mid-upload → AbortController fires after 30s → batch reports failure for that file but succeeds for the others.
+6. **Network indicator** in the runner topbar shows the right state across (a) online + saving, (b) online + saved with relative timestamp, (c) offline + last-saved-Nm-ago, (d) offline + never-saved. Updates every 15s while mounted.
+7. Signature canvas has `aria-label`; name input has `<label htmlFor>`.
+8. Runner Submit + media-uploader Camera/Upload buttons hit ≥44px on mobile (verified at 375px viewport).
+9. Escalate-to-Incident gated by `<AlertDialog>` confirm.
+10. **Mark Resolved gated by `<AlertDialog>` confirm** with the optional notes textarea inline in the dialog body.
+11. Mark Resolved redirects to parent inspection; Escalate redirects to new incident.
+12. List-page filters auto-submit on change (no "Apply" button).
+13. "Module 5" eyebrow dropped from `/inspections`.
+14. `pnpm tsc --noEmit` clean.
+15. Smoke-test: extend `docs/smoke-test-phase3.md` with 9 new 6g checkpoints (loading skeletons / error retry / per-file upload error / AbortController stall recovery / save debounce / network indicator state cycling / signature a11y / Mark Resolved + Escalate confirms / post-action redirects).
+16. PR description includes:
+    - 30s screen recording of runner on 375px viewport (one-thumb scroll + photo capture + signature + complete + observe the network indicator across save states).
+    - Network-drop demo: throttle to "Offline" mid-upload → AbortController fires after 30s → batch reports failure for that file but succeeds for the others; runner topbar pill flips to "Offline — last saved Xs ago".
     - Before/after screenshots for tap-target sizes + signature a11y.
 
 ---
 
-## Open questions for the user (resolve before coding)
+## Open questions — all resolved 2026-05-08
 
-1. **"Save & exit" CTA + auto-save indicator.** Today the runner's autosave is silent and the back arrow exits without a confirm. Do we (a) **leave it silent** (recommend — fire-and-forget saves work; user trust comes from durability not chrome), (b) add a one-time toast on first save ("Changes saved automatically"), or (c) add a small "Saved" indicator near the topbar that mirrors the Templates editor's `SaveIndicator`?
-2. **Network indicator (online/offline pill in the runner topbar).** `navigator.onLine` is cheap. (a) **Drop entirely** (recommend — without offline-queue support, an offline pill just communicates a problem we don't fix), (b) add a passive "Offline" pill that shows when `navigator.onLine === false`, (c) full network indicator with last-saved timestamp.
-3. **Per-file upload progress UI.** Supabase JS doesn't expose native upload progress; getting per-file % requires switching to XHR + signed-URL uploads (substantive refactor). (a) **Batch count only** (recommend — "3 of 5 uploaded" is honest about what we can measure), (b) refactor to XHR + signed URLs to surface real per-file %, (c) skip the indicator entirely.
-4. **Confirmation modal on Mark Resolved.** Today resolveFinding fires immediately when the user clicks. Notes textarea is optional. (a) **Add `<AlertDialog>` confirm with the notes textarea inline** (recommend — matches the destructive-action pattern set by 6c/6f), (b) keep current (notes are optional and resolve is reversible by editing the row), (c) make notes required + click-to-confirm.
-5. **List-page filter Apply-button removal.** The current "Apply" button is inconsistent with every other 6c/6d/6f filter strip. (a) **Remove + auto-submit on change** (recommend — matches precedent), (b) keep the Apply button and just make it work consistently, (c) deferred — it works today, polish is cosmetic.
-6. **"Save & exit" → preserves state.** Whether we add an explicit "Save & exit" CTA. Today the back arrow leaves silently and the auto-save preserves state, so "Save & exit" is functionally identical to back. (a) **Skip** (recommend — adding one would suggest the back arrow does NOT save, which is misleading), (b) add it for explicit reassurance, (c) repurpose the back arrow's behavior to confirm-then-exit.
+| # | Question | Resolution |
+|---|---|---|
+| 1 | "Save & exit" CTA + autosave indicator | **Leave silent.** No SaveIndicator in the runner topbar; back arrow keeps current silent-exit behavior (autosave preserves state). |
+| 2 | Network indicator | **Full indicator with last-saved timestamp.** New `components/inspections/runner/network-indicator.tsx` cycles "Saving…" / "Saved 12s ago" / "Offline — last saved Nm ago" / "Offline" (never-saved). Lives in the existing sticky topbar; updates every 15s while mounted. |
+| 3 | Per-file upload progress UI | **Batch count only** ("3 of 5 uploaded" + per-failure toasts). No XHR refactor. |
+| 4 | Confirmation modal on Mark Resolved | **AlertDialog with notes inline** in the dialog body (notes stay optional). Matches 6c/6f destructive-action precedent. |
+| 5 | List-page filter Apply-button removal | **Remove + auto-submit on change.** Matches every other 6c/6d/6f filter strip. |
+| 6 | Explicit "Save & exit" CTA | **Skip.** Adding one would suggest the back arrow does NOT save — misleading. |
 
 ---
 
-**Plan author note:** the original 06g stub from 2026-05-06 has been wholly replaced by this re-audit. All 14 DoD items above replace the 10 in the prior version (key adds: per-file upload, save debounce, signature a11y, tap targets, post-action redirects). Coding pauses until the user answers Q1–Q6 above. Recommended defaults are flagged so the user can rubber-stamp.
+**Plan author note:** the original 06g stub from 2026-05-06 has been wholly replaced by this re-audit. All 16 DoD items above replace the 10 in the prior version. All 6 open questions resolved 2026-05-08; coding can start.
