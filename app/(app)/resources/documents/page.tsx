@@ -208,15 +208,15 @@ export default async function DocumentsPage({
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border">
-          <Table>
+          <Table aria-label="Documents">
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Scope</TableHead>
-                <TableHead>Uploaded</TableHead>
-                <TableHead>Expiry</TableHead>
-                <TableHead className="text-right">Links</TableHead>
+                <TableHead scope="col">Name</TableHead>
+                <TableHead scope="col">Type</TableHead>
+                <TableHead scope="col">Scope</TableHead>
+                <TableHead scope="col">Uploaded</TableHead>
+                <TableHead scope="col">Expiry</TableHead>
+                <TableHead scope="col" className="text-right">Links</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -261,9 +261,6 @@ export default async function DocumentsPage({
 function Header() {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-        Module 4 · Resources
-      </p>
       <h1 className="flex items-center gap-2 text-2xl font-semibold">
         <Files className="h-6 w-6" />
         Documents

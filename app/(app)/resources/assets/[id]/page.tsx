@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Boxes,
   Calendar,
@@ -130,36 +131,62 @@ export default async function AssetDetailPage({
       <Tabs current={tab} assetId={asset.id} />
 
       {tab === "overview" && (
-        <OverviewTab
-          condition={asset.condition as AssetCondition}
-          location={asset.location}
-          lastInspected={asset.last_inspected_at}
-          nextPm={asset.next_pm_at}
-          notes={asset.notes}
-          sds={
-            sdsRaw
-              ? {
-                  id: sdsRaw.id,
-                  name: sdsRaw.name,
-                  type: sdsRaw.type as DocumentType,
-                  file_name: sdsRaw.file_name,
-                }
-              : null
-          }
-        />
+        <div
+          role="tabpanel"
+          id="asset-panel-overview"
+          aria-labelledby="asset-tab-overview"
+        >
+          <OverviewTab
+            condition={asset.condition as AssetCondition}
+            location={asset.location}
+            lastInspected={asset.last_inspected_at}
+            nextPm={asset.next_pm_at}
+            notes={asset.notes}
+            sds={
+              sdsRaw
+                ? {
+                    id: sdsRaw.id,
+                    name: sdsRaw.name,
+                    type: sdsRaw.type as DocumentType,
+                    file_name: sdsRaw.file_name,
+                  }
+                : null
+            }
+          />
+        </div>
       )}
 
-      {tab === "incidents" && <IncidentsTab assetId={asset.id} orgId={profile.org_id} />}
+      {tab === "incidents" && (
+        <div
+          role="tabpanel"
+          id="asset-panel-incidents"
+          aria-labelledby="asset-tab-incidents"
+        >
+          <IncidentsTab assetId={asset.id} orgId={profile.org_id} />
+        </div>
+      )}
       {tab === "inspections" && (
-        <InspectionsTab siteId={asset.site_id} kind={asset.kind as AssetKind} />
+        <div
+          role="tabpanel"
+          id="asset-panel-inspections"
+          aria-labelledby="asset-tab-inspections"
+        >
+          <InspectionsTab siteId={asset.site_id} kind={asset.kind as AssetKind} />
+        </div>
       )}
       {tab === "documents" && (
-        <DocumentsTab
-          assetId={asset.id}
-          orgId={profile.org_id}
-          sds={sdsRaw}
-          canLink={canLink}
-        />
+        <div
+          role="tabpanel"
+          id="asset-panel-documents"
+          aria-labelledby="asset-tab-documents"
+        >
+          <DocumentsTab
+            assetId={asset.id}
+            orgId={profile.org_id}
+            sds={sdsRaw}
+            canLink={canLink}
+          />
+        </div>
       )}
     </div>
   );
@@ -168,9 +195,25 @@ export default async function AssetDetailPage({
 // ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
+function TabError({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      <span>{message}</span>
+    </div>
+  );
+}
+
 function Tabs({ current, assetId }: { current: TabKey; assetId: string }) {
   return (
-    <nav className="flex flex-wrap gap-1 border-b text-sm">
+    <nav
+      role="tablist"
+      aria-label="Asset detail sections"
+      className="flex flex-wrap gap-1 border-b text-sm"
+    >
       {TABS.map((key) => {
         const active = current === key;
         const href =
@@ -181,6 +224,11 @@ function Tabs({ current, assetId }: { current: TabKey; assetId: string }) {
           <Link
             key={key}
             href={href}
+            role="tab"
+            id={`asset-tab-${key}`}
+            aria-selected={active}
+            aria-controls={`asset-panel-${key}`}
+            tabIndex={active ? 0 : -1}
             className={cn(
               "border-b-2 px-3 py-2 font-medium capitalize transition-colors",
               active
@@ -292,7 +340,7 @@ async function IncidentsTab({ assetId, orgId }: { assetId: string; orgId: string
     .order("occurred_at", { ascending: false })
     .limit(50);
   if (error) {
-    return <p className="text-sm text-destructive">{error.message}</p>;
+    return <TabError message={error.message} />;
   }
   if (!data || data.length === 0) {
     return (
@@ -353,7 +401,7 @@ async function InspectionsTab({
     .order("conducted_at", { ascending: false, nullsFirst: false })
     .limit(20);
   if (error) {
-    return <p className="text-sm text-destructive">{error.message}</p>;
+    return <TabError message={error.message} />;
   }
   if (!data || data.length === 0) {
     return (
@@ -431,7 +479,7 @@ async function DocumentsTab({
     .is("removed_at", null)
     .order("created_at", { ascending: false });
   if (error) {
-    return <p className="text-sm text-destructive">{error.message}</p>;
+    return <TabError message={error.message} />;
   }
 
   type LinkRow = {

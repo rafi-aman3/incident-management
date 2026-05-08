@@ -62,6 +62,9 @@ export function AssetForm({
     if (state && state.ok === false) toast.error(state.error);
   }, [state]);
 
+  const fieldErrors = (state && state.ok === false ? state.fieldErrors : undefined) ?? {};
+  const errFor = (key: string): string | undefined => fieldErrors[key]?.[0];
+
   return (
     <form action={action} className="space-y-5 rounded-lg border bg-card p-6">
       {isEdit && <input type="hidden" name="id" value={defaults!.id} />}
@@ -79,8 +82,15 @@ export function AssetForm({
             maxLength={160}
             defaultValue={defaults?.name ?? ""}
             placeholder="e.g. Hyster H40 — Bay 3"
+            aria-invalid={!!errFor("name")}
+            aria-describedby={errFor("name") ? "name-err" : undefined}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           />
+          {errFor("name") && (
+            <p id="name-err" className="mt-1 text-xs text-destructive">
+              {errFor("name")}
+            </p>
+          )}
         </div>
 
         <div>
@@ -92,6 +102,8 @@ export function AssetForm({
             id="kind"
             required
             defaultValue={defaults?.kind ?? "other"}
+            aria-invalid={!!errFor("kind")}
+            aria-describedby={errFor("kind") ? "kind-err" : undefined}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           >
             {ASSET_KINDS.map((k) => (
@@ -100,6 +112,11 @@ export function AssetForm({
               </option>
             ))}
           </select>
+          {errFor("kind") && (
+            <p id="kind-err" className="mt-1 text-xs text-destructive">
+              {errFor("kind")}
+            </p>
+          )}
         </div>
 
         <div>
@@ -111,6 +128,8 @@ export function AssetForm({
             id="site_id"
             required
             defaultValue={defaults?.site_id ?? sites[0]?.id ?? ""}
+            aria-invalid={!!errFor("site_id")}
+            aria-describedby={errFor("site_id") ? "site_id-err" : undefined}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           >
             {sites.length === 0 && <option value="">No site available</option>}
@@ -120,6 +139,11 @@ export function AssetForm({
               </option>
             ))}
           </select>
+          {errFor("site_id") && (
+            <p id="site_id-err" className="mt-1 text-xs text-destructive">
+              {errFor("site_id")}
+            </p>
+          )}
         </div>
 
         <div>
@@ -133,8 +157,15 @@ export function AssetForm({
             maxLength={160}
             defaultValue={defaults?.location ?? ""}
             placeholder="Bay 3, Aisle A"
+            aria-invalid={!!errFor("location")}
+            aria-describedby={errFor("location") ? "location-err" : undefined}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           />
+          {errFor("location") && (
+            <p id="location-err" className="mt-1 text-xs text-destructive">
+              {errFor("location")}
+            </p>
+          )}
         </div>
 
         <div>
@@ -145,6 +176,8 @@ export function AssetForm({
             name="condition"
             id="condition"
             defaultValue={defaults?.condition ?? "good"}
+            aria-invalid={!!errFor("condition")}
+            aria-describedby={errFor("condition") ? "condition-err" : undefined}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           >
             {ASSET_CONDITIONS.map((c) => (
@@ -153,6 +186,11 @@ export function AssetForm({
               </option>
             ))}
           </select>
+          {errFor("condition") && (
+            <p id="condition-err" className="mt-1 text-xs text-destructive">
+              {errFor("condition")}
+            </p>
+          )}
         </div>
 
         <div>
@@ -163,6 +201,7 @@ export function AssetForm({
             name="status"
             id="status"
             defaultValue={defaults?.status ?? "active"}
+            aria-invalid={!!errFor("status")}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           >
             {ASSET_STATUSES.map((s) => (
@@ -171,6 +210,9 @@ export function AssetForm({
               </option>
             ))}
           </select>
+          {errFor("status") && (
+            <p className="mt-1 text-xs text-destructive">{errFor("status")}</p>
+          )}
         </div>
 
         <div>
@@ -186,8 +228,18 @@ export function AssetForm({
                 ? defaults.last_inspected_at.slice(0, 10)
                 : ""
             }
+            aria-invalid={!!errFor("last_inspected_at")}
+            aria-describedby={errFor("last_inspected_at") ? "last_inspected_at-err" : "last_inspected_at-help"}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           />
+          <p id="last_inspected_at-help" className="mt-1 text-[11px] text-muted-foreground">
+            When this asset was last walked.
+          </p>
+          {errFor("last_inspected_at") && (
+            <p id="last_inspected_at-err" className="mt-1 text-xs text-destructive">
+              {errFor("last_inspected_at")}
+            </p>
+          )}
         </div>
 
         <div>
@@ -201,8 +253,18 @@ export function AssetForm({
             defaultValue={
               defaults?.next_pm_at ? defaults.next_pm_at.slice(0, 10) : ""
             }
+            aria-invalid={!!errFor("next_pm_at")}
+            aria-describedby={errFor("next_pm_at") ? "next_pm_at-err" : "next_pm_at-help"}
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
           />
+          <p id="next_pm_at-help" className="mt-1 text-[11px] text-muted-foreground">
+            Next preventive-maintenance date. Overdue dates surface in red on the list.
+          </p>
+          {errFor("next_pm_at") && (
+            <p id="next_pm_at-err" className="mt-1 text-xs text-destructive">
+              {errFor("next_pm_at")}
+            </p>
+          )}
         </div>
       </div>
 
@@ -214,6 +276,9 @@ export function AssetForm({
         label="Linked SDS"
         placeholder="No SDS linked. Choose one from the library."
       />
+      {errFor("sds_document_id") && (
+        <p className="mt-1 text-xs text-destructive">{errFor("sds_document_id")}</p>
+      )}
 
       <div>
         <label htmlFor="notes" className="text-sm font-medium">
@@ -226,8 +291,15 @@ export function AssetForm({
           maxLength={2000}
           defaultValue={defaults?.notes ?? ""}
           placeholder="Anything an inspector should know — quirks, recent repairs, neighboring hazards."
+          aria-invalid={!!errFor("notes")}
+          aria-describedby={errFor("notes") ? "notes-err" : undefined}
           className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
         />
+        {errFor("notes") && (
+          <p id="notes-err" className="mt-1 text-xs text-destructive">
+            {errFor("notes")}
+          </p>
+        )}
       </div>
 
       <div className="flex justify-end gap-2 pt-2">

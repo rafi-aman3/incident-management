@@ -288,6 +288,41 @@ export async function createAssetAction(
 }
 
 // ---------------------------------------------------------------------------
+// createAssetInline — for the AssetTypeaheadField inline-create dialog
+// (mounted inside the incident wizard step 2). Returns the new asset's id
+// + ref_code + name so the picker can hydrate its "picked" pill in place
+// without redirecting away from the wizard.
+// ---------------------------------------------------------------------------
+export async function createAssetInline(input: {
+  name: string;
+  kind: string;
+  site_id: string;
+  location?: string | null;
+  condition?: string;
+}): Promise<ActionResult<{ id: string; ref_code: string; name: string }>> {
+  const res = await createAsset({
+    name: input.name,
+    kind: input.kind as z.input<typeof AssetCreateSchema>["kind"],
+    site_id: input.site_id,
+    location: input.location ?? "",
+    condition: (input.condition ?? "good") as z.input<typeof AssetCreateSchema>["condition"],
+    status: "active",
+  });
+  if (!res.ok) return res;
+
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("assets")
+    .select("id, ref_code, name")
+    .eq("id", res.data!.id)
+    .maybeSingle();
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "Asset created but lookup failed" };
+  }
+  return { ok: true, data: { id: data.id, ref_code: data.ref_code, name: data.name } };
+}
+
+// ---------------------------------------------------------------------------
 // searchAssets — typeahead lookup for the wizard's equipment_asset_id field.
 // Returns active assets at the named site (or accessible-by-RLS subset)
 // matching the query against name / ref_code / location.

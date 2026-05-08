@@ -7,7 +7,7 @@
  *   * Archive — opens warning when active links exist; supports force
  */
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, Pencil, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -75,12 +75,24 @@ export function DocumentDetailActions({
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveReason, setArchiveReason] = useState("");
 
-  // Edit form state
+  // Edit form state — re-seeded from `initial` whenever the dialog opens so
+  // a re-open after Cancel shows the live snapshot, not the previously-
+  // edited (then-cancelled) values.
   const [name, setName] = useState(initial.name);
   const [type, setType] = useState<DocumentType>(initial.type);
   const [siteId, setSiteId] = useState<string>(initial.site_id ?? "");
   const [expiry, setExpiry] = useState(initial.expiry_date ?? "");
   const [notes, setNotes] = useState(initial.notes ?? "");
+
+  useEffect(() => {
+    if (editOpen) {
+      setName(initial.name);
+      setType(initial.type);
+      setSiteId(initial.site_id ?? "");
+      setExpiry(initial.expiry_date ?? "");
+      setNotes(initial.notes ?? "");
+    }
+  }, [editOpen, initial.name, initial.type, initial.site_id, initial.expiry_date, initial.notes]);
 
   function handleReplaceClick() {
     fileRef.current?.click();

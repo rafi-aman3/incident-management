@@ -69,6 +69,7 @@ export default async function AssetsPage({
   }
 
   const { data, error } = await query;
+  if (error) throw error;
 
   type Joined = {
     id: string;
@@ -121,6 +122,8 @@ export default async function AssetsPage({
     .map((s) => ({ id: s.id, name: s.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const hasFilters = Boolean(siteParam || kindParam || conditionParam || q);
+
   return (
     <div className="space-y-6">
       <Header />
@@ -138,8 +141,6 @@ export default async function AssetsPage({
         )}
       </div>
 
-      {error && <p className="text-sm text-destructive">{error.message}</p>}
-
       {grouped && Object.keys(grouped).length > 0 ? (
         <div className="space-y-8">
           {Object.entries(grouped).map(([siteId, siteRows]) => (
@@ -150,12 +151,12 @@ export default async function AssetsPage({
                   · {siteRows.length} asset{siteRows.length === 1 ? "" : "s"}
                 </span>
               </h2>
-              <AssetList rows={siteRows} />
+              <AssetList rows={siteRows} hasFilters={hasFilters} canCreate={canCreateAnywhere} />
             </section>
           ))}
         </div>
       ) : (
-        <AssetList rows={rows} />
+        <AssetList rows={rows} hasFilters={hasFilters} canCreate={canCreateAnywhere} />
       )}
     </div>
   );
@@ -164,9 +165,6 @@ export default async function AssetsPage({
 function Header() {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-        Module 4 · Resources
-      </p>
       <h1 className="flex items-center gap-2 text-2xl font-semibold">
         <Boxes className="h-6 w-6" />
         Assets
