@@ -30,70 +30,75 @@ export function PlannerWeek({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="grid grid-cols-7 border-b bg-muted/30 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {days.map((d, idx) => (
-          <div
-            key={d.toISOString()}
-            className={cn(
-              "px-2 py-1.5 text-center",
-              isSameDay(d, today) && "text-brand",
-            )}
-          >
-            <div>{WEEKDAY_LABELS[idx]}</div>
-            <div className="text-sm font-semibold tracking-normal text-foreground">
-              {format(d, "d MMM")}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7">
-        {days.map((d) => {
-          const key = format(d, "yyyy-MM-dd");
-          const bucket = buckets.get(key) ?? { am: [], pm: [] };
-          return (
+    <div className="overflow-x-auto rounded-lg border bg-card">
+      <div className="min-w-[640px]">
+        <div className="grid grid-cols-7 border-b bg-muted/30 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          {days.map((d, idx) => (
             <div
-              key={key}
+              key={d.toISOString()}
               className={cn(
-                "min-h-[280px] border-r p-2 last-of-type:border-r-0",
-                "[&:nth-child(7n)]:border-r-0",
-                isSameDay(d, today) && "bg-brand-soft/30",
+                "px-2 py-1.5 text-center",
+                isSameDay(d, today) && "text-brand",
               )}
             >
-              <div className="space-y-2">
-                {bucket.am.length > 0 ? (
-                  <div>
-                    <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Morning
-                    </p>
-                    <div className="space-y-1">
-                      {bucket.am.map((ev) => (
-                        <EventChip key={ev.id} event={ev} size="md" />
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {bucket.pm.length > 0 ? (
-                  <div>
-                    <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Afternoon / Evening
-                    </p>
-                    <div className="space-y-1">
-                      {bucket.pm.map((ev) => (
-                        <EventChip key={ev.id} event={ev} size="md" />
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {bucket.am.length === 0 && bucket.pm.length === 0 ? (
-                  <p className="text-[10px] italic text-muted-foreground/60">
-                    No events
-                  </p>
-                ) : null}
+              <div>{WEEKDAY_LABELS[idx]}</div>
+              <div className="text-sm font-semibold tracking-normal text-foreground">
+                {format(d, "d MMM")}
               </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {days.map((d) => {
+            const key = format(d, "yyyy-MM-dd");
+            const bucket = buckets.get(key) ?? { am: [], pm: [] };
+            const total = bucket.am.length + bucket.pm.length;
+            const ariaLabel = `${format(d, "EEEE, d MMM")}, ${total} event${total === 1 ? "" : "s"}`;
+            return (
+              <div
+                key={key}
+                aria-label={ariaLabel}
+                className={cn(
+                  "min-h-[280px] border-r p-2 last-of-type:border-r-0",
+                  "[&:nth-child(7n)]:border-r-0",
+                  isSameDay(d, today) && "bg-brand-soft/30",
+                )}
+              >
+                <div className="space-y-2">
+                  {bucket.am.length > 0 ? (
+                    <div>
+                      <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Morning
+                      </p>
+                      <div className="space-y-1">
+                        {bucket.am.map((ev) => (
+                          <EventChip key={ev.id} event={ev} size="md" />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {bucket.pm.length > 0 ? (
+                    <div>
+                      <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Afternoon / Evening
+                      </p>
+                      <div className="space-y-1">
+                        {bucket.pm.map((ev) => (
+                          <EventChip key={ev.id} event={ev} size="md" />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {bucket.am.length === 0 && bucket.pm.length === 0 ? (
+                    <p className="text-[10px] italic text-muted-foreground/60">
+                      No events
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

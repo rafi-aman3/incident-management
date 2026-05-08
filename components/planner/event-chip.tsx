@@ -78,13 +78,14 @@ export function EventChip({
       <Link
         href={event.href}
         title={fullLabel}
+        aria-label={fullLabel}
         className={cn(
           "flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] leading-none",
           "hover:brightness-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           tone,
         )}
       >
-        <Icon className="h-3 w-3 shrink-0" />
+        <Icon className="h-3 w-3 shrink-0" aria-hidden />
         <span className="truncate">{event.title}</span>
       </Link>
     );
@@ -93,13 +94,15 @@ export function EventChip({
   return (
     <Link
       href={event.href}
+      title={fullLabel}
+      aria-label={fullLabel}
       className={cn(
         "flex items-center gap-2 rounded border px-2 py-1.5 text-xs",
         "hover:brightness-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         tone,
       )}
     >
-      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="w-12 shrink-0 font-mono text-[10px] uppercase opacity-80">
         {time}
       </span>

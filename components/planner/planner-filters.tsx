@@ -88,17 +88,30 @@ export function PlannerFilters({
     onDate(yyyyMmDd);
   };
 
-  const siteSelectValue = siteParam === "" ? "current" : siteParam;
   const currentSite = sites.find((s) => s.id === currentSiteId);
+  // When ?site is unset, default to "current" if we can render that option;
+  // otherwise fall back to "all" so radix doesn't log a missing-SelectItem warning.
+  const siteSelectValue =
+    siteParam === ""
+      ? currentSite
+        ? "current"
+        : "all"
+      : siteParam;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {/* View toggle */}
-      <div className="inline-flex rounded-md border bg-card p-0.5">
+      {/* View toggle — radiogroup (single-select filter, no panel swap) */}
+      <div
+        role="radiogroup"
+        aria-label="Calendar view"
+        className="inline-flex rounded-md border bg-card p-0.5"
+      >
         {VIEWS.map((v) => (
           <button
             key={v.value}
             type="button"
+            role="radio"
+            aria-checked={view === v.value}
             disabled={pending}
             onClick={() => onView(v.value)}
             className={cn(
@@ -115,9 +128,10 @@ export function PlannerFilters({
 
       {/* Date stepper — native date input keeps it lightweight; URL stays the truth */}
       <div className="inline-flex items-center gap-1 rounded-md border bg-card px-2 py-1">
-        <CalendarRange className="h-3.5 w-3.5 text-muted-foreground" />
+        <CalendarRange className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         <input
           type="date"
+          aria-label="Calendar date"
           value={date}
           disabled={pending}
           onChange={(e) => onDate(e.target.value)}
@@ -161,12 +175,14 @@ export function PlannerFilters({
       <div className="flex flex-wrap items-center gap-1">
         {PLANNER_EVENT_KINDS.map((kind) => {
           const on = enabled.has(kind);
+          const label = PLANNER_EVENT_LABEL[kind];
           return (
             <button
               key={kind}
               type="button"
               disabled={pending}
               onClick={() => onToggleKind(kind)}
+              title={on ? `Click to hide ${label} events` : `Click to show ${label} events`}
               className={cn(
                 "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
                 on
@@ -175,7 +191,7 @@ export function PlannerFilters({
               )}
               aria-pressed={on}
             >
-              {PLANNER_EVENT_LABEL[kind]}
+              {label}
             </button>
           );
         })}

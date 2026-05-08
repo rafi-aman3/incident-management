@@ -13,6 +13,7 @@ import { PlannerMonth } from "@/components/planner/planner-month";
 import { PlannerWeek } from "@/components/planner/planner-week";
 import { PlannerDay } from "@/components/planner/planner-day";
 import { PlannerFilters } from "@/components/planner/planner-filters";
+import { SourceFailurePill } from "@/components/planner/source-failure-pill";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -119,25 +120,58 @@ export default async function PlannerPage({
     })),
   );
 
+  // No-accessible-sites edge case: skip calendar entirely.
+  if (accessibleSites.length === 0) {
+    return (
+      <div className="space-y-4">
+        <h1 className="flex items-center gap-1.5 text-2xl font-semibold">
+          <CalendarDays className="h-6 w-6 text-brand" aria-hidden />
+          Planner
+        </h1>
+        <div className="rounded-lg border border-dashed bg-card/50 p-8 text-center">
+          <p className="text-sm font-medium">No sites available</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You aren&apos;t a member of any site yet, so there are no events to show.
+            Ask an org admin to add you to a site, then come back.
+          </p>
+          <Link
+            href="/dashboard"
+            className="mt-4 inline-block text-xs font-medium text-brand underline"
+          >
+            Back to dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   // ---- searchParams ----
   const view = parseView(sp.view);
   const date = parseDate(sp.date);
   const siteParam = pickFirst(sp.site); // "", "all", or a site_id
   const enabledKinds = parseEnabledKinds(sp);
+  const allKindsDisabled = enabledKinds.length === 0;
+  const someKindsDisabled = enabledKinds.length < PLANNER_EVENT_KINDS.length;
 
   // Resolve which siteIds the aggregator should restrict to.
   let filterSiteIds: string[];
+  let resolvedSiteName: string | null = null;
   if (siteParam === "all") {
     filterSiteIds = accessibleSites.map((s) => s.id);
   } else if (siteParam !== "" && accessibleSites.some((s) => s.id === siteParam)) {
     filterSiteIds = [siteParam];
+    resolvedSiteName = accessibleSites.find((s) => s.id === siteParam)?.name ?? null;
+  } else if (currentSiteId) {
+    filterSiteIds = [currentSiteId];
+    resolvedSiteName = accessibleSites.find((s) => s.id === currentSiteId)?.name ?? null;
   } else {
-    filterSiteIds = currentSiteId ? [currentSiteId] : [];
+    // Falls through to "all" implicitly.
+    filterSiteIds = accessibleSites.map((s) => s.id);
   }
 
   // ---- aggregate ----
   const range = rangeFor(view, date);
-  const events = await aggregatePlannerEvents({
+  const { events, failedKinds } = await aggregatePlannerEvents({
     supabase,
     start: range.start,
     end: range.end,
@@ -145,15 +179,28 @@ export default async function PlannerPage({
     kinds: enabledKinds,
   });
 
-  // ---- build "+N more" link for month view that preserves filters ----
-  const hrefForDay = (d: Date) => {
+  // ---- URL builders that preserve filters ----
+  const buildPlannerHref = (overrides: Record<string, string>): string => {
     const params = new URLSearchParams();
-    params.set("view", "day");
-    params.set("date", format(d, "yyyy-MM-dd"));
+    params.set("view", overrides.view ?? view);
+    params.set("date", overrides.date ?? format(date, "yyyy-MM-dd"));
     if (siteParam) params.set("site", siteParam);
     for (const k of PLANNER_EVENT_KINDS) {
       if (!enabledKinds.includes(k)) params.set(k, "0");
     }
+    return `/planner?${params.toString()}`;
+  };
+
+  const hrefForDay = (d: Date) =>
+    buildPlannerHref({ view: "day", date: format(d, "yyyy-MM-dd") });
+  const backToMonthHref = buildPlannerHref({ view: "month" });
+
+  // "Show all event types" / "Clear filters" — strips every ?<kind>=0 param.
+  const buildShowAllHref = (): string => {
+    const params = new URLSearchParams();
+    params.set("view", view);
+    params.set("date", format(date, "yyyy-MM-dd"));
+    if (siteParam) params.set("site", siteParam);
     return `/planner?${params.toString()}`;
   };
 
@@ -169,11 +216,8 @@ export default async function PlannerPage({
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Module 5
-            </p>
             <h1 className="flex items-center gap-1.5 text-2xl font-semibold">
-              <CalendarDays className="h-6 w-6 text-brand" />
+              <CalendarDays className="h-6 w-6 text-brand" aria-hidden />
               Planner
               <InfoTooltip tip="planner_aggregation_rule" />
             </h1>
@@ -201,22 +245,72 @@ export default async function PlannerPage({
           currentSiteId={currentSiteId}
         />
 
+        <SourceFailurePill failedKinds={failedKinds} />
+
         {view === "month" ? (
           <PlannerMonth events={events} date={date} hrefForDay={hrefForDay} />
         ) : view === "week" ? (
           <PlannerWeek events={events} date={date} />
         ) : (
-          <PlannerDay events={events} date={date} />
+          <PlannerDay
+            events={events}
+            date={date}
+            siteName={resolvedSiteName}
+            backToMonthHref={backToMonthHref}
+          />
         )}
 
         {events.length === 0 && view !== "day" ? (
-          <p className="rounded-md border border-dashed bg-card/50 px-4 py-3 text-center text-xs text-muted-foreground">
-            No events in this window. Try a different date or toggle on more
-            event types.
-          </p>
+          <PlannerEmptyState
+            allKindsDisabled={allKindsDisabled}
+            someKindsDisabled={someKindsDisabled}
+            showAllHref={buildShowAllHref()}
+          />
         ) : null}
       </div>
     </TooltipProvider>
+  );
+}
+
+function PlannerEmptyState({
+  allKindsDisabled,
+  someKindsDisabled,
+  showAllHref,
+}: {
+  allKindsDisabled: boolean;
+  someKindsDisabled: boolean;
+  showAllHref: string;
+}) {
+  if (allKindsDisabled) {
+    return (
+      <div className="rounded-md border border-dashed bg-card/50 px-4 py-3 text-center text-xs text-muted-foreground">
+        All event types are hidden.{" "}
+        <Link
+          href={showAllHref}
+          className="font-medium text-brand underline underline-offset-2 hover:no-underline"
+        >
+          Show all
+        </Link>
+      </div>
+    );
+  }
+  if (someKindsDisabled) {
+    return (
+      <div className="rounded-md border border-dashed bg-card/50 px-4 py-3 text-center text-xs text-muted-foreground">
+        No events match the active filters.{" "}
+        <Link
+          href={showAllHref}
+          className="font-medium text-brand underline underline-offset-2 hover:no-underline"
+        >
+          Clear filters
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <p className="rounded-md border border-dashed bg-card/50 px-4 py-3 text-center text-xs text-muted-foreground">
+      No events in this window. Try a different date.
+    </p>
   );
 }
 
