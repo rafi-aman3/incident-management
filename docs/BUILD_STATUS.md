@@ -193,6 +193,50 @@ Smoke test: `docs/smoke-test-phase4.md` extended with 18 new 6h checkpoints (loa
 
 `pnpm tsc --noEmit` clean. `pnpm lint` 42/16 (baseline 40/16) — +2 are the standard "setState in effect on dialog-open" pattern that already ships across `change-role-dialog.tsx`, `archive-site-dialog.tsx`, `template-library-filters.tsx` in the existing baseline. Plan: `plans/06h-resources-polish.md`.
 
+## Phase 6i — Planner polish
+
+Merged 2026-05-08 (PR #22). Plan re-audited on kickoff against shipped surfaces (replaces the 2026-05-06 stub written before `/planner` shipped) — same precedent as 6c/6d/6e/6f/6g/6h. User answered all 6 open questions before coding ("proceed with recommendations" path).
+
+State coverage: 2 new state files — `loading.tsx` (calendar shell skeleton: header band + filter row + 7×5 grid placeholder with chip-shaped pulses) + `error.tsx` (brand destructive-bordered card with **Try again** + **Back to dashboard**, mirrors the 6g/6h pattern with `error.digest` surfaced as a small mono ref line) at `app/(app)/planner/`. "Module 5" eyebrow dropped on the page header (matches the eyebrow drops on 6b–6h).
+
+**Aggregator return shape evolution** (`lib/planner/aggregate.ts`): promoted from `Promise<PlannerEvent[]>` to `Promise<{ events: PlannerEvent[]; failedKinds: PlannerEventKind[] }>`. Each per-source fetcher (incidents · inspections_started · inspections_completed · capa_due · asset_pm_due · investigation_due · regulatory_deadline) refactored to return `{ kind, events, failed }` — the existing `[]`-on-error swallow contract is preserved exactly, but the orchestrator now collects which source kinds errored so the UI can name them. No SQL change; pure return-shape evolution.
+
+**`<SourceFailurePill>`** (`components/planner/source-failure-pill.tsx`, new): renders a quiet warning rendering above the calendar grid when `failedKinds.length > 0`. Copy lists the failed kinds by `PLANNER_EVENT_LABEL` and ends "— refresh to retry". `role="status"` + `border-warning/30` + `bg-warning/10`. **No retry button** per Q4: full page reload is the only sensible recovery for an SSR'd read-only surface; synthesizing per-source retry would require client state + a second action path.
+
+**Calendar-grid a11y** (`components/planner/planner-month.tsx`): real WAI-ARIA grid. Outer container is `role="grid"` with `aria-label="Planner month grid"`; days chunked into 5- or 6-row matrix with explicit `role="row"` wrappers (was a flat 35–42-cell sibling list with no row context). Each cell becomes `role="gridcell"` with `aria-label="<EEEE, PPP>, N event(s)"` (e.g. "Tuesday, May 12, 2026, 3 events"). The `+N more` link gets `aria-label="View all <total> events on <PPP>"`. Date number `aria-hidden` (the cell's aria-label already names the day). **Calendar-cell arrow-key roving-tabindex deferred to v2 per Q1** — proper grid keyboard nav (arrow handlers + roving focus + aria-rowindex) is closer to a small feature than polish; the chip Tab order already covers the day-by-day reading order linearly.
+
+**Mobile horizontal scroll** (`planner-month.tsx` + `planner-week.tsx`): both grids wrap in `overflow-x-auto` with an inner `min-w-[640px]` floor. At <640px the calendar gets its own horizontal scroll context instead of forcing body-level overflow. Per Q5: lighter than forcing Day view at sm (which would surprise users who picked Month/Week). Aligns with `docs/design.md` §8 "data tables: full → priority columns + horizontal scroll" guidance.
+
+**`<PlannerWeek>`**: same `overflow-x-auto` + `min-w-[640px]` wrap; per-day cell gains an `aria-label="<EEEE, d MMM>, N events"`. **No `role="grid"`** — week view is a 7-column lane layout, not a calendar grid; `role="grid"` would mislead.
+
+**`<PlannerDay>` (`planner-day.tsx`)**: header gains site name (when a single site resolves from `?site=`) + a "Back to month" link with an `ArrowLeft` icon that builds `/planner?view=month&date=<same>&<filters>` via the same URL-builder used by `+N more`, preserving the user's filter set.
+
+**`<PlannerFilters>` a11y + Site-Select fallback** (`planner-filters.tsx`):
+- View toggle migrates to `role="radiogroup"` + per-button `role="radio"` + `aria-checked` (single-select filter without panel-swap; mirrors the 6f Templates industry-filter pattern, NOT a `role="tablist"` — radiogroup is the more correct WAI-ARIA pattern for filters that don't swap panels).
+- Native date input gains `aria-label="Calendar date"`.
+- Event-type chips gain `title=` tooltips that flip on `aria-pressed` state ("Click to hide <kind> events" / "Click to show <kind> events"). Existing `aria-pressed` already in place.
+- **Real bug fixed:** the Site `<Select>` was setting `value="current"` even when `currentSiteId` was null and no `<SelectItem value="current">` existed in the rendered list — radix logged a missing-SelectItem warning and the trigger went blank. Fix falls back to `"all"` when `currentSite === undefined`.
+
+**`<EventChip>` a11y** (`event-chip.tsx`): `aria-label={fullLabel}` on both `size="sm"` and `size="md"` (full kind/ref/title/date/site, mirroring the existing `title=` value). Without it, screen readers only got the truncated visible title + an unlabeled icon. Decorative icons get `aria-hidden`.
+
+**Empty-state branching** (`page.tsx`): one generic "No events in this window" pill becomes 4 distinct branches:
+1. Org-fresh / no events match → "No events in this window. Try a different date."
+2. Some chips disabled, no events → "No events match the active filters." + **Clear filters** link (strips every `?<kind>=0`).
+3. All chips disabled → "All event types are hidden." + **Show all** link (per Q6: active recovery affordance over passive copy; mirrors 6c's "Clear filters" precedent).
+4. Zero accessible sites → dedicated "No sites available" card, calendar skipped entirely (rare edge case for newly invited users not yet attached to a site).
+
+`buildPlannerHref` + `buildShowAllHref` helpers in `page.tsx` preserve every URL param across transitions (date, site, view, all 7 kind flags).
+
+**Sandbox toggle deferred to v2 per Q2.** Aggregator currently relies on per-table RLS for sandbox isolation (sandbox events surface to the reporter + admins via existing `incidents_read` RLS — that's the intended behavior, no leak). Adding a "Show sandbox" admin toggle + a sandbox-styled chip variant would be cross-cutting work that shouldn't land piecemeal on the planner first.
+
+**`+N more` kept as route navigation per Q3** — original 2026-05-06 stub had proposed a side drawer; shipped routes to `/planner?view=day&date=…` instead. URL-shareable + back-button-friendly + zero client state. Audit's `aria-label` add was the only fix needed.
+
+Smoke test: `docs/smoke-test-phase5.md` extended with 12 new 6i polish checkpoints (eyebrow gone · loading/error shells · per-source failure pill · all 4 empty-state variants · no-accessible-sites card · mobile horizontal scroll · ARIA grid + radiogroup screen-reader announcements · EventChip aria-label · day-view back link · site-select null-currentSite fallback).
+
+**Not in this PR (deferred to v2):** drag-to-reschedule · event creation from planner · iCal / Google Calendar export · conflict detection · team / user lanes · timezone-aware multi-day events · recurring-inspection materialization preview · printable view · mobile-optimized week view (horizontal scroll is the v1 fix) · arrow-key calendar-cell nav (per Q1 — `role="grid"` shell ships now) · "Show sandbox" admin toggle (per Q2).
+
+`pnpm tsc --noEmit` clean. `pnpm lint` 42/16 (matches the 6h baseline; no new findings in `planner/*` files). Plan: `plans/06i-planner-polish.md`.
+
 ## Phase 11 — Sites + Members + Roles (org admin console)
 
 Reserved 2026-05-07; user scope absorbs the Members half of the original Phase 8 reservation (Phase 8 stays = Settings/account preferences only). Closes the Supabase-SQL-editor gap for every org-admin task. Reclaims the 4 dormant perm keys (`site:configure / member:invite / member:manage / role:edit`) declared in `init.sql` line 119–124 since Phase 0 but never granted to any default role.
@@ -267,4 +311,4 @@ Phase 11 closes. Plan: `plans/11c-roles-and-invitations.md`.
 
 ## Workflow notes
 
-Modules 6i–6j (Planner → Admin) queued. User kicks off each module with "start phase 6 <module>". Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Module 6j (Admin) queued — last per-module polish PR before Phase 6 closes. User kicks off each module with "start phase 6 <module>". Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
