@@ -111,94 +111,171 @@ export default async function DocumentDetailPage({ params }: { params: Params })
     {} as Record<DocumentLinkParent, typeof linkRows>,
   );
 
-  // Per-parent label fetches — small, sequential, scoped by RLS.
+  // Per-parent label fetches — small, RLS-scoped queries run in parallel
+  // so cold-load on a heavily-linked document doesn't pay 7× round-trip
+  // latency for what's effectively independent reads.
+  type LabelMap = Record<string, { label: string; href: string }>;
+  type LabelResult = { parentType: DocumentLinkParent; labels: LabelMap };
+
+  // Supabase's PostgrestBuilder returns `PromiseLike`, not `Promise`, so we
+  // type the queue accordingly. `Promise.all` accepts both.
+  const labelFetchers: PromiseLike<LabelResult>[] = [];
   for (const [parentType, rows] of Object.entries(grouped) as [
     DocumentLinkParent,
     typeof linkRows,
   ][]) {
     if (!rows || rows.length === 0) continue;
     const ids = rows.map((r) => r.parent_id);
-    let labels: Record<string, { label: string; href: string }> = {};
 
     if (parentType === "incident") {
-      const { data } = await supabase
-        .from("incidents")
-        .select("id, ref_code, title")
-        .in("id", ids);
-      labels = Object.fromEntries(
-        (data ?? []).map((row) => [row.id, {
-          label: `${row.ref_code} · ${row.title}`,
-          href: `/incidents/${row.id}`,
-        }]),
+      labelFetchers.push(
+        supabase
+          .from("incidents")
+          .select("id, ref_code, title")
+          .in("id", ids)
+          .then(({ data }) => ({
+            parentType,
+            labels: Object.fromEntries(
+              (data ?? []).map((row) => [
+                row.id,
+                {
+                  label: `${row.ref_code} · ${row.title}`,
+                  href: `/incidents/${row.id}`,
+                },
+              ]),
+            ),
+          })),
       );
     } else if (parentType === "investigation") {
-      const { data } = await supabase
-        .from("investigations")
-        .select("id, ref_code, incident:incidents(title)")
-        .in("id", ids);
-      labels = Object.fromEntries(
-        (data ?? []).map((row) => {
-          const inc = Array.isArray(row.incident) ? row.incident[0] : row.incident;
-          return [row.id, {
-            label: `${row.ref_code}${inc?.title ? ` · ${inc.title}` : ""}`,
-            href: `/investigations/${row.id}`,
-          }];
-        }),
+      labelFetchers.push(
+        supabase
+          .from("investigations")
+          .select("id, ref_code, incident:incidents(title)")
+          .in("id", ids)
+          .then(({ data }) => ({
+            parentType,
+            labels: Object.fromEntries(
+              (data ?? []).map((row) => {
+                const inc = Array.isArray(row.incident)
+                  ? row.incident[0]
+                  : row.incident;
+                return [
+                  row.id,
+                  {
+                    label: `${row.ref_code}${inc?.title ? ` · ${inc.title}` : ""}`,
+                    href: `/investigations/${row.id}`,
+                  },
+                ];
+              }),
+            ),
+          })),
       );
     } else if (parentType === "capa") {
-      const { data } = await supabase
-        .from("capas")
-        .select("id, ref_code, title")
-        .in("id", ids);
-      labels = Object.fromEntries(
-        (data ?? []).map((row) => [row.id, {
-          label: `${row.ref_code} · ${row.title}`,
-          href: `/capa/${row.id}`,
-        }]),
+      labelFetchers.push(
+        supabase
+          .from("capas")
+          .select("id, ref_code, title")
+          .in("id", ids)
+          .then(({ data }) => ({
+            parentType,
+            labels: Object.fromEntries(
+              (data ?? []).map((row) => [
+                row.id,
+                {
+                  label: `${row.ref_code} · ${row.title}`,
+                  href: `/capa/${row.id}`,
+                },
+              ]),
+            ),
+          })),
       );
     } else if (parentType === "asset") {
-      const { data } = await supabase
-        .from("assets")
-        .select("id, ref_code, name")
-        .in("id", ids);
-      labels = Object.fromEntries(
-        (data ?? []).map((row) => [row.id, {
-          label: `${row.ref_code} · ${row.name}`,
-          href: `/resources/assets/${row.id}`,
-        }]),
+      labelFetchers.push(
+        supabase
+          .from("assets")
+          .select("id, ref_code, name")
+          .in("id", ids)
+          .then(({ data }) => ({
+            parentType,
+            labels: Object.fromEntries(
+              (data ?? []).map((row) => [
+                row.id,
+                {
+                  label: `${row.ref_code} · ${row.name}`,
+                  href: `/resources/assets/${row.id}`,
+                },
+              ]),
+            ),
+          })),
       );
     } else if (parentType === "site") {
-      const { data } = await supabase.from("sites").select("id, name").in("id", ids);
-      labels = Object.fromEntries(
-        (data ?? []).map((row) => [row.id, {
-          label: row.name,
-          href: `/admin/sites/${row.id}`,
-        }]),
+      labelFetchers.push(
+        supabase
+          .from("sites")
+          .select("id, name")
+          .in("id", ids)
+          .then(({ data }) => ({
+            parentType,
+            labels: Object.fromEntries(
+              (data ?? []).map((row) => [
+                row.id,
+                { label: row.name, href: `/admin/sites/${row.id}` },
+              ]),
+            ),
+          })),
       );
     } else if (parentType === "inspection") {
-      const { data } = await supabase
-        .from("inspections")
-        .select("id, ref_code, title")
-        .in("id", ids);
-      labels = Object.fromEntries(
-        (data ?? []).map((row) => [row.id, {
-          label: `${row.ref_code} · ${row.title}`,
-          href: `/inspections/${row.id}`,
-        }]),
+      labelFetchers.push(
+        supabase
+          .from("inspections")
+          .select("id, ref_code, title")
+          .in("id", ids)
+          .then(({ data }) => ({
+            parentType,
+            labels: Object.fromEntries(
+              (data ?? []).map((row) => [
+                row.id,
+                {
+                  label: `${row.ref_code} · ${row.title}`,
+                  href: `/inspections/${row.id}`,
+                },
+              ]),
+            ),
+          })),
       );
     } else if (parentType === "finding") {
-      const { data } = await supabase
-        .from("inspection_findings")
-        .select("id, ref_code, item_label, inspection_id")
-        .in("id", ids);
-      labels = Object.fromEntries(
-        (data ?? []).map((row) => [row.id, {
-          label: `${row.ref_code} · ${row.item_label}`,
-          href: `/inspections/${row.inspection_id}/findings/${row.id}`,
-        }]),
+      labelFetchers.push(
+        supabase
+          .from("inspection_findings")
+          .select("id, ref_code, item_label, inspection_id")
+          .in("id", ids)
+          .then(({ data }) => ({
+            parentType,
+            labels: Object.fromEntries(
+              (data ?? []).map((row) => [
+                row.id,
+                {
+                  label: `${row.ref_code} · ${row.item_label}`,
+                  href: `/inspections/${row.inspection_id}/findings/${row.id}`,
+                },
+              ]),
+            ),
+          })),
       );
     }
+  }
 
+  const labelResults = await Promise.all(labelFetchers);
+  const labelsByType = Object.fromEntries(
+    labelResults.map((r) => [r.parentType, r.labels]),
+  ) as Record<DocumentLinkParent, LabelMap>;
+
+  for (const [parentType, rows] of Object.entries(grouped) as [
+    DocumentLinkParent,
+    typeof linkRows,
+  ][]) {
+    if (!rows || rows.length === 0) continue;
+    const labels = labelsByType[parentType] ?? {};
     buckets[parentType].rows = rows.map((r) => ({
       id: r.id,
       parent_id: r.parent_id,
@@ -326,9 +403,13 @@ export default async function DocumentDetailPage({ params }: { params: Params })
               Linked from {totalLinks} record{totalLinks === 1 ? "" : "s"}
             </p>
             {totalLinks === 0 ? (
-              <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-4 text-xs text-muted-foreground">
-                <FileText className="h-3.5 w-3.5" /> Not linked yet. Pickers
-                across the app reference this document by id.
+              <div className="flex items-start gap-2 rounded-md border border-dashed px-3 py-4 text-xs text-muted-foreground">
+                <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  This document hasn&apos;t been linked to any records yet. Use
+                  the picker on an incident, asset, CAPA, or inspection to link
+                  it.
+                </span>
               </div>
             ) : (
               <ul className="space-y-3">

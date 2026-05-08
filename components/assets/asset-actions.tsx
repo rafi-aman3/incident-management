@@ -82,6 +82,7 @@ export function AssetActions({
             variant="outline"
             size="sm"
             disabled={pending}
+            aria-label="Change asset condition"
             className="gap-1"
           >
             <span className="text-xs text-muted-foreground">Condition:</span>

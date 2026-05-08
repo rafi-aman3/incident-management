@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertCircle, FileText } from "lucide-react";
+import { AlertCircle, Boxes, FileText } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -30,27 +30,56 @@ export type AssetRow = {
   has_sds: boolean;
 };
 
-export function AssetList({ rows }: { rows: AssetRow[] }) {
+export function AssetList({
+  rows,
+  hasFilters = false,
+  canCreate = false,
+}: {
+  rows: AssetRow[];
+  hasFilters?: boolean;
+  canCreate?: boolean;
+}) {
   if (rows.length === 0) {
+    if (hasFilters) {
+      return (
+        <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
+          No assets match these filters. Adjust the filters to see more.
+        </div>
+      );
+    }
     return (
-      <div className="rounded-md border border-dashed p-12 text-center text-sm text-muted-foreground">
-        No assets match these filters.
+      <div className="rounded-md border border-dashed p-12 text-center">
+        <Boxes className="mx-auto h-10 w-10 text-muted-foreground/40" />
+        <h2 className="mt-4 text-lg font-semibold">No assets yet</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {canCreate
+            ? "Register your first asset to get started — equipment, machinery, safety gear."
+            : "Once a site admin registers assets here, they'll show up in this list."}
+        </p>
+        {canCreate && (
+          <Link
+            href="/resources/assets/new"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+          >
+            Register asset
+          </Link>
+        )}
       </div>
     );
   }
   return (
     <div className="overflow-hidden rounded-md border">
-      <Table>
+      <Table aria-label="Assets">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[120px]">Ref</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Kind</TableHead>
-            <TableHead>Location</TableHead>
-            <TableHead>Condition</TableHead>
-            <TableHead>Last inspected</TableHead>
-            <TableHead>Next PM</TableHead>
-            <TableHead className="text-right">SDS</TableHead>
+            <TableHead scope="col" className="w-[120px]">Ref</TableHead>
+            <TableHead scope="col">Name</TableHead>
+            <TableHead scope="col">Kind</TableHead>
+            <TableHead scope="col">Location</TableHead>
+            <TableHead scope="col">Condition</TableHead>
+            <TableHead scope="col">Last inspected</TableHead>
+            <TableHead scope="col">Next PM</TableHead>
+            <TableHead scope="col" className="text-right">SDS</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

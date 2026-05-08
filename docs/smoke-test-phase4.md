@@ -144,3 +144,30 @@ select i.ref_code, i.title, a.ref_code as asset_ref, a.name from incidents i
 ---
 
 If every step above passes with a clean console, Phase 4 is shippable.
+
+---
+
+## Phase 6h — Resources polish checkpoints (added 2026-05-08)
+
+Re-run the prior steps first, then walk these. ~7 min.
+
+1. **Loading skeletons.** Hard-refresh `/resources/assets`, `/resources/assets/[id]`, `/resources/assets/new`, `/resources/assets/[id]/edit`, `/resources/documents`, `/resources/documents/[id]`, `/resources/documents/new`. Each route paints a skeleton matching the post-load layout (no blank flash, no layout shift).
+2. **Error boundary retry.** DevTools → Network → Offline → load `/resources/assets`. Brand error card with **Try again** + **Back to dashboard**. Toggle online → click Try again → page recovers. Repeat for `/resources/documents`.
+3. **Not-found.** Navigate to `/resources/assets/00000000-0000-0000-0000-000000000000` and `/resources/documents/00000000-0000-0000-0000-000000000000`. Each renders the dashed not-found card with a "Back to …" CTA.
+4. **Module 4 eyebrow gone.** `/resources/assets` and `/resources/documents` page headers show only the title + sub-copy — no "Module 4 · Resources" tag.
+5. **Cold-empty Assets copy.** Sign in as a user whose org has zero assets (or temporarily soft-delete the seeded assets at the demo org). The list shows "No assets yet" with a register CTA, not the filter-mismatch hint.
+6. **Filtered-zero Assets copy.** With assets present, type a nonsense string into the search filter. The list shows "No assets match these filters. Adjust the filters to see more."
+7. **Asset detail tab a11y.** On `/resources/assets/[id]`, inspect the tab strip — `<nav role="tablist">` + each `<a role="tab">` with `aria-selected="true"` on the active tab + `aria-controls` matching the panel below. Each tab body wrapped in `<div role="tabpanel" aria-labelledby="asset-tab-…">`.
+8. **AssetActions dropdown a11y.** Trigger button announces as "Change asset condition" via VoiceOver / DevTools accessibility tree.
+9. **List-table a11y.** Both Assets list (any view) and Documents list (table view at `?view=table`) — `<table aria-label="…">` + every `<th scope="col">` set.
+10. **AssetTypeaheadField combobox.** Open the incident wizard at Step 2 with type=`property_damage`. Focus the asset search input → screen reader announces as "Linked asset, combobox". Type a partial — results render with `role="listbox"` + each `role="option"`. Use ↑/↓ to navigate, Enter to pick, ESC to close. ESC closes the dropdown without dismissing the wizard.
+11. **AssetTypeaheadField inline-create.** With no matches showing, click "+ Register a new asset" — a Dialog opens *over* the wizard. Fill name + kind, click Create. The dialog closes; the wizard remains intact at Step 2; the new asset auto-selects in the typeahead pill (no reload, no state loss).
+12. **AssetForm field errors.** On `/resources/assets/new`, leave name blank + click Create. Server returns validation error; name field gets `aria-invalid="true"` + a destructive-text message renders below it. VoiceOver announces the error message via `aria-describedby`.
+13. **DocumentLinkPicker upload form reset.** Open the picker on any incident, switch to "Upload new", choose a file + fill name, click Upload and link. On success the dialog closes; reopen → form is empty (file cleared, name reset to "", type reset to default).
+14. **DocumentLinkPicker orphan path.** Temporarily revoke `document_link:create` on your role (or block `link_document_v1` in DevTools → Network), then upload-and-link. The doc uploads to `/resources/documents` but linking fails — toast shows a **warning** (not error) saying "Uploaded …, but linking it here failed: …" with a "View document" action. Click → lands on the new doc's detail page.
+15. **DocumentDetailActions edit-metadata reset.** On `/resources/documents/[id]`, click Edit metadata. Change name + type. Click Cancel. Reopen the dialog → fields show the original `initial` values, not the edited-then-cancelled values.
+16. **Linked-from empty copy.** On a brand-new document with zero links, the sidebar shows "This document hasn't been linked to any records yet. Use the picker on an incident, asset, CAPA, or inspection to link it." (replaces the older "Pickers across the app reference this document by id" technical copy).
+17. **Document detail label-fetch perf.** On a document linked to ≥3 different parent types, watch DevTools Network on cold load — the 7 parent-type label queries (incidents / investigations / capas / assets / sites / inspections / inspection_findings) start within the same tick instead of waterfalling.
+18. **Asset detail per-tab error styling.** Block the Supabase incidents query in DevTools, then visit `/resources/assets/[id]?tab=incidents`. The tab body shows the destructive-bordered alert card (with AlertTriangle icon), not a bare red paragraph.
+
+If all 18 pass: 6h is shippable.

@@ -378,6 +378,7 @@ function UploadTab({
   defaultSiteId?: string | null;
   onDone: (linkId: string, documentId: string) => void;
 }) {
+  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
@@ -397,9 +398,19 @@ function UploadTab({
     }
   }
 
+  function resetForm() {
+    setFile(null);
+    setName("");
+    setType(defaultTypeFilter ?? "evidence");
+    setExpiry("");
+    setNotes("");
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   async function handleSubmit() {
     if (!file) return;
     setBusy(true);
+    let createdDocId: string | null = null;
     try {
       // 1. Client-side upload
       const meta = await uploadDocumentFile(file, orgId);
@@ -413,19 +424,51 @@ function UploadTab({
         notes: notes || "",
       });
       if (!created.ok) throw new Error(created.error);
-      const documentId = created.data!.id;
+      createdDocId = created.data!.id;
       // 3. Link to the parent
       const linked = await linkDocument({
-        document_id: documentId,
+        document_id: createdDocId,
         parent_type: parentType,
         parent_id: parentId,
         link_role: defaultLinkRole,
       });
-      if (!linked.ok) throw new Error(linked.error);
+      if (!linked.ok) {
+        // Orphan path: doc exists in the library but the link failed. We
+        // surface a warning toast with a CTA so the user can decide whether
+        // to keep it (it may still be useful elsewhere) or archive it.
+        toast.warning(
+          `Uploaded "${name.trim()}" to the library, but linking it here failed: ${linked.error}`,
+          {
+            action: {
+              label: "View document",
+              onClick: () => router.push(`/resources/documents/${createdDocId}`),
+            },
+            duration: 10_000,
+          },
+        );
+        return;
+      }
       toast.success(`Uploaded and linked "${name.trim()}"`);
-      onDone(linked.data!.link_id, documentId);
+      resetForm();
+      onDone(linked.data!.link_id, createdDocId);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Upload failed");
+      const msg = e instanceof Error ? e.message : "Upload failed";
+      if (createdDocId) {
+        // Same orphan recovery path, but for unexpected throws after the
+        // doc is created (e.g. linkDocument threw rather than returning ok=false).
+        toast.warning(
+          `Uploaded "${name.trim()}" to the library, but linking it here failed: ${msg}`,
+          {
+            action: {
+              label: "View document",
+              onClick: () => router.push(`/resources/documents/${createdDocId}`),
+            },
+            duration: 10_000,
+          },
+        );
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setBusy(false);
     }
