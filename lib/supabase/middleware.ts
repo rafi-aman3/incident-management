@@ -30,14 +30,20 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Do not run code between createServerClient and
-  // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
-
-  // IMPORTANT: If you remove getClaims() and you use server-side rendering
-  // with the Supabase client, your users may be randomly logged out.
-  const { data } = await supabase.auth.getClaims()
-  const user = data?.claims
+  // Do not run code between createServerClient and supabase.auth.getUser().
+  // A simple mistake could make it very hard to debug issues with users being
+  // randomly logged out.
+  //
+  // We use getUser() (not getClaims()) so the access token is refreshed when
+  // it has expired — getClaims() only verifies the JWT locally and returns
+  // null on expiry, which would bounce signed-in users to /login the moment
+  // their 1-hour access token rolled over (with a valid refresh token still
+  // in the cookie). getUser() goes through the auth server and the cookies
+  // adapter above writes the refreshed access/refresh tokens back to the
+  // response.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
   const isPublicAuthRoute =
