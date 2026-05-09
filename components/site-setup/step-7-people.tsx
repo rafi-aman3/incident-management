@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,14 @@ import {
 } from "@/components/ui/select";
 import { saveStep7 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { FieldError, StepFooter, StepFormError } from "./wizard-chrome";
+import {
+  clearPriorStepDraft,
+  draftKey,
+  pickFromDraft,
+  useDraftPersistence,
+  describeRestoredAt,
+} from "@/lib/site-setup/use-draft-persistence";
+import { DraftRestoredBanner, FieldError, StepFooter, StepFormError } from "./wizard-chrome";
 
 type ProfileChoice = { id: string; full_name: string | null; email: string };
 
@@ -33,17 +40,47 @@ type Initial = {
   members: ProfileChoice[];
 };
 
-export function Step7People({ initial }: { initial: Initial }) {
+function parseDraftContacts(rawJson: string | string[] | undefined): EmergencyContact[] | null {
+  if (typeof rawJson !== "string" || !rawJson) return null;
+  try {
+    const parsed = JSON.parse(rawJson) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.map((c) => {
+      const obj = c as Partial<EmergencyContact>;
+      return {
+        name: typeof obj.name === "string" ? obj.name : "",
+        role: typeof obj.role === "string" ? obj.role : "",
+        phone: typeof obj.phone === "string" ? obj.phone : "",
+        email: typeof obj.email === "string" ? obj.email : "",
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function Step7People({ initial, siteId }: { initial: Initial; siteId: string }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     saveStep7,
     null
   );
 
-  const [ehsLead, setEhsLead] = useState(initial.site_ehs_lead_id ?? "");
+  const { formRef, draft, restoredAt, clearAndReload } = useDraftPersistence(
+    draftKey(siteId, "people")
+  );
+  useEffect(() => clearPriorStepDraft(siteId, "people"), [siteId]);
+
+  const [ehsLead, setEhsLead] = useState(
+    pickFromDraft(draft, "site_ehs_lead_id", initial.site_ehs_lead_id ?? "")
+  );
+
+  const draftContacts = parseDraftContacts(draft?.emergency_contacts_json);
   const [contacts, setContacts] = useState<EmergencyContact[]>(
-    initial.emergency_contacts.length > 0
-      ? initial.emergency_contacts
-      : [{ name: "", role: "", phone: "", email: "" }]
+    draftContacts && draftContacts.length > 0
+      ? draftContacts
+      : initial.emergency_contacts.length > 0
+        ? initial.emergency_contacts
+        : [{ name: "", role: "", phone: "", email: "" }]
   );
 
   const fieldErr = (k: string) =>
@@ -66,8 +103,15 @@ export function Step7People({ initial }: { initial: Initial }) {
     .filter((c) => c.name.length > 0 && (c.phone.length > 0 || c.email.length > 0));
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form ref={formRef} action={formAction} className="space-y-6">
       <input type="hidden" name="country" value={initial.country} />
+
+      {restoredAt && (
+        <DraftRestoredBanner
+          restoredAtLabel={describeRestoredAt(restoredAt)}
+          onDiscard={clearAndReload}
+        />
+      )}
 
       <fieldset className="space-y-4 rounded-md border bg-muted/20 p-4">
         <legend className="px-1 text-sm font-semibold">Site EHS lead</legend>
@@ -119,7 +163,11 @@ export function Step7People({ initial }: { initial: Initial }) {
               <Input
                 id="riddor_responsible_person_name"
                 name="riddor_responsible_person_name"
-                defaultValue={initial.riddor_responsible_person_name ?? ""}
+                defaultValue={pickFromDraft(
+                  draft,
+                  "riddor_responsible_person_name",
+                  initial.riddor_responsible_person_name ?? ""
+                )}
                 placeholder="Erin Manager"
               />
               <FieldError msg={fieldErr("riddor_responsible_person_name")} />
@@ -130,7 +178,11 @@ export function Step7People({ initial }: { initial: Initial }) {
               <Input
                 id="riddor_responsible_person_role"
                 name="riddor_responsible_person_role"
-                defaultValue={initial.riddor_responsible_person_role ?? ""}
+                defaultValue={pickFromDraft(
+                  draft,
+                  "riddor_responsible_person_role",
+                  initial.riddor_responsible_person_role ?? ""
+                )}
                 placeholder="EHS Manager"
               />
               <FieldError msg={fieldErr("riddor_responsible_person_role")} />

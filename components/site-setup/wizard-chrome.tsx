@@ -221,3 +221,44 @@ export function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return <p className="text-xs text-destructive">{msg}</p>;
 }
+
+/**
+ * Banner that surfaces above the form when a draft was restored from
+ * localStorage. Shows when the draft was saved and offers a Discard button
+ * (wipes localStorage and reloads the page so server-loaded defaults render).
+ *
+ * Used by every form step paired with `useDraftPersistence`.
+ */
+export function DraftRestoredBanner({
+  restoredAtLabel,
+  onDiscard,
+}: {
+  restoredAtLabel: string;
+  onDiscard: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm"
+    >
+      <RotateCcw
+        className="mt-0.5 h-4 w-4 shrink-0 text-warning-foreground"
+        aria-hidden
+      />
+      <div className="flex-1 min-w-0">
+        <p className="font-medium">Draft restored</p>
+        <p className="text-xs text-muted-foreground">
+          We saved your in-progress edits {restoredAtLabel} so a tab close or
+          refresh wouldn't lose them.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onDiscard}
+        className="inline-flex items-center gap-1 rounded border border-warning/40 bg-background px-2 py-1 text-xs font-medium hover:bg-accent"
+      >
+        Discard draft
+      </button>
+    </div>
+  );
+}

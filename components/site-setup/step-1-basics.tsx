@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,7 +12,14 @@ import {
 } from "@/components/ui/select";
 import { saveStep1 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { FieldError, StepFooter, StepFormError } from "./wizard-chrome";
+import {
+  clearPriorStepDraft,
+  draftKey,
+  pickFromDraft,
+  useDraftPersistence,
+  describeRestoredAt,
+} from "@/lib/site-setup/use-draft-persistence";
+import { DraftRestoredBanner, FieldError, StepFooter, StepFormError } from "./wizard-chrome";
 
 const TIMEZONE_HINTS = [
   { value: "America/Chicago", label: "America/Chicago" },
@@ -40,25 +47,47 @@ type Initial = {
   closed_on: string | null;
 };
 
-export function Step1Basics({ initial }: { initial: Initial }) {
+export function Step1Basics({ initial, siteId }: { initial: Initial; siteId: string }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     saveStep1,
     null
   );
-  const [timezone, setTimezone] = useState(initial.timezone);
-  const [siteType, setSiteType] = useState(initial.site_type);
-  const [opStatus, setOpStatus] = useState(initial.operational_status);
+
+  const { formRef, draft, restoredAt, clearAndReload } = useDraftPersistence(
+    draftKey(siteId, "basics")
+  );
+
+  // Clear the prior step's draft on mount (no prior step here, so no-op).
+  useEffect(() => clearPriorStepDraft(siteId, "basics"), [siteId]);
+
+  const [timezone, setTimezone] = useState(pickFromDraft(draft, "timezone", initial.timezone));
+  const [siteType, setSiteType] = useState(
+    pickFromDraft(draft, "site_type", initial.site_type) as Initial["site_type"]
+  );
+  const [opStatus, setOpStatus] = useState(
+    pickFromDraft(draft, "operational_status", initial.operational_status) as Initial["operational_status"]
+  );
 
   const fieldErr = (k: string) =>
     state?.ok === false ? state.fieldErrors?.[k]?.[0] : undefined;
 
+  const def = (key: string, fallback: string | null): string =>
+    pickFromDraft(draft, key, fallback ?? "");
+
   return (
-    <form action={formAction} className="space-y-6">
+    <form ref={formRef} action={formAction} className="space-y-6">
       <input type="hidden" name="country" value={initial.country} />
+
+      {restoredAt && (
+        <DraftRestoredBanner
+          restoredAtLabel={describeRestoredAt(restoredAt)}
+          onDiscard={clearAndReload}
+        />
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="name">Establishment name</Label>
-        <Input id="name" name="name" defaultValue={initial.name} required />
+        <Input id="name" name="name" defaultValue={def("name", initial.name)} required />
         <FieldError msg={fieldErr("name")} />
         <p className="text-xs text-muted-foreground">
           OSHA defines an "establishment" as a single physical location where business is conducted.
@@ -74,7 +103,7 @@ export function Step1Basics({ initial }: { initial: Initial }) {
           <Input
             id="street_1"
             name="street_1"
-            defaultValue={initial.street_1 ?? ""}
+            defaultValue={def("street_1", initial.street_1)}
             placeholder="123 Industry Way"
           />
           <FieldError msg={fieldErr("street_1")} />
@@ -85,7 +114,7 @@ export function Step1Basics({ initial }: { initial: Initial }) {
           <Input
             id="street_2"
             name="street_2"
-            defaultValue={initial.street_2 ?? ""}
+            defaultValue={def("street_2", initial.street_2)}
             placeholder="Suite 400"
           />
           <FieldError msg={fieldErr("street_2")} />
@@ -94,7 +123,7 @@ export function Step1Basics({ initial }: { initial: Initial }) {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="city">City</Label>
-            <Input id="city" name="city" defaultValue={initial.city ?? ""} />
+            <Input id="city" name="city" defaultValue={def("city", initial.city)} />
             <FieldError msg={fieldErr("city")} />
           </div>
           <div className="space-y-2">
@@ -104,7 +133,7 @@ export function Step1Basics({ initial }: { initial: Initial }) {
             <Input
               id="state_or_region"
               name="state_or_region"
-              defaultValue={initial.state_or_region ?? ""}
+              defaultValue={def("state_or_region", initial.state_or_region)}
               placeholder={initial.country === "US" ? "TX" : "Greater Manchester"}
             />
             <FieldError msg={fieldErr("state_or_region")} />
@@ -116,7 +145,7 @@ export function Step1Basics({ initial }: { initial: Initial }) {
             <Input
               id="postal_code"
               name="postal_code"
-              defaultValue={initial.postal_code ?? ""}
+              defaultValue={def("postal_code", initial.postal_code)}
               placeholder={initial.country === "US" ? "77002" : "M1 2AB"}
             />
             <FieldError msg={fieldErr("postal_code")} />
@@ -131,7 +160,10 @@ export function Step1Basics({ initial }: { initial: Initial }) {
               name="latitude"
               type="text"
               inputMode="decimal"
-              defaultValue={initial.latitude !== null ? String(initial.latitude) : ""}
+              defaultValue={def(
+                "latitude",
+                initial.latitude !== null ? String(initial.latitude) : null
+              )}
               placeholder="29.7604"
             />
             <FieldError msg={fieldErr("latitude")} />
@@ -143,7 +175,10 @@ export function Step1Basics({ initial }: { initial: Initial }) {
               name="longitude"
               type="text"
               inputMode="decimal"
-              defaultValue={initial.longitude !== null ? String(initial.longitude) : ""}
+              defaultValue={def(
+                "longitude",
+                initial.longitude !== null ? String(initial.longitude) : null
+              )}
               placeholder="-95.3698"
             />
             <FieldError msg={fieldErr("longitude")} />
@@ -242,7 +277,7 @@ export function Step1Basics({ initial }: { initial: Initial }) {
               id="opened_on"
               name="opened_on"
               type="date"
-              defaultValue={initial.opened_on ?? ""}
+              defaultValue={def("opened_on", initial.opened_on)}
             />
             <FieldError msg={fieldErr("opened_on")} />
           </div>
@@ -253,7 +288,7 @@ export function Step1Basics({ initial }: { initial: Initial }) {
                 id="closed_on"
                 name="closed_on"
                 type="date"
-                defaultValue={initial.closed_on ?? ""}
+                defaultValue={def("closed_on", initial.closed_on)}
               />
               <FieldError msg={fieldErr("closed_on")} />
             </div>

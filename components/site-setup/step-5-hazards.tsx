@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { saveStep5 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
@@ -15,7 +15,14 @@ import {
   HAZARD_TAG_DESCRIPTIONS,
   type HazardTagCode,
 } from "@/lib/site-setup/hazard-tags";
-import { FieldError, StepFooter, StepFormError } from "./wizard-chrome";
+import {
+  clearPriorStepDraft,
+  draftKey,
+  pickArrayFromDraft,
+  useDraftPersistence,
+  describeRestoredAt,
+} from "@/lib/site-setup/use-draft-persistence";
+import { DraftRestoredBanner, FieldError, StepFooter, StepFormError } from "./wizard-chrome";
 
 type Initial = {
   country: "US" | "GB";
@@ -24,15 +31,33 @@ type Initial = {
   hazard_tags: HazardTagCode[];
 };
 
-export function Step5Hazards({ initial }: { initial: Initial }) {
+export function Step5Hazards({ initial, siteId }: { initial: Initial; siteId: string }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     saveStep5,
     null
   );
-  const [standards, setStandards] = useState<Set<ApplicableStandardCode>>(
-    () => new Set(initial.applicable_standards)
+
+  const { formRef, draft, restoredAt, clearAndReload } = useDraftPersistence(
+    draftKey(siteId, "hazards")
   );
-  const [tags, setTags] = useState<Set<HazardTagCode>>(() => new Set(initial.hazard_tags));
+  useEffect(() => clearPriorStepDraft(siteId, "hazards"), [siteId]);
+
+  const [standards, setStandards] = useState<Set<ApplicableStandardCode>>(
+    () =>
+      new Set(
+        pickArrayFromDraft<ApplicableStandardCode>(
+          draft,
+          "applicable_standards",
+          initial.applicable_standards
+        )
+      )
+  );
+  const [tags, setTags] = useState<Set<HazardTagCode>>(
+    () => new Set(pickArrayFromDraft<HazardTagCode>(draft, "hazard_tags", initial.hazard_tags))
+  );
+  const psmDraftDefault = draft
+    ? draft.psm_applicable === "on"
+    : initial.psm_applicable;
 
   const fieldErr = (k: string) =>
     state?.ok === false ? state.fieldErrors?.[k]?.[0] : undefined;
@@ -56,8 +81,15 @@ export function Step5Hazards({ initial }: { initial: Initial }) {
   };
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form ref={formRef} action={formAction} className="space-y-6">
       <input type="hidden" name="country" value={initial.country} />
+
+      {restoredAt && (
+        <DraftRestoredBanner
+          restoredAtLabel={describeRestoredAt(restoredAt)}
+          onDiscard={clearAndReload}
+        />
+      )}
 
       {initial.country === "US" && (
         <fieldset className="space-y-4 rounded-md border bg-muted/20 p-4">
@@ -92,7 +124,7 @@ export function Step5Hazards({ initial }: { initial: Initial }) {
             <input
               type="checkbox"
               name="psm_applicable"
-              defaultChecked={initial.psm_applicable}
+              defaultChecked={psmDraftDefault}
               className="mt-0.5 h-4 w-4"
             />
             <span>

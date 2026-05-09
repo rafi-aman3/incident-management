@@ -74,6 +74,7 @@ export default async function SiteSetupStepPage({ params }: { params: Params }) 
         <div className="min-w-0">
           {slug === "basics" && (
             <Step1Basics
+              siteId={currentSiteId}
               initial={{
                 name: site.name,
                 street_1: site.street_1,
@@ -98,6 +99,7 @@ export default async function SiteSetupStepPage({ params }: { params: Params }) 
 
           {slug === "jurisdiction" && (
             <Step2Jurisdiction
+              siteId={currentSiteId}
               initial={{
                 country,
                 osha_jurisdiction: site.osha_jurisdiction as
@@ -115,6 +117,7 @@ export default async function SiteSetupStepPage({ params }: { params: Params }) 
 
           {slug === "identifiers" && (
             <Step3Identifiers
+              siteId={currentSiteId}
               initial={{
                 country,
                 ein: site.ein,
@@ -129,10 +132,11 @@ export default async function SiteSetupStepPage({ params }: { params: Params }) 
             />
           )}
 
-          {slug === "workforce" && <WorkforceServer site={site} />}
+          {slug === "workforce" && <WorkforceServer site={site} siteId={currentSiteId} />}
 
           {slug === "hazards" && (
             <Step5Hazards
+              siteId={currentSiteId}
               initial={{
                 country,
                 applicable_standards: (site.applicable_standards ?? []) as ApplicableStandardCode[],
@@ -143,17 +147,24 @@ export default async function SiteSetupStepPage({ params }: { params: Params }) 
           )}
 
           {slug === "departments" && (
-            <Step6Departments initial={progress.departments ?? []} />
+            <Step6Departments initial={progress.departments ?? []} siteId={currentSiteId} />
           )}
 
-          {slug === "people" && <PeopleServer site={site} country={country} />}
+          {slug === "people" && (
+            <PeopleServer site={site} country={country} siteId={currentSiteId} />
+          )}
 
           {slug === "recipients" && (
             <RecipientsServer siteId={currentSiteId} orgId={profile.org_id} />
           )}
 
           {slug === "confirm" && (
-            <ConfirmServer site={site} country={country} progress={progress} />
+            <ConfirmServer
+              site={site}
+              country={country}
+              progress={progress}
+              siteId={currentSiteId}
+            />
           )}
         </div>
       </div>
@@ -207,7 +218,7 @@ type SiteRow = {
   setup_progress: unknown;
 };
 
-async function WorkforceServer({ site }: { site: SiteRow }) {
+async function WorkforceServer({ site, siteId }: { site: SiteRow; siteId: string }) {
   const { supabase } = await requireUser();
   const currentYear = new Date().getFullYear();
 
@@ -232,6 +243,7 @@ async function WorkforceServer({ site }: { site: SiteRow }) {
 
   return (
     <Step4Workforce
+      siteId={siteId}
       initial={{
         peak_employees_year: site.peak_employees_year,
         avg_employees_year: site.avg_employees_year,
@@ -249,9 +261,11 @@ async function WorkforceServer({ site }: { site: SiteRow }) {
 async function PeopleServer({
   site,
   country,
+  siteId,
 }: {
   site: SiteRow;
   country: "US" | "GB";
+  siteId: string;
 }) {
   const { supabase } = await requireUser();
   const [{ data: members }, { data: contacts }] = await Promise.all([
@@ -275,6 +289,7 @@ async function PeopleServer({
 
   return (
     <Step7People
+      siteId={siteId}
       initial={{
         country,
         site_ehs_lead_id: site.site_ehs_lead_id,
@@ -323,17 +338,19 @@ async function RecipientsServer({ siteId, orgId }: { siteId: string; orgId: stri
     initial[k]!.push(r);
   }
 
-  return <Step8Recipients profiles={choices} initial={initial} />;
+  return <Step8Recipients profiles={choices} initial={initial} siteId={siteId} />;
 }
 
 async function ConfirmServer({
   site,
   country,
   progress,
+  siteId,
 }: {
   site: SiteRow;
   country: "US" | "GB";
   progress: SetupProgress;
+  siteId: string;
 }) {
   const { supabase } = await requireUser();
   const [
@@ -402,6 +419,7 @@ async function ConfirmServer({
 
   return (
     <Step9Confirm
+      siteId={siteId}
       summary={{
         name: site.name,
         country,

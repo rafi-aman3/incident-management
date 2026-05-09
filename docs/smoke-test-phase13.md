@@ -125,7 +125,21 @@ Switch site cookie to Manchester via the topbar SiteSwitcher, then `/admin/site-
    ```
    `setup_progress` has step1..step9 = true; `setup_completed_at` is a recent timestamp.
 
-## Part K — RBAC gates
+## Part K — localStorage draft persistence
+
+Covers the tab-close / refresh resilience added on top of Phase 13.
+
+1. Sign in as `admin@demo.local`. Visit `/admin/site-setup/basics` on a fresh in-progress site.
+2. Type "Test Site Foo" into the name field, fill in some address fields, lat `29.7604` + long `-95.3698`, but **do not** click Save & continue.
+3. Hit `Cmd+R` (or close + reopen the tab). The page reloads.
+4. **Expected:** "Draft restored — we saved your in-progress edits just now" banner appears above the form. All fields are pre-filled with what you typed. Clicking **Discard draft** wipes the entry and reloads with server-canonical values.
+5. Repeat with a multi-select step (Step 5 hazards): tick `Confined spaces` + `Hot work`, refresh — checkboxes restored.
+6. Repeat with a JSON-payload step (Step 6 departments): add a department + areas, refresh — list restored.
+7. **Cross-step clear:** on Step 1, type changes, click Save & continue — Step 2 mounts. Manually visit `localStorage` in DevTools — Step 1's `site-setup-draft:<siteId>:basics:v1` key is gone (cleared by Step 2's mount). Step 2's typed work persists across its own refresh until Save & continue.
+8. **Launch clears all:** walk to Step 9 (confirm). Open DevTools → Application → Local Storage. All `site-setup-draft:<siteId>:*` keys are gone.
+9. **24h TTL:** manually edit a draft entry's `ts` to `Date.now() - 25 * 60 * 60 * 1000`. Refresh the step — banner does not appear (entry expired and was auto-purged).
+
+## Part L — RBAC gates
 
 1. Sign in as `worker@demo.local`. Try `/admin/site-setup/basics` directly — should redirect to `/dashboard` (no `site:configure` permission).
 2. Sign in as `ehs@demo.local`. Same URL — should render (ehs_manager gets `site:configure` per Phase 11a grants).

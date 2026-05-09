@@ -1,12 +1,18 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveStep6 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { StepFooter, StepFormError } from "./wizard-chrome";
+import {
+  clearPriorStepDraft,
+  draftKey,
+  useDraftPersistence,
+  describeRestoredAt,
+} from "@/lib/site-setup/use-draft-persistence";
+import { DraftRestoredBanner, StepFooter, StepFormError } from "./wizard-chrome";
 
 type Department = { name: string; areas: string[] };
 
@@ -16,13 +22,44 @@ const STARTER_DEFAULTS: Department[] = [
   { name: "Logistics", areas: ["Inbound", "Outbound"] },
 ];
 
-export function Step6Departments({ initial }: { initial: Department[] }) {
+function parseDraftDepartments(rawJson: string | string[] | undefined): Department[] | null {
+  if (typeof rawJson !== "string" || !rawJson) return null;
+  try {
+    const parsed = JSON.parse(rawJson) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.map((d) => {
+      const obj = d as { name?: unknown; areas?: unknown };
+      return {
+        name: typeof obj.name === "string" ? obj.name : "",
+        areas: Array.isArray(obj.areas)
+          ? obj.areas.filter((a): a is string => typeof a === "string")
+          : [],
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function Step6Departments({ initial, siteId }: { initial: Department[]; siteId: string }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     saveStep6,
     null
   );
+
+  const { formRef, draft, restoredAt, clearAndReload } = useDraftPersistence(
+    draftKey(siteId, "departments")
+  );
+  useEffect(() => clearPriorStepDraft(siteId, "departments"), [siteId]);
+
+  const draftDepts = parseDraftDepartments(draft?.departments_json);
+
   const [departments, setDepartments] = useState<Department[]>(
-    initial.length > 0 ? initial : STARTER_DEFAULTS
+    draftDepts && draftDepts.length > 0
+      ? draftDepts
+      : initial.length > 0
+        ? initial
+        : STARTER_DEFAULTS
   );
 
   const updateDept = (i: number, patch: Partial<Department>) => {
@@ -48,7 +85,14 @@ export function Step6Departments({ initial }: { initial: Department[] }) {
     .filter((d) => d.name.length > 0);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form ref={formRef} action={formAction} className="space-y-5">
+      {restoredAt && (
+        <DraftRestoredBanner
+          restoredAtLabel={describeRestoredAt(restoredAt)}
+          onDiscard={clearAndReload}
+        />
+      )}
+
       <p className="text-sm text-muted-foreground">
         These populate the location dropdown when a worker reports an incident. Areas are optional —
         a department alone is fine if you don&apos;t track sub-locations.

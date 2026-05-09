@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { launchSite } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult, NotificationKind } from "@/lib/site-setup/schemas";
+import { clearAllDraftsForSite } from "@/lib/site-setup/use-draft-persistence";
 import { StepFooter, StepFormError } from "./wizard-chrome";
 
 type Summary = {
@@ -46,11 +47,15 @@ type Summary = {
   warnings: string[];
 };
 
-export function Step9Confirm({ summary }: { summary: Summary }) {
+export function Step9Confirm({ summary, siteId }: { summary: Summary; siteId: string }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     async () => launchSite(),
     null
   );
+
+  // Reaching the Confirm step means every prior step is server-persisted.
+  // Wipe all of this site's drafts so a future fresh re-walk starts clean.
+  useEffect(() => clearAllDraftsForSite(siteId), [siteId]);
 
   return (
     <form action={formAction} className="space-y-5">

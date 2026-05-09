@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -12,7 +12,14 @@ import {
 import { saveStep2 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
 import { STATE_PLANS } from "@/lib/site-setup/state-plans";
-import { FieldError, StepFooter, StepFormError } from "./wizard-chrome";
+import {
+  clearPriorStepDraft,
+  draftKey,
+  pickFromDraft,
+  useDraftPersistence,
+  describeRestoredAt,
+} from "@/lib/site-setup/use-draft-persistence";
+import { DraftRestoredBanner, FieldError, StepFooter, StepFormError } from "./wizard-chrome";
 
 type Initial = {
   country: "US" | "GB";
@@ -21,26 +28,44 @@ type Initial = {
   gb_jurisdiction: "hse" | "local_authority" | null;
 };
 
-export function Step2Jurisdiction({ initial }: { initial: Initial }) {
+export function Step2Jurisdiction({ initial, siteId }: { initial: Initial; siteId: string }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     saveStep2,
     null
   );
 
-  const [oshaJurisdiction, setOshaJurisdiction] = useState<"federal" | "state_plan">(
-    initial.osha_jurisdiction ?? "federal"
+  const { formRef, draft, restoredAt, clearAndReload } = useDraftPersistence(
+    draftKey(siteId, "jurisdiction")
   );
-  const [statePlanCode, setStatePlanCode] = useState(initial.state_plan_code ?? "");
+  useEffect(() => clearPriorStepDraft(siteId, "jurisdiction"), [siteId]);
+
+  const [oshaJurisdiction, setOshaJurisdiction] = useState<"federal" | "state_plan">(
+    pickFromDraft(draft, "osha_jurisdiction", initial.osha_jurisdiction ?? "federal") as
+      | "federal"
+      | "state_plan"
+  );
+  const [statePlanCode, setStatePlanCode] = useState(
+    pickFromDraft(draft, "state_plan_code", initial.state_plan_code ?? "")
+  );
   const [gbJurisdiction, setGbJurisdiction] = useState<"hse" | "local_authority">(
-    initial.gb_jurisdiction ?? "hse"
+    pickFromDraft(draft, "gb_jurisdiction", initial.gb_jurisdiction ?? "hse") as
+      | "hse"
+      | "local_authority"
   );
 
   const fieldErr = (k: string) =>
     state?.ok === false ? state.fieldErrors?.[k]?.[0] : undefined;
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form ref={formRef} action={formAction} className="space-y-6">
       <input type="hidden" name="country" value={initial.country} />
+
+      {restoredAt && (
+        <DraftRestoredBanner
+          restoredAtLabel={describeRestoredAt(restoredAt)}
+          onDiscard={clearAndReload}
+        />
+      )}
 
       <p className="text-sm text-muted-foreground">
         {initial.country === "US"

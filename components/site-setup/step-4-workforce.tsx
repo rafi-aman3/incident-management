@@ -1,12 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Check, Info, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveStep4 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
-import { FieldError, StepFooter, StepFormError } from "./wizard-chrome";
+import {
+  clearPriorStepDraft,
+  draftKey,
+  pickFromDraft,
+  useDraftPersistence,
+  describeRestoredAt,
+} from "@/lib/site-setup/use-draft-persistence";
+import { DraftRestoredBanner, FieldError, StepFooter, StepFormError } from "./wizard-chrome";
 
 type Initial = {
   peak_employees_year: number | null;
@@ -20,17 +27,42 @@ type Initial = {
   current_year_hours: number | null;
 };
 
-export function Step4Workforce({ initial }: { initial: Initial }) {
+export function Step4Workforce({ initial, siteId }: { initial: Initial; siteId: string }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     saveStep4,
     null
   );
 
+  const { formRef, draft, restoredAt, clearAndReload } = useDraftPersistence(
+    draftKey(siteId, "workforce")
+  );
+  useEffect(() => clearPriorStepDraft(siteId, "workforce"), [siteId]);
+
   const fieldErr = (k: string) =>
     state?.ok === false ? state.fieldErrors?.[k]?.[0] : undefined;
 
+  const peakDraftDefault = pickFromDraft(
+    draft,
+    "peak_employees_year",
+    initial.peak_employees_year !== null ? String(initial.peak_employees_year) : ""
+  );
+  const avgDraftDefault = pickFromDraft(
+    draft,
+    "avg_employees_year",
+    initial.avg_employees_year !== null ? String(initial.avg_employees_year) : ""
+  );
+  const overrideDraftDefault = draft
+    ? draft.partially_exempt_override === "on"
+    : initial.partially_exempt_override;
+
   return (
-    <form action={formAction} className="space-y-6">
+    <form ref={formRef} action={formAction} className="space-y-6">
+      {restoredAt && (
+        <DraftRestoredBanner
+          restoredAtLabel={describeRestoredAt(restoredAt)}
+          onDiscard={clearAndReload}
+        />
+      )}
       <p className="text-sm text-muted-foreground">
         Employee headcount and annual hours drive Form 300A annual summary, recordkeeping
         exemption, and incident-rate metrics (TRIR / DART).
@@ -48,7 +80,7 @@ export function Step4Workforce({ initial }: { initial: Initial }) {
               type="number"
               min={0}
               max={1000000}
-              defaultValue={initial.peak_employees_year ?? ""}
+              defaultValue={peakDraftDefault}
               placeholder="145"
             />
             <FieldError msg={fieldErr("peak_employees_year")} />
@@ -66,7 +98,7 @@ export function Step4Workforce({ initial }: { initial: Initial }) {
               type="number"
               min={0}
               max={1000000}
-              defaultValue={initial.avg_employees_year ?? ""}
+              defaultValue={avgDraftDefault}
               placeholder="132"
             />
             <FieldError msg={fieldErr("avg_employees_year")} />
@@ -132,7 +164,7 @@ export function Step4Workforce({ initial }: { initial: Initial }) {
           <input
             type="checkbox"
             name="partially_exempt_override"
-            defaultChecked={initial.partially_exempt_override}
+            defaultChecked={overrideDraftDefault}
             className="mt-0.5 h-4 w-4"
           />
           <span>
