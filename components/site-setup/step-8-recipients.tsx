@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { saveStep6 } from "@/app/(app)/admin/site-setup/actions";
+import { saveStep8 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
 import { NOTIFICATION_KINDS, type NotificationKind } from "@/lib/site-setup/schemas";
 import { StepFooter, StepFormError } from "./wizard-chrome";
@@ -34,7 +34,7 @@ const KIND_LABELS: Record<NotificationKind, { title: string; body: string; requi
   capa_escalated:    { title: "CAPA escalated",            body: "A CAPA was reopened after a failed verification." },
 };
 
-export function Step6Recipients({
+export function Step8Recipients({
   profiles,
   initial,
 }: {
@@ -42,7 +42,7 @@ export function Step6Recipients({
   initial: RecipientsByKind;
 }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
-    saveStep6,
+    saveStep8,
     null
   );
   const [byKind, setByKind] = useState<RecipientsByKind>(() => {
@@ -175,7 +175,7 @@ export function Step6Recipients({
       />
 
       <StepFooter
-        prevHref="/admin/site-setup/5"
+        prevHref="/admin/site-setup/people"
         isPending={isPending}
         primaryDisabled={missingRequired.length > 0}
       />
