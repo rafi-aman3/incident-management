@@ -1696,6 +1696,7 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          onboarded_at: string | null
           org_id: string
           seen_welcome: boolean
           updated_at: string
@@ -1706,6 +1707,7 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          onboarded_at?: string | null
           org_id: string
           seen_welcome?: boolean
           updated_at?: string
@@ -1716,6 +1718,7 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          onboarded_at?: string | null
           org_id?: string
           seen_welcome?: boolean
           updated_at?: string
@@ -3003,6 +3006,19 @@ export type Database = {
           p_verifier_id: string
         }
         Returns: string
+      }
+      bootstrap_org_v1: {
+        Args: {
+          p_country: string
+          p_industry: Database["public"]["Enums"]["industry_type"]
+          p_org_name: string
+          p_site_name: string
+          p_timezone: string
+        }
+        Returns: {
+          org_id: string
+          site_id: string
+        }[]
       }
       can_edit_parent: {
         Args: {

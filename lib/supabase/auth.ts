@@ -25,10 +25,27 @@ export type ProfileRow = {
   full_name: string | null;
   department: string | null;
   seen_welcome: boolean;
+  onboarded_at: string | null;
 };
 
 /**
- * Server-side session gate. Redirects to /login if no session or no profile.
+ * For (onboarding) routes: requires auth.user but accepts the no-profile
+ * state (mid-bootstrap). Redirects to /login if no auth.user.
+ */
+export async function requireAuthenticatedUser() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  return { supabase, user };
+}
+
+/**
+ * Server-side session gate for (app) routes. Redirects:
+ *   - /login        if no auth.user
+ *   - /onboarding   if auth.user but no profile row yet (Phase 12)
+ *
  * Returns the user's profile + memberships + the resolved "current site"
  * (cookie-driven; falls back to first membership).
  */
@@ -42,11 +59,11 @@ export async function requireUser() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, org_id, email, full_name, department, seen_welcome")
+    .select("id, org_id, email, full_name, department, seen_welcome, onboarded_at")
     .eq("id", user.id)
     .single<ProfileRow>();
 
-  if (!profile) redirect("/login");
+  if (!profile) redirect("/onboarding");
 
   const { data: memberships } = await supabase
     .from("site_members")

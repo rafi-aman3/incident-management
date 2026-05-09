@@ -1,5 +1,6 @@
 import { ReactNode, Suspense } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { SidebarShell } from "@/components/app-shell/sidebar-shell";
 import { SIDEBAR_PINNED_COOKIE } from "@/components/app-shell/sidebar-cookie";
 import { Topbar } from "@/components/app-shell/topbar";
@@ -21,6 +22,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 async function AppShell({ children }: { children: ReactNode }) {
   const { profile, memberships, currentMembership, currentSiteId, currentRoleKey, supabase } =
     await requireUser();
+
+  // Phase 12 tab-crash recovery: profile + at least one site exists, but
+  // onboarded_at is still null → user committed Step 1+2 of /onboarding
+  // and lost their tab before Step 3 (or skipped invites by closing the
+  // browser). Route them back to finish.
+  if (profile.onboarded_at === null && memberships.length > 0) {
+    redirect("/onboarding?step=invite");
+  }
 
   // Permission-filter nav items server-side. resolvePermissions is
   // React.cache-memoized per request, so this is one round-trip total.

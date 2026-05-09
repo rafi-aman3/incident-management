@@ -15,6 +15,11 @@ This is the **page-by-page contract**: every route, what it shows, what the user
 ```
 /                                       → redirect to /dashboard or /login
 /login                                  Public · Sign in
+/register                               Public · Create account (Phase 12)
+/verify-otp                             Public · Verify email OTP (demo: 8484; Phase 12)
+/forgot-password                        Public · Request password reset (Phase 12)
+/reset-password                         Public · Apply new password from magic-link (Phase 12)
+/onboarding                             New users · Org + first site + invites wizard (Phase 12)
 /auth/callback                          Public · Supabase auth code exchange
 /dashboard                              All roles · KPIs + banners + activity
 /incidents                              All roles · List (scope per role)
