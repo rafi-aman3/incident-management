@@ -56,11 +56,13 @@ export function OnboardingWizard({
   fullName,
   initialStep,
   siteId,
+  defaultOrgName,
 }: {
   email: string;
   fullName: string;
   initialStep: StepKey;
   siteId: string | null;
+  defaultOrgName: string | null;
 }) {
   const [step, setStep] = useState<StepKey>(initialStep);
   const [activeSiteId, setActiveSiteId] = useState<string | null>(siteId);
@@ -82,6 +84,7 @@ export function OnboardingWizard({
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         {step === "org" ? (
           <OrgAndSiteStep
+            defaultOrgName={defaultOrgName}
             onSuccess={(newSiteId) => {
               setActiveSiteId(newSiteId);
               setStep("invite");
@@ -137,8 +140,10 @@ function ProgressBar({ current }: { current: StepKey }) {
 }
 
 function OrgAndSiteStep({
+  defaultOrgName,
   onSuccess,
 }: {
+  defaultOrgName: string | null;
   onSuccess: (siteId: string) => void;
 }) {
   const [state, formAction, pending] = useActionState<
@@ -171,6 +176,7 @@ function OrgAndSiteStep({
             id="org_name"
             name="org_name"
             placeholder="Acme Safety"
+            defaultValue={defaultOrgName ?? ""}
             required
             aria-invalid={!!fieldErr("org_name")}
             aria-describedby={fieldErr("org_name") ? "org_name_err" : undefined}
@@ -342,19 +348,15 @@ function InviteStep({
         <Button type="submit" disabled={invitePending} className="flex-1">
           {invitePending ? "Sending…" : "Send invites & continue"}
         </Button>
-        <SkipButton siteId={siteId} />
+        {/*
+          Skip routes through finishOnboarding via React 19 formAction.
+          A nested <form action={finishOnboarding}> here would be invalid HTML
+          and trigger a hydration mismatch.
+        */}
+        <Button type="submit" variant="outline" formAction={finishOnboarding}>
+          Skip for now
+        </Button>
       </div>
-    </form>
-  );
-}
-
-function SkipButton({ siteId }: { siteId: string }) {
-  return (
-    <form action={finishOnboarding}>
-      <input type="hidden" name="site_id" value={siteId} />
-      <Button type="submit" variant="outline">
-        Skip for now
-      </Button>
     </form>
   );
 }

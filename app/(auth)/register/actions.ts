@@ -29,6 +29,11 @@ const signUpSchema = z
     email: z.string().trim().toLowerCase().email("Enter a valid email"),
     password: z.string().min(8, "At least 8 characters"),
     confirm_password: z.string().min(1, "Required"),
+    org_name: z
+      .string()
+      .trim()
+      .min(1, "Company name can't be empty")
+      .max(120, "Company name is too long"),
   })
   .refine((d) => d.password === d.confirm_password, {
     message: "Passwords don't match",
@@ -44,6 +49,7 @@ export async function signUp(
     email: fd.get("email"),
     password: fd.get("password"),
     confirm_password: fd.get("confirm_password"),
+    org_name: fd.get("org_name"),
   });
   if (!parsed.success) {
     return {
@@ -58,7 +64,10 @@ export async function signUp(
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      data: { full_name: parsed.data.full_name },
+      data: {
+        full_name: parsed.data.full_name,
+        org_name: parsed.data.org_name,
+      },
     },
   });
 

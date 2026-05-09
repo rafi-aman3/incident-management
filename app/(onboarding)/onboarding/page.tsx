@@ -25,6 +25,10 @@ export default async function OnboardingPage({
   // Already onboarded → out of here.
   if (profile?.onboarded_at) redirect("/dashboard");
 
+  const meta = user.user_metadata as
+    | { full_name?: string; org_name?: string }
+    | undefined;
+
   // Profile exists + at least one site = mid-flow (Step 1+2 committed,
   // Step 3 pending). Force Step 3 so the user finishes.
   if (profile) {
@@ -41,6 +45,7 @@ export default async function OnboardingPage({
           fullName={profile.full_name ?? ""}
           initialStep="invite"
           siteId={membership.site_id}
+          defaultOrgName={null}
         />
       );
     }
@@ -51,11 +56,10 @@ export default async function OnboardingPage({
   return (
     <OnboardingWizard
       email={user.email ?? ""}
-      fullName={
-        ((user.user_metadata?.full_name as string | undefined) ?? "") || ""
-      }
+      fullName={(meta?.full_name ?? "") || ""}
       initialStep={initialStep}
       siteId={sp.site ?? null}
+      defaultOrgName={meta?.org_name ?? null}
     />
   );
 }

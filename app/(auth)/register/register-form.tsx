@@ -56,6 +56,23 @@ export function RegisterForm() {
       </div>
 
       <div className="grid gap-2">
+        <Label htmlFor="org_name">Company name</Label>
+        <Input
+          id="org_name"
+          name="org_name"
+          autoComplete="organization"
+          required
+          aria-invalid={!!fieldErr("org_name")}
+          aria-describedby={fieldErr("org_name") ? "org_name_err" : undefined}
+        />
+        {fieldErr("org_name") && (
+          <p id="org_name_err" className="text-xs text-destructive">
+            {fieldErr("org_name")}
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-2">
         <Label htmlFor="password">Password</Label>
         <Input
           id="password"
