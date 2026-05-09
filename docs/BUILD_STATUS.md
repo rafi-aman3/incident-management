@@ -390,6 +390,52 @@ Phase 11 closes. Plan: `plans/11c-roles-and-invitations.md`.
 
 ---
 
+## Phase 8 — Settings (account preferences)
+
+Merged 2026-05-09 (PR #24). First post-Phase-6 feature PR. Replaces the EmptyState stub at `/settings` shipped in 6l Topbar polish (PR #9) with a real account-preferences surface. **Account-only** scope — every org-level / site-level / role-level / notification-recipient surface already lives under `/admin/*` after Phase 11 (the original Phase 8 reservation was "Settings + Members"; Members moved to Phase 11 on 2026-05-07). User answered all 6 open questions as "proceed with recommendations" — every Q resolved scope-conservatively.
+
+**No schema migration. No new permission keys. No new RPCs.** Account settings are RLS-bound to `auth.uid() = profiles.id` via the existing `profiles_update_self` policy from Phase 0 init.sql. Single route, 4 sections, 3 server actions.
+
+**3 server actions** in `app/(app)/settings/actions.ts`:
+- `updateProfile` — Zod validates `full_name` (required, max 120) + `department` (optional, max 120); RLS-bound update over `profiles`. Returns `ActionResult` with `fieldErrors` via `flatten().fieldErrors`. Revalidates `/settings` + `/` layout (so the topbar avatar dropdown re-reads `full_name` on next nav).
+- `changePassword` — re-auths via `supabase.auth.signInWithPassword({ email, password: current_password })` BEFORE applying `auth.updateUser({ password: new_password })` so a stolen session can't change pw without the typed current password. Wrong current → `fieldErrors.current_password = ["Current password is incorrect"]`. Mismatched confirm → `fieldErrors.confirm_password` (Zod `.refine`). New === current → `fieldErrors.new_password`. Min 8 chars on `new_password`.
+- `signOutEverywhere` — uses the service-role admin client (`lib/supabase/admin.ts`, already shipped Phase 11c for `/invite/[token]` lookup) to call `auth.admin.signOut(userId)`, invalidating every active session for this user including the current one. Redirects to `/login?signed_out=everywhere`.
+
+**Page layout** (`app/(app)/settings/page.tsx`): single `max-w-3xl` column with 4 cards stacked. Header copy points at `/admin` for org-level settings.
+
+**4 cards under `components/settings/`:**
+- `<ProfileCard>` — Display name + Department editable; Email read-only with "Contact your admin" v2 hint. Field-errored inputs get `aria-invalid` + `aria-describedby` + per-field error message.
+- `<SecurityCard>` — password change form with `<PwField>` reusable input (Current / New / Confirm; `autoComplete="current-password" / "new-password"`); below the form, a section-divided "Sign out from all devices" row that opens an AlertDialog confirm (mirrors 6c destructive-action precedent + 6j Demo Reset migration). Form ref + `formRef.current?.reset()` on success so the 3 fields clear; toast "Password updated".
+- `<AppearanceCard>` — Light / Dark / System theme toggle as a 3-button `role="radiogroup"` (mirrors 6f Templates industry-filter + 6i Planner view-toggle precedent — radiogroup, not tablist, for filters that don't swap panels). Per-button `role="radio"` + `aria-checked`. Active button gets `bg-brand text-white shadow-sm`. Uses `next-themes`' `useTheme()` + a `mounted` flag (set in `useEffect`) to gate the active-theme readback so SSR markup matches the first client render — per next-themes' hydration-mismatch docs. The `setMounted(true)` in `useEffect` carries an inline `eslint-disable-next-line react-hooks/set-state-in-effect` with a comment linking the next-themes docs (the lint rule is a known false positive for this exact pattern).
+- `<SignOutCard>` — section-level button mounting the existing `signOut` action from `app/(auth)/login/actions.ts`. **Plain Button (no AlertDialog)** per Q6 — same-device sign-out is reversible by signing back in; AlertDialog reserved for the harder-to-undo sign-out-everywhere flow.
+
+**Theme infrastructure:**
+- New `<ThemeProvider>` wrapper at `components/theme-provider.tsx` — thin client component wrapping `next-themes`'s ThemeProvider so the RSC root layout (`app/layout.tsx`) can import a single client-component module (mirrors how `components/ui/sonner.tsx` already wraps sonner's `<Toaster>`).
+- `app/layout.tsx` wraps the tree in `<ThemeProvider attribute="class" defaultTheme="system" enableSystem>`. `suppressHydrationWarning` added to `<html>` per next-themes' recommendation (the `class="dark"` attribute is set client-side after mount, so SSR markup mismatches by design for one frame).
+- `next-themes` was already a direct dep (`^0.4.6` in package.json) — previously only consumed by `components/ui/sonner.tsx` for sonner's theme-aware toasts. No new dep added.
+
+**State coverage:** `app/(app)/settings/{loading,error}.tsx` — 4-card skeleton matching the post-load layout + brand destructive card with **Try again** + **Back to dashboard** (mirrors 6h/6j shape).
+
+**Login page** (`app/(auth)/login/page.tsx`): reads `searchParams.signed_out === "everywhere"` and renders a 1-line `role="status"` warning callout above the form: "You've been signed out from all devices. Sign in again to continue." `searchParams` extended with `signed_out?: string`.
+
+**Doc updates:**
+- `docs/ui-flow.md` line 36 fixed: outdated "Site Admin · Site settings page (post-setup)" → "All users · Account preferences (profile, password, theme, sign out)". Site-level concerns moved to `/admin/sites/[id]` in Phase 11a; the line had been stale since.
+- `docs/smoke-test-phase8.md` (NEW) — 11-step walkthrough (land · profile happy path · profile validation · password wrong-current · password mismatch · password success · sign-out-everywhere · theme persists · same-device sign out · a11y/SR sanity · console hygiene).
+
+**Open questions resolved on kickoff** (all "proceed with recommendations"):
+1. Theme storage = next-themes/localStorage per-device (over a synced DB column — DB column is over-engineered for a per-device convention).
+2. Sign-out-everywhere = ship (admin client already in repo from 11c; security best-practice).
+3. Email change = defer to v2 (Supabase verification flow with 2-stage confirm).
+4. Notification silencing per user = defer to v2 (would need new `user_notification_silences` table + dashboard banner filter + bell filter).
+5. `preferred_pathway` column = defer (no current dashboard need; empty-state cards already personalize).
+6. Section-level sign out confirm = plain button (same-device, reversible); AlertDialog reserved for sign-out-everywhere.
+
+**Deferred to v2 (logged):** email change · MFA/2FA enrollment + recovery codes + step-up auth · notification silencing per user · avatar upload · language preference · timezone preference · active-sessions list · `preferred_pathway` column / personalized dashboard.
+
+`pnpm tsc --noEmit` clean. `pnpm lint` 42/14 — **exact match with 6j baseline**. The next-themes mounted-flag pattern in `appearance-card.tsx` requires the inline disable noted above. Plan: `plans/08-settings.md`.
+
+---
+
 ## Workflow notes
 
-All Phase 6 polish PRs merged 2026-05-08 — V1 demo polish-complete. Next per the deferred roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 8 (Settings) → Phase 9 (Argus AI) → Phase 10 (Safety Bulletin + wizard restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Phase 6 polish + Phase 8 Settings shipped. Next per the deferred roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 9 (Argus AI assistant) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
