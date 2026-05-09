@@ -46,6 +46,7 @@ OSHA references: 29 CFR 1904.4 (recordkeeping), 1904.41 (electronic submission /
 |---|---|---|---|---|
 | **Address** | street_1, street_2 | Single `address text` | Universal | Form 300A, RIDDOR F2508 |
 | | city, state_or_region, postal_code | ❌ | Universal | Same |
+| | latitude, longitude | ❌ | Universal | Future map-view dashboard |
 | **Jurisdiction** | osha_jurisdiction (federal / state_plan_<code>) | ❌ | OSHA | Reporting portal routing |
 | | gb_jurisdiction (hse / local_authority) | ❌ | RIDDOR | Reporting portal routing |
 | **Identifiers** | ein (Employer ID) | ❌ | OSHA | ITA submission |
@@ -76,6 +77,7 @@ OSHA references: 29 CFR 1904.4 (recordkeeping), 1904.41 (electronic submission /
 
 **New columns on `sites`:**
 - `street_1 text`, `street_2 text`, `city text`, `state_or_region text`, `postal_code text` — structured address
+- `latitude numeric(9,6)`, `longitude numeric(9,6)` — both nullable; CHECK constraint `(latitude IS NULL) = (longitude IS NULL)` so you can't half-set; range checks `latitude between -90 and 90` + `longitude between -180 and 180`. ~11 cm precision. Stays as plain numerics (NOT PostGIS) — future map dashboard just reads two numbers per row. If we ever need real spatial queries ("sites within 50 mi of incident"), promote to PostGIS in a future phase via a one-shot conversion.
 - `osha_jurisdiction text` — `federal` | `state_plan` (free-form `state_plan_code` text alongside, since CA / MI / WA / etc. are 22+ values)
 - `state_plan_code char(2)` — only when `osha_jurisdiction='state_plan'`
 - `gb_jurisdiction text` — `hse` | `local_authority`
@@ -156,7 +158,7 @@ Appendix A list and exempt-NAICS list come from the OSHA codified tables — exa
 
 | # | Slug | Title | Country branching | Fields |
 |---|---|---|---|---|
-| 1 | `basics` | Site basics | — | name, structured address, timezone, site_type, operational_status, opened_on, (closed_on when status=closed) |
+| 1 | `basics` | Site basics | — | name, structured address, **latitude + longitude**, timezone, site_type, operational_status, opened_on, (closed_on when status=closed) |
 | 2 | `jurisdiction` | Jurisdiction | US: Federal vs State Plan + state code; GB: HSE vs Local Authority | regulator (legacy `osha`/`hse`/`both` field), osha_jurisdiction, state_plan_code, gb_jurisdiction |
 | 3 | `identifiers` | Identifiers | US block: EIN, NAICS, SIC, ITA establishment ID; GB block: CRN, UK SIC 2007, HSE establishment number | ein, naics_code, sic_code, ita_establishment_id, crn, uk_sic_2007, hse_establishment_number |
 | 4 | `workforce` | Workforce | US-leaning (300A driver) | peak_employees_year, avg_employees_year, in-place editor for `site_annual_hours`, computed read-only badges for `is_ita_required` + `is_partially_exempt` with override toggle for the latter |
@@ -192,6 +194,7 @@ export function stepBySlug(slug: SetupStepSlug): SetupStep { ... }
 
 `scripts/seed.ts` currently sets `setup_completed_at = now()` on demo sites without populating the new fields. Plan to:
 - Backfill structured address fields on Houston, Manchester, etc. with realistic placeholder values.
+- Backfill `latitude` + `longitude` with real coordinates: Houston `(29.7604, -95.3698)`, Manchester `(53.4808, -2.2426)`, Houston / Building A offset slightly from Houston (`(29.7610, -95.3705)`), Manchester / North offset slightly from Manchester. Drives the future map-view dashboard.
 - Set EIN to a fake but format-valid `12-3456789` for Houston (US sites).
 - Set peak_employees_year + avg_employees_year to seeded numbers (Houston: 145 / 132; Manchester: 65 / 60).
 - Pick `site_type='fixed'`, `operational_status='active'` for all.
@@ -231,9 +234,12 @@ New `docs/smoke-test-phase13.md`:
 7. **`site_ehs_lead_id` cardinality**: nullable? Required on save of People step? Recommendation: nullable column; the wizard requires it on Step 7 save but the column allows NULL for backward compat with existing seeded sites.
 8. **Annual hours integration on Step 4**: embed the existing multi-year editor inline, or link out to `/admin/sites/[id]?tab=hours`? Recommendation: embed inline — wizard fatigue is real, sending the user to a different tab mid-setup is jarring.
 9. **Emergency contacts minimum**: zero allowed (skip step) or require 1+? Recommendation: zero allowed but warn on Step 9 confirm if zero contacts.
+10. **Lat/long capture UX**: pure manual paste (V1, simplest), or a "Look up from address" button using a free geocoding API (Nominatim/OSM)? Recommendation: V1 = manual paste only with a help text "right-click in Google Maps → click coordinates → paste here". Geocoding API integration (Nominatim has a 1 req/sec policy that fits low-volume admin use) deferred to V2 when the future map dashboard ships and the field becomes load-bearing.
 
 ## Out of scope (defer to v2)
 
+- **Map-view dashboard** — Phase 13 ships the lat/long *columns* + populates them in the demo seed; the actual `<MapView sites={...} />` component (Leaflet + OpenStreetMap tiles is the lightest path) is a future phase. This phase is the schema unblock.
+- **Geocoding API integration** — manual lat/long paste only in V1 (see Q10).
 - ITA portal API integration — manual ITA submission stays
 - HSE F2508 portal API integration — same
 - Multi-establishment EIN handling (one EIN per legal employer can cover multiple establishments — this PR uses one EIN per site, simpler model)
