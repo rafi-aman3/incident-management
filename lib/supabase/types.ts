@@ -1940,6 +1940,50 @@ export type Database = {
           },
         ]
       }
+      site_emergency_contacts: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          role: string | null
+          site_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          role?: string | null
+          site_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          role?: string | null
+          site_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_emergency_contacts_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_members: {
         Row: {
           created_at: string
@@ -1992,59 +2036,146 @@ export type Database = {
       sites: {
         Row: {
           address: string | null
+          applicable_standards: string[]
           archive_reason: string | null
           archived_at: string | null
           archived_by: string | null
+          avg_employees_year: number | null
+          city: string | null
+          closed_on: string | null
           country: string
           created_at: string
+          crn: string | null
+          ein: string | null
+          gb_jurisdiction: string | null
+          hazard_tags: string[]
+          hse_establishment_number: string | null
           id: string
+          ita_establishment_id: string | null
+          latitude: number | null
+          longitude: number | null
           naics_code: string | null
           name: string
+          opened_on: string | null
+          operational_status: string
           org_id: string
           osha_establishment_id: string | null
+          osha_jurisdiction: string | null
           parent_site_id: string | null
+          partially_exempt_override: boolean
+          peak_employees_year: number | null
+          postal_code: string | null
+          psm_applicable: boolean
           region: string | null
+          riddor_responsible_person_name: string | null
+          riddor_responsible_person_role: string | null
           setup_completed_at: string | null
           setup_progress: Json
+          sic_code: string | null
+          site_ehs_lead_id: string | null
+          site_type: string
+          state_or_region: string | null
+          state_plan_code: string | null
+          street_1: string | null
+          street_2: string | null
           timezone: string
+          uk_sic_2007: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          applicable_standards?: string[]
           archive_reason?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          avg_employees_year?: number | null
+          city?: string | null
+          closed_on?: string | null
           country: string
           created_at?: string
+          crn?: string | null
+          ein?: string | null
+          gb_jurisdiction?: string | null
+          hazard_tags?: string[]
+          hse_establishment_number?: string | null
           id?: string
+          ita_establishment_id?: string | null
+          latitude?: number | null
+          longitude?: number | null
           naics_code?: string | null
           name: string
+          opened_on?: string | null
+          operational_status?: string
           org_id: string
           osha_establishment_id?: string | null
+          osha_jurisdiction?: string | null
           parent_site_id?: string | null
+          partially_exempt_override?: boolean
+          peak_employees_year?: number | null
+          postal_code?: string | null
+          psm_applicable?: boolean
           region?: string | null
+          riddor_responsible_person_name?: string | null
+          riddor_responsible_person_role?: string | null
           setup_completed_at?: string | null
           setup_progress?: Json
+          sic_code?: string | null
+          site_ehs_lead_id?: string | null
+          site_type?: string
+          state_or_region?: string | null
+          state_plan_code?: string | null
+          street_1?: string | null
+          street_2?: string | null
           timezone?: string
+          uk_sic_2007?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
+          applicable_standards?: string[]
           archive_reason?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          avg_employees_year?: number | null
+          city?: string | null
+          closed_on?: string | null
           country?: string
           created_at?: string
+          crn?: string | null
+          ein?: string | null
+          gb_jurisdiction?: string | null
+          hazard_tags?: string[]
+          hse_establishment_number?: string | null
           id?: string
+          ita_establishment_id?: string | null
+          latitude?: number | null
+          longitude?: number | null
           naics_code?: string | null
           name?: string
+          opened_on?: string | null
+          operational_status?: string
           org_id?: string
           osha_establishment_id?: string | null
+          osha_jurisdiction?: string | null
           parent_site_id?: string | null
+          partially_exempt_override?: boolean
+          peak_employees_year?: number | null
+          postal_code?: string | null
+          psm_applicable?: boolean
           region?: string | null
+          riddor_responsible_person_name?: string | null
+          riddor_responsible_person_role?: string | null
           setup_completed_at?: string | null
           setup_progress?: Json
+          sic_code?: string | null
+          site_ehs_lead_id?: string | null
+          site_type?: string
+          state_or_region?: string | null
+          state_plan_code?: string | null
+          street_1?: string | null
+          street_2?: string | null
           timezone?: string
+          uk_sic_2007?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2067,6 +2198,13 @@ export type Database = {
             columns: ["parent_site_id"]
             isOneToOne: false
             referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sites_site_ehs_lead_id_fkey"
+            columns: ["site_ehs_lead_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2968,6 +3106,11 @@ export type Database = {
       }
     }
     Functions: {
+      _phase13_high_hazard_naics_prefixes: { Args: never; Returns: string[] }
+      _phase13_partially_exempt_naics_prefixes: {
+        Args: never
+        Returns: string[]
+      }
       accept_invitation_v1: {
         Args: { p_token: string }
         Returns: {
@@ -3104,6 +3247,14 @@ export type Database = {
           p_site_id: string
         }
         Returns: undefined
+      }
+      is_ita_required: {
+        Args: { p_naics: string; p_peak_employees: number }
+        Returns: boolean
+      }
+      is_partially_exempt: {
+        Args: { p_naics: string; p_peak_employees: number }
+        Returns: boolean
       }
       link_document_v1: {
         Args: {

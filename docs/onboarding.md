@@ -102,7 +102,9 @@ Configured in admin Site Setup Wizard Step 6.
 
 ## 5. Site Administrator — Setup Wizard
 
-This is the **one real wizard** in onboarding (Report Wizard is the other, but it's incident-flow not onboarding). A site admin landing on a tenant with `setup_completed_at IS NULL` is routed to `/admin/site-setup` instead of `/dashboard`. The wizard has 7 small steps; each is one decision; admin can save & resume at any time. Each step writes to `sites.setup_progress` so progress is visible and recoverable.
+This is the **one real wizard** in onboarding (Report Wizard is the other, but it's incident-flow not onboarding). A site admin landing on a tenant with `setup_completed_at IS NULL` is routed to `/admin/site-setup` instead of `/dashboard`. The wizard has 9 small steps with self-explanatory slugs (`/admin/site-setup/<slug>`); each is one decision; admin can save & resume at any time. Each step writes to `sites.setup_progress` so progress is visible and recoverable.
+
+> **Phase 13 reshape (2026-05-09):** the previous 7-step shape (`basics → regulator → establishment-ids → departments → users → recipients → confirm`) was replaced by 9 OSHA + RIDDOR-aligned steps with slug URLs: `basics → jurisdiction → identifiers → workforce → hazards → departments → people → recipients → confirm`. The detailed step descriptions below are pre-13 — the canonical step inventory now lives in `lib/site-setup/steps.ts` and `plans/13-site-setup-osha-riddor.md`. SPEC §15 logs the schema delta.
 
 ### 5.1 Wizard chrome
 - Top: progress bar (7 dots, current highlighted in brand purple `#735CDD`, completed in success green `#16A34A`)

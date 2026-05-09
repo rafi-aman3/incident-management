@@ -20,3 +20,4 @@ export default async function SiteSetupIndex() {
   const progress = (site?.setup_progress ?? {}) as SetupProgress;
   redirect(`/admin/site-setup/${nextIncompleteStep(progress)}`);
 }
+// Note: nextIncompleteStep returns a slug since Phase 13 (was a step number pre-13).

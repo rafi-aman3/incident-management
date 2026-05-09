@@ -92,6 +92,13 @@ async function ensureDefaultRoles(orgId: string) {
 // ---------------------------------------------------------------------------
 // 2. Sites — 2 top-level + 2 children for hierarchy + include_children demo
 // ---------------------------------------------------------------------------
+type EmergencyContact = {
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+};
+
 type SiteSeed = {
   slug: string; // not stored — used as natural key for idempotence via name
   name: string;
@@ -99,15 +106,109 @@ type SiteSeed = {
   region?: string;
   timezone: string;
   parent?: string; // slug of parent
+  // Phase 13 — structured address + lat/long.
+  street_1: string;
+  city: string;
+  state_or_region: string;
+  postal_code: string;
+  latitude: number;
+  longitude: number;
+  // Lifecycle
+  site_type: "fixed" | "mobile" | "office_only";
+  operational_status: "active" | "inactive" | "closed";
+  opened_on: string;
+  // Jurisdiction
+  osha_jurisdiction?: "federal" | "state_plan";
+  state_plan_code?: string;
+  gb_jurisdiction?: "hse" | "local_authority";
+  // US identifiers
+  ein?: string;
   naics?: string;
+  sic_code?: string;
   osha?: string;
+  // GB identifiers
+  crn?: string;
+  uk_sic_2007?: string;
+  // Workforce
+  peak_employees_year?: number;
+  avg_employees_year?: number;
+  // Hazards
+  applicable_standards?: string[];
+  psm_applicable?: boolean;
+  hazard_tags?: string[];
+  // RIDDOR responsible person (GB only)
+  riddor_responsible_person_name?: string;
+  riddor_responsible_person_role?: string;
+  // Emergency contacts (per-site list; written to site_emergency_contacts).
+  emergency_contacts: EmergencyContact[];
+  // EHS lead pointer (resolved post-user-seed by email lookup; site_ehs_lead_id
+  // is populated in setSiteEhsLeads() once user IDs exist).
+  ehs_lead_email?: string;
 };
 
 const SITE_SEEDS: SiteSeed[] = [
-  { slug: "houston",         name: "Houston",         country: "US", region: "TX", timezone: "America/Chicago", naics: "332710", osha: "OSHA-HOU-001" },
-  { slug: "houston-bldg-a",  name: "Houston / Building A", country: "US", region: "TX", timezone: "America/Chicago", parent: "houston" },
-  { slug: "manchester",      name: "Manchester",      country: "GB", region: "ENG", timezone: "Europe/London" },
-  { slug: "manchester-north",name: "Manchester / North", country: "GB", region: "ENG", timezone: "Europe/London", parent: "manchester" },
+  {
+    slug: "houston", name: "Houston", country: "US", region: "TX", timezone: "America/Chicago",
+    street_1: "1450 Industry Way", city: "Houston", state_or_region: "TX", postal_code: "77002",
+    latitude: 29.7604, longitude: -95.3698,
+    site_type: "fixed", operational_status: "active", opened_on: "2018-04-12",
+    osha_jurisdiction: "federal",
+    ein: "12-3456789", naics: "332710", sic_code: "3441", osha: "OSHA-HOU-001",
+    peak_employees_year: 145, avg_employees_year: 132,
+    applicable_standards: ["1910"], psm_applicable: false,
+    hazard_tags: ["confined_space", "hot_work", "hazardous_energy", "chemicals", "noise"],
+    ehs_lead_email: "ehs@demo.local",
+    emergency_contacts: [
+      { name: "Alex Admin",   role: "Plant Manager", phone: "+1 713 555 0100", email: "admin@demo.local" },
+      { name: "Erin Manager", role: "EHS Manager",   phone: "+1 713 555 0140", email: "ehs@demo.local" },
+    ],
+  },
+  {
+    slug: "houston-bldg-a", name: "Houston / Building A", country: "US", region: "TX", timezone: "America/Chicago", parent: "houston",
+    street_1: "1450 Industry Way, Building A", city: "Houston", state_or_region: "TX", postal_code: "77002",
+    latitude: 29.7610, longitude: -95.3705,
+    site_type: "fixed", operational_status: "active", opened_on: "2019-09-03",
+    osha_jurisdiction: "federal",
+    naics: "332710",
+    peak_employees_year: 38, avg_employees_year: 34,
+    applicable_standards: ["1910"], psm_applicable: false,
+    hazard_tags: ["hazardous_energy", "manual_handling", "noise"],
+    emergency_contacts: [
+      { name: "Sam Supervisor", role: "Building A Supervisor", phone: "+1 713 555 0152", email: "supervisor@demo.local" },
+    ],
+  },
+  {
+    slug: "manchester", name: "Manchester", country: "GB", region: "ENG", timezone: "Europe/London",
+    street_1: "12 Trafford Park Road", city: "Manchester", state_or_region: "Greater Manchester", postal_code: "M17 1AA",
+    latitude: 53.4808, longitude: -2.2426,
+    site_type: "fixed", operational_status: "active", opened_on: "2020-06-15",
+    gb_jurisdiction: "hse",
+    crn: "07654321", uk_sic_2007: "25620",
+    peak_employees_year: 65, avg_employees_year: 60,
+    hazard_tags: ["chemicals", "manual_handling", "noise", "working_at_height"],
+    riddor_responsible_person_name: "Erin Manager",
+    riddor_responsible_person_role: "EHS Manager",
+    ehs_lead_email: "ehs@demo.local",
+    emergency_contacts: [
+      { name: "Erin Manager", role: "EHS Manager",  phone: "+44 161 555 0100", email: "ehs@demo.local" },
+      { name: "Alex Admin",   role: "Site Director", phone: "+44 161 555 0140", email: "admin@demo.local" },
+    ],
+  },
+  {
+    slug: "manchester-north", name: "Manchester / North", country: "GB", region: "ENG", timezone: "Europe/London", parent: "manchester",
+    street_1: "Building 4, Trafford Park North", city: "Manchester", state_or_region: "Greater Manchester", postal_code: "M17 1BB",
+    latitude: 53.4830, longitude: -2.2410,
+    site_type: "fixed", operational_status: "active", opened_on: "2022-02-01",
+    gb_jurisdiction: "hse",
+    uk_sic_2007: "46900",
+    peak_employees_year: 22, avg_employees_year: 20,
+    hazard_tags: ["manual_handling", "noise"],
+    riddor_responsible_person_name: "Erin Manager",
+    riddor_responsible_person_role: "EHS Manager",
+    emergency_contacts: [
+      { name: "Sam Supervisor", role: "Shift Lead", phone: "+44 161 555 0150", email: "supervisor@demo.local" },
+    ],
+  },
 ];
 
 async function ensureSites(orgId: string) {
@@ -126,6 +227,39 @@ async function ensureSites(orgId: string) {
   return map;
 }
 
+// Phase 13 fields all sites get on insert + backfill on re-seed.
+function siteUpdatePayload(seed: SiteSeed) {
+  return {
+    region: seed.region ?? null,
+    timezone: seed.timezone,
+    street_1: seed.street_1,
+    city: seed.city,
+    state_or_region: seed.state_or_region,
+    postal_code: seed.postal_code,
+    latitude: seed.latitude,
+    longitude: seed.longitude,
+    site_type: seed.site_type,
+    operational_status: seed.operational_status,
+    opened_on: seed.opened_on,
+    osha_jurisdiction: seed.osha_jurisdiction ?? null,
+    state_plan_code: seed.state_plan_code ?? null,
+    gb_jurisdiction: seed.gb_jurisdiction ?? null,
+    ein: seed.ein ?? null,
+    naics_code: seed.naics ?? null,
+    sic_code: seed.sic_code ?? null,
+    osha_establishment_id: seed.osha ?? null,
+    crn: seed.crn ?? null,
+    uk_sic_2007: seed.uk_sic_2007 ?? null,
+    peak_employees_year: seed.peak_employees_year ?? null,
+    avg_employees_year: seed.avg_employees_year ?? null,
+    applicable_standards: seed.applicable_standards ?? [],
+    psm_applicable: seed.psm_applicable ?? false,
+    hazard_tags: seed.hazard_tags ?? [],
+    riddor_responsible_person_name: seed.riddor_responsible_person_name ?? null,
+    riddor_responsible_person_role: seed.riddor_responsible_person_role ?? null,
+  };
+}
+
 async function upsertSite(orgId: string, seed: SiteSeed, parentId: string | undefined) {
   const { data: existing } = await sb
     .from("sites")
@@ -134,16 +268,15 @@ async function upsertSite(orgId: string, seed: SiteSeed, parentId: string | unde
     .eq("name", seed.name)
     .maybeSingle();
   if (existing) {
-    // Backfill setup_completed_at on already-seeded rows so re-running the
-    // seed against an older db marks the demo sites as "ready" — the
-    // dashboard auto-redirect uses this flag to gate the wizard.
-    if (!existing.setup_completed_at) {
-      await sb
-        .from("sites")
-        .update({ setup_completed_at: new Date().toISOString() })
-        .eq("id", existing.id);
-      log("site marked setup-complete:", seed.name);
-    }
+    // Backfill setup_completed_at + the Phase 13 field set on already-seeded
+    // rows so re-running the seed against an older db lands the demo
+    // demo-defensible OSHA/RIDDOR data in place.
+    const update = {
+      ...siteUpdatePayload(seed),
+      setup_completed_at: existing.setup_completed_at ?? new Date().toISOString(),
+    };
+    await sb.from("sites").update(update).eq("id", existing.id);
+    log("site backfilled:", seed.name);
     return existing.id as string;
   }
 
@@ -154,10 +287,7 @@ async function upsertSite(orgId: string, seed: SiteSeed, parentId: string | unde
       parent_site_id: parentId ?? null,
       name: seed.name,
       country: seed.country,
-      region: seed.region,
-      timezone: seed.timezone,
-      naics_code: seed.naics,
-      osha_establishment_id: seed.osha,
+      ...siteUpdatePayload(seed),
       // Demo sites are pre-configured — skip the wizard so users land
       // straight on the dashboard with the seeded data already populated.
       setup_completed_at: new Date().toISOString(),
@@ -167,6 +297,39 @@ async function upsertSite(orgId: string, seed: SiteSeed, parentId: string | unde
   if (error) throw error;
   log("site created:", seed.name);
   return data.id as string;
+}
+
+// Replace emergency contacts for each demo site idempotently (delete-then-insert).
+async function ensureEmergencyContacts(siteIds: Map<string, string>) {
+  for (const seed of SITE_SEEDS) {
+    const siteId = siteIds.get(seed.slug);
+    if (!siteId) continue;
+    await sb.from("site_emergency_contacts").delete().eq("site_id", siteId);
+    if (seed.emergency_contacts.length === 0) continue;
+    const rows = seed.emergency_contacts.map((c, i) => ({
+      site_id: siteId,
+      name: c.name,
+      role: c.role,
+      phone: c.phone,
+      email: c.email,
+      sort_order: i,
+    }));
+    const { error } = await sb.from("site_emergency_contacts").insert(rows);
+    if (error) throw error;
+  }
+  log("emergency contacts seeded");
+}
+
+// Wire each site's site_ehs_lead_id to the seeded user resolved by email.
+async function setSiteEhsLeads(siteIds: Map<string, string>, userIds: Map<string, string>) {
+  for (const seed of SITE_SEEDS) {
+    if (!seed.ehs_lead_email) continue;
+    const siteId = siteIds.get(seed.slug);
+    const userId = userIds.get(seed.ehs_lead_email);
+    if (!siteId || !userId) continue;
+    await sb.from("sites").update({ site_ehs_lead_id: userId }).eq("id", siteId);
+  }
+  log("site EHS leads linked");
 }
 
 // ---------------------------------------------------------------------------
@@ -1699,6 +1862,10 @@ async function main() {
   const roles = await ensureDefaultRoles(orgId);
   const sites = await ensureSites(orgId);
   const users = await ensureUsers(orgId, sites, roles);
+  // Phase 13 — emergency contacts + site EHS leads land after sites + users
+  // exist (EHS leads are FKs into profiles).
+  await ensureEmergencyContacts(sites);
+  await setSiteEhsLeads(sites, users);
   const incidents = await ensureIncidents(orgId, sites, users);
   await ensureInjuredPersons(orgId);
   await ensureWitnesses(orgId);

@@ -1,29 +1,29 @@
 import Link from "next/link";
 import { AlertTriangle, Check, RotateCcw } from "lucide-react";
-import { SETUP_STEPS, type SetupProgress, type SetupStepNumber } from "@/lib/site-setup/steps";
+import { SETUP_STEPS, type SetupProgress, type SetupStepSlug } from "@/lib/site-setup/steps";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  currentStep: SetupStepNumber;
+  currentSlug: SetupStepSlug;
   progress: SetupProgress;
   siteName: string;
 };
 
-export function WizardChrome({ currentStep, progress, siteName }: Props) {
+export function WizardChrome({ currentSlug, progress, siteName }: Props) {
   return (
     <div className="space-y-6 py-8">
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">Site setup</p>
         <h1 className="text-2xl font-semibold">{siteName}</h1>
         <p className="text-sm text-muted-foreground">
-          Seven small steps. Save and resume any time — nothing locks until you click Launch.
+          Nine quick steps. Save and resume any time — nothing locks until you click Launch.
         </p>
       </div>
 
-      <ProgressDots currentStep={currentStep} progress={progress} />
+      <ProgressDots currentSlug={currentSlug} progress={progress} />
 
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-[220px_1fr]">
-        <StepList currentStep={currentStep} progress={progress} />
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-[240px_1fr]">
+        <StepList currentSlug={currentSlug} progress={progress} />
         <div className="min-w-0">{/* page renders form panel here */}</div>
       </div>
     </div>
@@ -31,13 +31,14 @@ export function WizardChrome({ currentStep, progress, siteName }: Props) {
 }
 
 export function ProgressDots({
-  currentStep,
+  currentSlug,
   progress,
 }: {
-  currentStep: SetupStepNumber;
+  currentSlug: SetupStepSlug;
   progress: SetupProgress;
 }) {
   const completedCount = SETUP_STEPS.filter((s) => Boolean(progress[s.progressKey])).length;
+  const currentNumber = SETUP_STEPS.find((s) => s.slug === currentSlug)?.number ?? 1;
   return (
     <ol
       className="flex items-center gap-2"
@@ -46,14 +47,14 @@ export function ProgressDots({
       aria-valuenow={completedCount}
       aria-valuemin={0}
       aria-valuemax={SETUP_STEPS.length}
-      aria-valuetext={`Step ${currentStep} of ${SETUP_STEPS.length} · ${completedCount} complete`}
+      aria-valuetext={`Step ${currentNumber} of ${SETUP_STEPS.length} · ${completedCount} complete`}
     >
       {SETUP_STEPS.map((step) => {
         const isDone = Boolean(progress[step.progressKey]);
-        const isCurrent = step.number === currentStep;
+        const isCurrent = step.slug === currentSlug;
         return (
           <li
-            key={step.number}
+            key={step.slug}
             className={cn(
               "h-2 flex-1 rounded-full transition-colors",
               isDone && "bg-success",
@@ -69,19 +70,20 @@ export function ProgressDots({
 }
 
 export function StepList({
-  currentStep,
+  currentSlug,
   progress,
 }: {
-  currentStep: SetupStepNumber;
+  currentSlug: SetupStepSlug;
   progress: SetupProgress;
 }) {
+  const currentNumber = SETUP_STEPS.find((s) => s.slug === currentSlug)?.number ?? 1;
   return (
     <nav aria-label="Site setup steps">
       <ol className="space-y-1 text-sm">
         {SETUP_STEPS.map((step) => {
           const isDone = Boolean(progress[step.progressKey]);
-          const isCurrent = step.number === currentStep;
-          const reachable = isDone || isCurrent || step.number <= currentStep;
+          const isCurrent = step.slug === currentSlug;
+          const reachable = isDone || isCurrent || step.number <= currentNumber;
           const stateLabel = isDone
             ? "complete"
             : isCurrent
@@ -90,9 +92,9 @@ export function StepList({
                 ? "not yet started"
                 : "not yet available";
           return (
-            <li key={step.number}>
+            <li key={step.slug}>
               <Link
-                href={reachable ? `/admin/site-setup/${step.number}` : "#"}
+                href={reachable ? `/admin/site-setup/${step.slug}` : "#"}
                 aria-disabled={!reachable}
                 aria-current={isCurrent ? "step" : undefined}
                 aria-label={`Step ${step.number}: ${step.title}, ${stateLabel}`}
@@ -208,6 +210,55 @@ export function StepFooter({
           {isPending ? "Saving…" : primaryLabel}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Reusable inline field error for the wizard's per-step forms.
+ */
+export function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null;
+  return <p className="text-xs text-destructive">{msg}</p>;
+}
+
+/**
+ * Banner that surfaces above the form when a draft was restored from
+ * localStorage. Shows when the draft was saved and offers a Discard button
+ * (wipes localStorage and reloads the page so server-loaded defaults render).
+ *
+ * Used by every form step paired with `useDraftPersistence`.
+ */
+export function DraftRestoredBanner({
+  restoredAtLabel,
+  onDiscard,
+}: {
+  restoredAtLabel: string;
+  onDiscard: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm"
+    >
+      <RotateCcw
+        className="mt-0.5 h-4 w-4 shrink-0 text-warning-foreground"
+        aria-hidden
+      />
+      <div className="flex-1 min-w-0">
+        <p className="font-medium">Draft restored</p>
+        <p className="text-xs text-muted-foreground">
+          We saved your in-progress edits {restoredAtLabel} so a tab close or
+          refresh wouldn't lose them.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onDiscard}
+        className="inline-flex items-center gap-1 rounded border border-warning/40 bg-background px-2 py-1 text-xs font-medium hover:bg-accent"
+      >
+        Discard draft
+      </button>
     </div>
   );
 }

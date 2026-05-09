@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,10 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { saveStep6 } from "@/app/(app)/admin/site-setup/actions";
+import { saveStep8 } from "@/app/(app)/admin/site-setup/actions";
 import type { ActionResult } from "@/lib/site-setup/schemas";
 import { NOTIFICATION_KINDS, type NotificationKind } from "@/lib/site-setup/schemas";
-import { StepFooter, StepFormError } from "./wizard-chrome";
+import {
+  clearPriorStepDraft,
+  draftKey,
+  useDraftPersistence,
+  describeRestoredAt,
+} from "@/lib/site-setup/use-draft-persistence";
+import { DraftRestoredBanner, StepFooter, StepFormError } from "./wizard-chrome";
 
 export type ProfileChoice = { id: string; full_name: string | null; email: string };
 export type RecipientRow = {
@@ -34,18 +40,59 @@ const KIND_LABELS: Record<NotificationKind, { title: string; body: string; requi
   capa_escalated:    { title: "CAPA escalated",            body: "A CAPA was reopened after a failed verification." },
 };
 
-export function Step6Recipients({
+function parseDraftRecipients(
+  rawJson: string | string[] | undefined
+): RecipientsByKind | null {
+  if (typeof rawJson !== "string" || !rawJson) return null;
+  try {
+    const parsed = JSON.parse(rawJson) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const out: RecipientsByKind = {};
+    for (const kind of NOTIFICATION_KINDS) out[kind] = [];
+    for (const row of parsed) {
+      const obj = row as { kind?: unknown; list?: unknown };
+      if (typeof obj.kind !== "string") continue;
+      if (!(NOTIFICATION_KINDS as readonly string[]).includes(obj.kind)) continue;
+      if (!Array.isArray(obj.list)) continue;
+      out[obj.kind as NotificationKind] = obj.list.map((r) => {
+        const item = r as Partial<RecipientRow>;
+        const next: RecipientRow = {};
+        if (typeof item.recipient_profile_id === "string" && item.recipient_profile_id)
+          next.recipient_profile_id = item.recipient_profile_id;
+        if (typeof item.external_email === "string" && item.external_email)
+          next.external_email = item.external_email;
+        return next;
+      });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+export function Step8Recipients({
   profiles,
   initial,
+  siteId,
 }: {
   profiles: ProfileChoice[];
   initial: RecipientsByKind;
+  siteId: string;
 }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
-    saveStep6,
+    saveStep8,
     null
   );
+
+  const { formRef, draft, restoredAt, clearAndReload } = useDraftPersistence(
+    draftKey(siteId, "recipients")
+  );
+  useEffect(() => clearPriorStepDraft(siteId, "recipients"), [siteId]);
+
+  const draftRecipients = parseDraftRecipients(draft?.recipients_json);
+
   const [byKind, setByKind] = useState<RecipientsByKind>(() => {
+    if (draftRecipients) return draftRecipients;
     const out: RecipientsByKind = {};
     for (const k of NOTIFICATION_KINDS) out[k] = initial[k] ?? [];
     return out;
@@ -71,7 +118,14 @@ export function Step6Recipients({
   );
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form ref={formRef} action={formAction} className="space-y-5">
+      {restoredAt && (
+        <DraftRestoredBanner
+          restoredAtLabel={describeRestoredAt(restoredAt)}
+          onDiscard={clearAndReload}
+        />
+      )}
+
       <p className="text-sm text-muted-foreground">
         Pick at least one user (or external email) per high-priority kind. The notification engine
         fires these the moment an incident is classified — without recipients, the regulatory clock
@@ -175,7 +229,7 @@ export function Step6Recipients({
       />
 
       <StepFooter
-        prevHref="/admin/site-setup/5"
+        prevHref="/admin/site-setup/people"
         isPending={isPending}
         primaryDisabled={missingRequired.length > 0}
       />
