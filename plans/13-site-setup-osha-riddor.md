@@ -1,6 +1,6 @@
 # Phase 13 — Site Setup: OSHA + RIDDOR alignment
 
-> **Status:** Drafting plan, awaiting direction. Branch `feat/phase-13-site-setup-osha-riddor` cut from `main` at `97e4468`. Per `feedback_phase_cadence.md`, no code lands until the open questions below are answered.
+> **Status:** All 10 questions resolved 2026-05-09 — user said "ship it as recommended." Branch `feat/phase-13-site-setup-osha-riddor` cut from `main` at `97e4468`. Implementation in flight.
 
 ## What this phase ships
 
@@ -223,18 +223,18 @@ New `docs/smoke-test-phase13.md`:
 7. Confirm step — every previously-flagged warning still surfaces (OSHA establishment ID missing, etc.); new warnings for missing EIN, missing peak_employees_year.
 8. Launch — `setup_completed_at` set; redirect to dashboard.
 
-## Open questions
+## Decisions (locked 2026-05-09 — user said "ship it as recommended")
 
-1. **`address` column**: keep as denormalized concat (trigger-maintained) or drop entirely? Recommendation: keep for one phase, drop in Phase 14.
-2. **Hazard tags storage**: `text[]` on `sites` (simple, fast, no FK) vs. `site_hazard_tags` lookup table (allows display labels, ordering, future extensibility)? Recommendation: `text[]` with a constants module in `lib/site-setup/hazard-tags.ts` mapping codes → display strings. If we ever need user-editable tags, promote to a table later.
-3. **Applicable standards**: same Q. Recommendation: `text[]` — the OSHA part numbers are stable.
-4. **State Plan list**: hardcoded enum vs free-form text? Recommendation: hardcoded TS constant (22 states + Puerto Rico + Virgin Islands), validated server-side. Doesn't change often.
-5. **Old numeric URL backward-compat**: drop and 404, or keep a `[step]/` redirector that translates 1→basics, 2→jurisdiction, etc.? Recommendation: drop. Internal admin only, redirector is dead code mass.
-6. **Existing demo sites with `address` text**: best-effort split during migration (regex `street, city, state ZIP`)? Or leave structured fields NULL and let admin fill? Recommendation: leave NULL, the wizard will surface them as required-on-save.
-7. **`site_ehs_lead_id` cardinality**: nullable? Required on save of People step? Recommendation: nullable column; the wizard requires it on Step 7 save but the column allows NULL for backward compat with existing seeded sites.
-8. **Annual hours integration on Step 4**: embed the existing multi-year editor inline, or link out to `/admin/sites/[id]?tab=hours`? Recommendation: embed inline — wizard fatigue is real, sending the user to a different tab mid-setup is jarring.
-9. **Emergency contacts minimum**: zero allowed (skip step) or require 1+? Recommendation: zero allowed but warn on Step 9 confirm if zero contacts.
-10. **Lat/long capture UX**: pure manual paste (V1, simplest), or a "Look up from address" button using a free geocoding API (Nominatim/OSM)? Recommendation: V1 = manual paste only with a help text "right-click in Google Maps → click coordinates → paste here". Geocoding API integration (Nominatim has a 1 req/sec policy that fits low-volume admin use) deferred to V2 when the future map dashboard ships and the field becomes load-bearing.
+1. **`address` column** — KEEP for Phase 13 as denormalized text; the migration writes `street_1 = address` for existing rows so legacy reads keep working. Drop scheduled for Phase 14+.
+2. **Hazard tags storage** — `text[]` on `sites`. Display labels live in `lib/site-setup/hazard-tags.ts`. Promote to lookup table only when Templates module needs to derive required training (Phase 14+).
+3. **Applicable standards** — `text[]`. OSHA part numbers are stable; constants module mirrors hazard-tags.
+4. **State Plan list** — hardcoded TS constant (22 states + PR + VI), validated server-side via Zod enum.
+5. **Old numeric URL backward-compat** — DROP. No redirector. `/admin/site-setup` index already routes to next-incomplete; old open tabs hit 404 + index recovery.
+6. **Existing demo sites with `address` text** — copy `address → street_1` on migration. No regex parsing. Admin re-splits during next wizard walkthrough; missing structured fields surface as warnings on the Confirm step.
+7. **`site_ehs_lead_id`** — nullable column (schema-level), required at Step 7 save (wizard-level). Standard pattern (mirrors `setup_completed_at` etc.).
+8. **Annual hours integration on Step 4** — embed the multi-year editor inline. Wizard fatigue is real; sending users to a different tab mid-setup is jarring.
+9. **Emergency contacts minimum** — zero allowed; Confirm-step warning fires when zero.
+10. **Lat/long capture UX** — V1 = manual paste with help text "right-click in Google Maps → click the coordinates pair → paste". Geocoding API (Nominatim) deferred to V2 when the future map dashboard ships and the field becomes load-bearing.
 
 ## Out of scope (defer to v2)
 
