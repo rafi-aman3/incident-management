@@ -484,6 +484,79 @@ NEXT_PUBLIC_DEMO_OTP_BYPASS=8484
 
 ---
 
+## Phase 13 — Site Setup OSHA + RIDDOR alignment
+
+Merged 2026-05-09 (PR #26). Replaces the 7-step demo Site Setup wizard with a 9-step regulatory-aligned flow that captures the fields OSHA Form 300A and RIDDOR F2508 actually require. Pre-13 the wizard collected only name + address-text + NAICS + an OSHA establishment ID; that's not enough to file. User answered all 10 open questions as "ship it as recommended" — every Q resolved scope-conservatively with no scope expansion.
+
+**Migration `20260517120000_phase13_site_setup_osha_riddor.sql`:**
+- 22 new columns on `sites`: structured address (`street_1/2`, `city`, `state_or_region`, `postal_code`), lat/long (`numeric(9,6)` paired-or-null with range CHECKs — plain numerics, NOT PostGIS, since map dashboards just read two numbers per row), jurisdiction (`osha_jurisdiction` federal/state-plan + `state_plan_code`; `gb_jurisdiction` HSE/local-authority), US identifiers (`ein` NN-NNNNNNN format, `sic_code`, `ita_establishment_id`), GB identifiers (`crn` Companies House, `uk_sic_2007`, `hse_establishment_number` promoted from JSONB to a real column), workforce (`peak_employees_year`, `avg_employees_year`, `partially_exempt_override`), hazards (`applicable_standards text[]` constrained to {1910/1926/1915/1917/1918/1928}, `psm_applicable`, `hazard_tags text[]` constrained to a 10-tag catalog), lifecycle (`site_type` fixed/mobile/office_only, `operational_status` active/inactive/closed, `opened_on`, `closed_on`), people (`site_ehs_lead_id` FK profiles, `riddor_responsible_person_{name,role}`).
+- New child table `site_emergency_contacts` (id, site_id, name, role, phone, email, sort_order, timestamps + `name + (phone OR email)` CHECK). RLS read = `user_can_access_site`; writes gated on `site:configure`.
+- Three new RLS policies on `notification_recipients` — INSERT/UPDATE/DELETE all gated on `site:configure`. **Closes the Phase-0-era bug** the user reported: the init migration shipped a SELECT-only policy on this table, so the recipients step (Step 6 pre-13, now Step 8) silently 401'd with "new row violates row-level security policy" when the wizard tried to save.
+- Two computed-read SQL functions:
+  - `is_ita_required(p_naics text, p_peak_employees integer)` — returns true if the site must submit Form 300A via OSHA's ITA portal, per 29 CFR 1904.41 Appendix A: 250+ employees in any covered industry, OR 20–249 in a high-hazard NAICS, falling through to false when partially exempt.
+  - `is_partially_exempt(p_naics text, p_peak_employees integer)` — returns true if the site is partially exempt from routine 300/300A/301 recordkeeping per 29 CFR 1904.2: ≤10 employees at all times, OR NAICS in the partially-exempt low-hazard list.
+- Curated NAICS prefix arrays (high-hazard + partially-exempt) live as static array literals inside private helper functions `_phase13_high_hazard_naics_prefixes()` + `_phase13_partially_exempt_naics_prefixes()`. Curated representative set for V1 — the full Appendix A tables run ~150 rows; expand as more industries onboard. `is_partially_exempt` is defined first because `is_ita_required` references it (one-line ordering bug fixed before merge).
+- DB-layer CHECK constraints validate `applicable_standards <@ array['1910','1926','1915','1917','1918','1928']` and `hazard_tags <@ array[<10-tag catalog>]` — defense-in-depth alongside the Zod layer.
+- Lat/long CHECK: `(latitude IS NULL) = (longitude IS NULL)` (paired-or-null) + `latitude between -90 and 90` + `longitude between -180 and 180`.
+- Existing `address text` column kept as denormalized legacy for one phase per Q1 decision; migration runs `update sites set street_1 = address where address is not null and street_1 is null` for backfill — no regex parsing of unstructured strings (US/GB formats vary too much).
+
+**Wizard rewrite — 9 steps with slug URLs at `/admin/site-setup/<slug>`:**
+| # | Slug | Country branching | Fields collected |
+|---|---|---|---|
+| 1 | `basics` | label-only | name, structured address, lat/long, country (read-only), timezone, site_type, operational_status, opened_on, closed_on |
+| 2 | `jurisdiction` | US: federal vs state-plan + state code; GB: HSE vs local authority | `osha_jurisdiction`, `state_plan_code`, `gb_jurisdiction` |
+| 3 | `identifiers` | US block: EIN + NAICS + SIC + ITA + legacy OSHA establishment ID; GB block: CRN + UK SIC 2007 + HSE establishment number | per-country identifier set |
+| 4 | `workforce` | universal | peak/avg employees, inline annual-hours readout pointing at `/admin/sites/[id]?tab=hours`, computed read-only badges for `is_ita_required` + `is_partially_exempt` calling the SQL fns via `supabase.rpc()`, `partially_exempt_override` toggle |
+| 5 | `hazards` | US-only: applicable_standards multi-select + PSM toggle; both: hazard_tags multi-select | text[] selections matching DB CHECK constraints |
+| 6 | `departments` | label-only | preserved from old Step 4 — JSON-payload pattern in `setup_progress.departments` |
+| 7 | `people` | GB: RIDDOR responsible person fields visible | EHS lead profile picker (from `site_members`), responsible person name + role, emergency contacts list editor |
+| 8 | `recipients` | label-only | preserved from old Step 6 — RLS fix is migration-only |
+| 9 | `confirm` | label-only | summary in 6 sections + warnings list + Launch button |
+
+**URL slug migration:**
+- `lib/site-setup/steps.ts` reshape: `slug` field added to `SETUP_STEPS`; `nextIncompleteStep()` returns slug strings; new helpers `isValidSlug`, `stepBySlug`, `stepByNumber`, `nextStepSlug`.
+- Route folder renamed `[step]` → `[slug]`. Numeric URL backward-compat dropped per Q5 — internal admin chrome, no external links, redirector at `/admin/site-setup` handles stale tabs by routing to `nextIncompleteStep(progress)`.
+- `lib/site-setup/{hazard-tags,applicable-standards,state-plans}.ts` — TS catalog modules with codes + display labels matching the DB CHECK constraints. Per Q2/Q3/Q4: text[] columns with constants modules over lookup tables — premature abstraction otherwise.
+
+**Server actions** (`app/(app)/admin/site-setup/actions.ts`): 9 actions, slug-based redirects, country-branched persistence (e.g. `saveStep3` writes US fields when `country='US'` and nulls the GB fields, vice versa). `saveStep7` does an emergency-contacts insert-after-delete pattern (simpler than diffing for v1).
+
+**localStorage draft persistence** (`lib/site-setup/use-draft-persistence.ts`):
+- Every form step auto-saves its current FormData to localStorage on every input/change with a 600ms debounce. Multi-value fields (`text[]`) preserved via `Set + getAll` serializer.
+- On mount, if a saved draft exists for the (siteId, slug) pair, the form is pre-filled from the draft and a `<DraftRestoredBanner>` surfaces above the form with a Discard button (wipes localStorage + reloads the page so server-loaded defaults render fresh). Per Q "Restore UX" decision: auto-hydrate + banner, not modal-on-mount.
+- Storage key shape: `site-setup-draft:<siteId>:<slug>:v1`. 24-hour TTL on stale entries (auto-purged on read).
+- Clear semantics per Q "Clear timing" decision:
+  - Step N+1 mount clears Step N's draft (server has the data after a successful Save & continue).
+  - Step 9 (Confirm) mount clears ALL drafts for the site (`clearAllDraftsForSite(siteId)`).
+- Failure modes covered: tab close, page refresh, browser crash, accidental navigation away. Network-error-during-save is also covered as a side effect — `useActionState` already retains form state across submission failures, so localStorage is belt + suspenders for that case. JSON-payload steps (departments / people / recipients) parse the `*_json` field back into the controlled state on hydrate.
+
+**Demo seed updates** (`scripts/seed.ts`):
+- `SiteSeed` extended with the full Phase 13 field set; SITE_SEEDS records carry realistic data — Houston (US, NAICS 332710 manufacturing, EIN 12-3456789, lat 29.7604 / long -95.3698, hazard tags confined_space + hot_work + hazardous_energy + chemicals + noise, peak 145 / avg 132), Manchester (GB, CRN 07654321, UK SIC 25620, HSE jurisdiction, lat 53.4808 / long -2.2426, RIDDOR responsible person Erin Manager, peak 65 / avg 60), child sites offset slightly from parents.
+- New `ensureEmergencyContacts(sites)` and `setSiteEhsLeads(sites, users)` passes run after the user-seed pass so the FKs into profiles resolve. Idempotent — re-runs backfill existing rows via `siteUpdatePayload(seed)` helper.
+
+**Drive-by fix** — `app/(auth)/verify-otp/page.tsx`: pre-existing Phase 12 build failure (Cache Components: "Uncached data was accessed outside of `<Suspense>`"). Wrapped the `searchParams`-consuming portion in `<Suspense>` matching the `/login` page pattern. Unblocks `next build` end-to-end.
+
+**Smoke test** — `docs/smoke-test-phase13.md` (12 parts): RLS bug fix, slug URLs, US country branching, GB country branching, workforce computed badges, hazards multi-select, lat/long pairing, emergency contacts + EHS lead, confirm warnings, launch, **localStorage draft persistence (refresh recovery + cross-step clear + Launch clear + 24h TTL)**, RBAC gates.
+
+**Locked decisions** (per kickoff Q&A — every recommendation in `plans/13-site-setup-osha-riddor.md`):
+1. `address text` kept for one phase as denormalized legacy; admin re-splits during next walkthrough.
+2. Hazard tags storage = `text[]` (constants module, not lookup table).
+3. Applicable standards storage = `text[]`.
+4. State Plan list = hardcoded TS constant.
+5. Numeric URL backward-compat dropped.
+6. Existing demo `address` text copied to `street_1` on migration; structured fields left NULL.
+7. `site_ehs_lead_id` nullable schema-level, required at wizard save.
+8. Annual hours editor embedded inline on Step 4 (not link-out).
+9. Emergency contacts: zero allowed; Confirm warns when zero.
+10. Lat/long capture = manual paste only (geocoding API deferred).
+
+**Plan:** `plans/13-site-setup-osha-riddor.md`. **Smoke test:** `docs/smoke-test-phase13.md`. **Decisions:** `docs/SPEC.md §15`.
+
+**Deferred to v2 (logged):** ITA portal API submission · HSE F2508 portal API submission · multi-establishment EIN handling · Cal/OSHA-, MIOSHA-specific extra fields · PSM covered-process registry beyond yes/no · hazard tag → required training derivation (Phase 14+ Templates tie-in) · address autocomplete / geocoding API · site cloning · map-view dashboard component (lat/long columns + demo data ready, the actual Leaflet/OSM render is a future phase).
+
+`pnpm tsc --noEmit` clean. `pnpm exec next build` green (all 59 pages).
+
+---
+
 ## Workflow notes
 
-Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding shipped. Next per the deferred roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 9 (Argus AI assistant) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding + Phase 13 Site Setup OSHA + RIDDOR shipped. Next per the deferred roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 9 (Argus AI assistant) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
