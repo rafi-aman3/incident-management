@@ -11,19 +11,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { markWelcomeSeen } from "@/lib/actions/onboarding";
+import {
+  ROLE_WELCOME_CONTENT,
+  type RoleWelcomeContent,
+} from "@/lib/onboarding/role-welcome-content";
 
-export type RoleWelcomeContent = {
-  title: string;
-  description: string;
-  body: string;
-  primary: { label: string; href: string };
-  secondary?: { label: string; href: string };
-};
+// Re-export so existing call sites that import from this file keep working.
+export { ROLE_WELCOME_CONTENT };
+export type { RoleWelcomeContent };
 
 /**
- * Reusable first-login welcome dialog. The worker / supervisor / EHS-manager
- * variants pass their own copy + deep-links; the dismiss action flips
- * profiles.seen_welcome so the modal never returns.
+ * Reusable first-login welcome dialog. The supervisor / EHS-manager /
+ * site_admin variants pass their own copy + deep-links; the dismiss action
+ * flips profiles.seen_welcome so the modal never returns.
  *
  * The verifier welcome is context-driven (not first-login) and uses a
  * separate component — see VerifierWelcomeCard.
@@ -33,7 +33,7 @@ export function RoleWelcomeCard({
   content,
 }: {
   firstName: string;
-  content: RoleWelcomeContent;
+  content: RoleWelcomeContent | undefined;
 }) {
   const [open, setOpen] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -44,6 +44,8 @@ export function RoleWelcomeCard({
       setOpen(false);
     });
   };
+
+  if (!content) return null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && dismiss()}>
@@ -83,33 +85,3 @@ export function RoleWelcomeCard({
     </Dialog>
   );
 }
-
-export const ROLE_WELCOME_CONTENT: Record<
-  "supervisor" | "ehs_manager" | "site_admin",
-  RoleWelcomeContent
-> = {
-  supervisor: {
-    title: "Welcome, {firstName}",
-    description:
-      "You triage incidents reported by your team — review classifications, assign owners, escalate to investigation.",
-    body: "Look at the Incidents list to see what's queued. The 4 triage modals (override severity, assign owner, escalate, close) live on the incident detail page.",
-    primary: { label: "Open incidents", href: "/incidents" },
-    secondary: { label: "Practice report", href: "/incidents/new/1?sandbox=true" },
-  },
-  ehs_manager: {
-    title: "Welcome, {firstName}",
-    description:
-      "You lead investigations, assign CAPAs, and own the regulatory paperwork. The whole pipeline reads from here.",
-    body: "Investigations Kanban shows what's open. CAPAs in pending verification need an independent verifier — assign someone other than the owner. The Reports module renders OSHA 300 / 300A / 301 and RIDDOR F2508 directly from your data.",
-    primary: { label: "Open Kanban", href: "/investigations" },
-    secondary: { label: "Reports", href: "/reports" },
-  },
-  site_admin: {
-    title: "Welcome, {firstName}",
-    description:
-      "You configure the site, manage users, and have access to the demo affordances. Start with Site Setup if you haven't already.",
-    body: "Use the demo page to load a sample CAPA chain or trigger a test banner for screencaps. Reset Demo Data wipes everything back to seed — only available on demo orgs.",
-    primary: { label: "Demo affordances", href: "/admin/demo" },
-    secondary: { label: "Open Kanban", href: "/investigations" },
-  },
-};

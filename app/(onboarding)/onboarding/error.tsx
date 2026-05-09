@@ -1,0 +1,37 @@
+"use client";
+
+import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+
+export default function OnboardingError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center">
+      <AlertTriangle className="mx-auto h-8 w-8 text-destructive" aria-hidden />
+      <h2 className="mt-3 text-lg font-semibold">Onboarding hit an error</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Don&apos;t worry — your progress is saved. Try the step again, or
+        head back to the login page if the issue persists.
+      </p>
+      {error.digest ? (
+        <p className="mt-2 text-[11px] font-mono text-muted-foreground/70">
+          Ref: {error.digest}
+        </p>
+      ) : null}
+      <div className="mt-4 flex justify-center gap-2">
+        <Button onClick={reset} variant="default">
+          Try again
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/login">Back to login</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}

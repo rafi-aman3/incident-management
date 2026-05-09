@@ -9,10 +9,8 @@ import { can } from "@/lib/auth/can";
 import { INCIDENT_TYPE_META, type IncidentType } from "@/lib/incidents/types";
 import { SeverityBadge, TrackBadge, StatusBadge } from "@/components/incidents/badges";
 import { WorkerWelcomeCard } from "@/components/onboarding/worker-welcome-card";
-import {
-  RoleWelcomeCard,
-  ROLE_WELCOME_CONTENT,
-} from "@/components/onboarding/role-welcome-card";
+import { RoleWelcomeCard } from "@/components/onboarding/role-welcome-card";
+import { ROLE_WELCOME_CONTENT } from "@/lib/onboarding/role-welcome-content";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
 import type { TooltipKey } from "@/lib/constants/tooltips";

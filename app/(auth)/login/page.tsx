@@ -10,10 +10,17 @@ const DEMO_ACCOUNTS = [
   { label: "Site Admin", email: "admin@demo.local"      },
 ];
 
+type LoginSearch = {
+  next?: string;
+  signed_out?: string;
+  password_reset?: string;
+  after_verify?: string;
+};
+
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; signed_out?: string }>;
+  searchParams: Promise<LoginSearch>;
 }) {
   const showDemoChips = process.env.NODE_ENV !== "production";
 
@@ -35,6 +42,24 @@ export default function LoginPage({
           demoAccounts={showDemoChips ? DEMO_ACCOUNTS : []}
         />
       </Suspense>
+
+      <div className="flex flex-col gap-2 text-center text-xs text-muted-foreground">
+        <Link
+          href="/forgot-password"
+          className="font-medium text-brand underline underline-offset-2 hover:no-underline"
+        >
+          Forgot password?
+        </Link>
+        <p>
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-brand underline underline-offset-2 hover:no-underline"
+          >
+            Sign up
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }
@@ -43,10 +68,15 @@ async function LoginFormFromParams({
   searchParams,
   demoAccounts,
 }: {
-  searchParams: Promise<{ next?: string; signed_out?: string }>;
+  searchParams: Promise<LoginSearch>;
   demoAccounts: { label: string; email: string }[];
 }) {
-  const { next = "/dashboard", signed_out } = await searchParams;
+  const {
+    next = "/dashboard",
+    signed_out,
+    password_reset,
+    after_verify,
+  } = await searchParams;
   return (
     <>
       {signed_out === "everywhere" ? (
@@ -56,6 +86,22 @@ async function LoginFormFromParams({
         >
           You&apos;ve been signed out from all devices. Sign in again to
           continue.
+        </div>
+      ) : null}
+      {password_reset === "1" ? (
+        <div
+          role="status"
+          className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs text-foreground"
+        >
+          Password updated. Sign in with your new password.
+        </div>
+      ) : null}
+      {after_verify === "1" ? (
+        <div
+          role="status"
+          className="rounded-md border bg-card px-3 py-2 text-xs text-foreground"
+        >
+          Email verified. Sign in to continue.
         </div>
       ) : null}
       <LoginForm next={next} demoAccounts={demoAccounts} />
