@@ -33,7 +33,7 @@ This is the **page-by-page contract**: every route, what it shows, what the user
 /reports/riddor-f2508/[incidentId]      EHS Manager+ · UK F2508 form
 /admin/site-setup                       Site Admin · 7-step wizard (see docs/onboarding.md §5)
 /admin/site-setup/[step]                Site Admin · Wizard steps 1–7
-/settings                               Site Admin · Site settings page (post-setup)
+/settings                               All users · Account preferences (profile, password, theme, sign out)
 /admin/* (stub)                         Site Admin · Users, roles (deferred to P3+)
 ```
 

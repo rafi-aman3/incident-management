@@ -13,7 +13,7 @@ const DEMO_ACCOUNTS = [
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; signed_out?: string }>;
 }) {
   const showDemoChips = process.env.NODE_ENV !== "production";
 
@@ -43,11 +43,24 @@ async function LoginFormFromParams({
   searchParams,
   demoAccounts,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; signed_out?: string }>;
   demoAccounts: { label: string; email: string }[];
 }) {
-  const { next = "/dashboard" } = await searchParams;
-  return <LoginForm next={next} demoAccounts={demoAccounts} />;
+  const { next = "/dashboard", signed_out } = await searchParams;
+  return (
+    <>
+      {signed_out === "everywhere" ? (
+        <div
+          role="status"
+          className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-foreground"
+        >
+          You&apos;ve been signed out from all devices. Sign in again to
+          continue.
+        </div>
+      ) : null}
+      <LoginForm next={next} demoAccounts={demoAccounts} />
+    </>
+  );
 }
 
 function LoginFormSkeleton() {
