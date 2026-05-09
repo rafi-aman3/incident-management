@@ -436,6 +436,54 @@ Merged 2026-05-09 (PR #24). First post-Phase-6 feature PR. Replaces the EmptySta
 
 ---
 
+## Phase 12 — Auth & Onboarding
+
+Merged 2026-05-09 (PR #25). First feature PR that turns the platform into a *self-serve* product — pre-12 the only path to a `profiles` row was running `pnpm db:seed`. Now any brand-new email signs up, verifies, names their org + first site, optionally invites teammates, and lands on a real dashboard with their own bootstrapped data. User answered all 9 open questions as "proceed with recommendations" — every Q resolved scope-conservatively.
+
+**Migration `20260515120000_phase12_auth_onboarding.sql`:** adds `profiles.onboarded_at timestamptz` (NULL = mid-onboarding, timestamp = finished — backfilled `now()` for the 4 seeded demo accounts so they skip the gate); adds `bootstrap_org_v1(text, industry_type, char(2), text, text)` SECURITY DEFINER RPC that atomically creates org + profile + first site + first membership + seeded default roles in a single function call (so no half-state if any step fails); adds `profiles_self_insert` RLS policy as defense-in-depth for any non-RPC profile insert under the user's session.
+
+**Migration `20260516120000_phase12_fix_bootstrap_org_ambiguous_org_id.sql` (post-merge bug fix):** original `bootstrap_org_v1` declaration `returns table (org_id uuid, site_id uuid)` makes `org_id` an OUT parameter visible inside the function body. The bare comparison `where org_id = v_org_id` inside the `roles` lookup at step 7 was therefore ambiguous against `roles.org_id`; Postgres rejected it as `column reference "org_id" is ambiguous`. Fix qualifies the column reference (`roles.org_id`) using a table alias. Rewritten function is otherwise identical to the original.
+
+**6 new pages** under `app/(auth)/` and `app/(onboarding)/`:
+- `/register` (`page.tsx` + `register-form.tsx` + `actions.ts`) — full_name + email + password + confirm + **company name** form. Calls `auth.signUp` with `options.data` carrying `full_name` + `org_name` (so onboarding step 1 pre-fills the org name without a second user keystroke). Stashes the registration password base64-encoded in a 5-minute httpOnly + sameSite=strict cookie (`pending_otp`) so the DEMO OTP path can sign the user in after verification — production path doesn't depend on this cookie because Supabase `verifyOtp({type:"signup"})` handles the password during verification natively. Email-already-registered surfaces as a `fieldErrors.email` ("This email is already registered. Try signing in instead.") not a generic toast. **Country intentionally NOT collected at register** — country is a per-site fact (multi-country orgs are real; a US HQ can have UK + Australia sites), so it stays in the onboarding wizard's site fieldset where it belongs.
+- `/verify-otp` (`page.tsx` + `otp-form.tsx` + `actions.ts`) — single inputMode=numeric maxLength=6 input. DEMO mode: typing the magic value `NEXT_PUBLIC_DEMO_OTP_BYPASS` (default `8484`) routes through the service-role admin client which sets `email_confirm:true` then signs in via `signInWithPassword` from the cookie-stashed pw. PROD mode: native `verifyOtp({type:"signup"})`. Resend wired with a 60s cookie-based cooldown.
+- `/forgot-password` (`page.tsx` + `forgot-password-form.tsx` + `actions.ts`) — always returns `ok:true` (no email enumeration); DEMO mode `console.log`s the magic-link target so devs can copy/paste during local testing.
+- `/reset-password` (`page.tsx` + `reset-password-form.tsx` + `actions.ts`) — reads the Supabase-established session from the magic link; calls `auth.updateUser({password})` + `signOut` + redirects to `/login?password_reset=1`. Expired-link path surfaces "Reset link expired or missing. Request a new password reset email."
+- `/onboarding` (`page.tsx` + `onboarding-wizard.tsx` + `actions.ts` + `loading.tsx` + `error.tsx`) — NEW route group `(onboarding)` with its own centered layout (`max-w-xl`, no app shell). 3-step wizard: (1) Org+Industry → (2) Site+Country+Timezone → (3) optional Invites. Steps 1+2 commit atomically via `bootstrap_org_v1`; Step 3 reuses the Phase 11c `invite_member_to_site_v1` RPC (up to 5 emails — comma- or newline-separated). On finish, `finishOnboarding` sets `onboarded_at = now()` + redirects to `/dashboard?welcome=1`. Tab-crash recovery: profile + at least one membership + `onboarded_at IS NULL` → page re-enters at the invite step. Org name pre-fills from `auth.users.raw_user_meta_data.org_name` (set during register) — user can still edit before clicking "Create my workspace". Wizard's "Skip for now" uses React 19's `<Button formAction={finishOnboarding}>` instead of a nested `<form>` (HTML forbids nested forms — original implementation triggered a hydration error).
+
+**Auth gate split** (`lib/supabase/auth.ts`):
+- `requireUser()` (for `(app)` routes) — auth.user check + profile row read; **redirects no-profile state to `/onboarding` (not `/login`)** so a user who completed signup but lost their tab before finishing onboarding lands on the wizard instead of a confusing login round-trip.
+- `requireAuthenticatedUser()` (NEW, for `(onboarding)` routes) — auth.user check only, accepts the no-profile state mid-bootstrap.
+- `ProfileRow` type extended with `onboarded_at`.
+
+**`(app)` layout finishing nudge** (`app/(app)/layout.tsx`): `if (profile.onboarded_at IS NULL && memberships.length > 0) redirect('/onboarding?step=invite')` — the second tab-crash recovery layer for users who closed the browser between Step 2 commit and Step 3 finish.
+
+**Login page** (`app/(auth)/login/page.tsx`): adds `?password_reset=1` (green) and `?after_verify=1` (neutral) banners alongside the existing `?signed_out=everywhere` (yellow). Footer gains "Forgot password?" + "Don't have an account? Sign up" links.
+
+**Proxy middleware** (`lib/supabase/middleware.ts`):
+- Public-auth allowlist extended for the new routes so unauthenticated users can reach `/register`, `/verify-otp`, `/forgot-password`, `/reset-password`, `/callback` (the original allowlist only covered `/login`, `/auth/*`, `/invite/*` — every Phase 12 route was getting bounced to `/login` mid-flow).
+- **Switched from `supabase.auth.getClaims()` to `supabase.auth.getUser()` (post-merge fix).** `getClaims()` only verifies the JWT locally — it does NOT refresh expired access tokens. After Supabase's default 1-hour TTL, the access-token cookie expired and `getClaims()` returned null even though a valid `refresh_token` was sitting right next to it; the middleware then redirected signed-in users to `/login` (reproduced as "log in as admin@demo.local, click /incidents, get bounced to login"). `getUser()` goes through the Auth server, refreshes the access token via the refresh cookie, and the cookies adapter's `setAll` writes the rotated tokens back to the response. Matches the canonical Supabase Next.js SSR pattern.
+
+**`ROLE_WELCOME_CONTENT` extracted to `lib/onboarding/role-welcome-content.ts` (post-merge fix).** Originally exported from the `"use client"` `components/onboarding/role-welcome-card.tsx`; the dashboard server component imported it from there. Next.js 16 with Cache Components treats every named export of a `"use client"` module as a client reference — non-component values come back as opaque stubs in the server runtime, so `ROLE_WELCOME_CONTENT[currentRoleKey]` evaluated to `undefined` and the dashboard crashed on `content.title` when `?welcome=1` rendered the dialog. Moved the data + type to a plain non-client module; `role-welcome-card.tsx` re-exports them so existing call sites still work, and the component now early-returns `null` if `content` is missing as a defensive belt.
+
+**Demo accounts unaffected.** All 4 seeded demo profiles had `onboarded_at` backfilled to `now()` by the migration's `update profiles set onboarded_at = now() where onboarded_at is null` step, so login → /dashboard works as before. New self-signups (e.g. `rafiaman03@…`) go through the full register → verify → onboard flow; a sign-out + sign-back-in still owns their real org + site (no "demo data is gone" surprise).
+
+**`docs/smoke-test-phase12.md`** — 14-step walkthrough.
+
+**`docs/ui-flow.md`** — 5 new public auth routes + onboarding listed at top of route inventory.
+
+**Env requirement (`.env.local` — gitignored):**
+```
+NEXT_PUBLIC_DEMO_OTP_BYPASS=8484
+```
+**Production deployments MUST unset this** — when present, the magic value lets anyone sign up with any email without a real OTP. The `pending_otp` cookie payload is harmless when unset (production native `verifyOtp` ignores it).
+
+`pnpm tsc --noEmit` clean. Plan: `plans/12-auth-onboarding.md`.
+
+**Deferred to v2 (logged):** real email-OTP delivery configuration (currently DEMO-mode only — Supabase email templates need wiring); MFA/2FA enrollment + recovery codes + step-up auth; SSO/SAML/SCIM/IDP integration; passwordless magic-link login (we ship password-based + OTP-during-signup but not magic-link sign-in); rate-limiting on `/register` + `/verify-otp` (currently unthrottled — Supabase auth's built-in rate-limits are the ceiling); CAPTCHA on public auth surfaces; legal/ToS acceptance checkbox + tracking column; soft-delete on profiles (currently RLS-bound to `auth.uid()` only); audit-trail viewer for self-signup events.
+
+---
+
 ## Workflow notes
 
-Phase 6 polish + Phase 8 Settings shipped. Next per the deferred roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 9 (Argus AI assistant) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding shipped. Next per the deferred roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 9 (Argus AI assistant) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
