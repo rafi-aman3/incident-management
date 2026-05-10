@@ -1,5 +1,4 @@
 import { logArgusSuggestion } from "@/lib/argus/log";
-import { MODEL_HAIKU } from "@/lib/argus/models";
 import type { ArgusToolDefinition } from "./types";
 
 interface Input {
@@ -17,7 +16,7 @@ export const logObservationTool: ArgusToolDefinition<Input> = {
   name: "log_observation",
   description:
     "Record a single hazard or unsafe-condition observation against the draft incident. Use the worker's own words, lightly cleaned up. One observation per call. Include the area/location if mentioned.",
-  input_schema: {
+  parameters: {
     type: "object",
     properties: {
       text: {
@@ -43,7 +42,7 @@ export const logObservationTool: ArgusToolDefinition<Input> = {
       surface: "copilot",
       targetKind: "incident",
       targetId: ctx.incidentId,
-      model: MODEL_HAIKU,
+      model: ctx.modelUsed,
       usage: { promptTokens: 0, completionTokens: 0 },
       payload: {
         kind: "observation",

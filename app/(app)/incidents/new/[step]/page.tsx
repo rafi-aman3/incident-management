@@ -161,7 +161,7 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
     .select(
       `id, type, status, is_sandbox, reporter_id, site_id, updated_at, ppe_worn, substance,
        quantity_value, quantity_unit, equipment, dangerous_occurrence_kind,
-       equipment_asset_id,
+       equipment_asset_id, title, description, area,
        sites:site_id(country),
        equipment_asset:equipment_asset_id(ref_code, name)`
     )
@@ -170,6 +170,18 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
   if (!incident) notFound();
   if (incident.reporter_id !== user.id) notFound();
   if (incident.status !== "draft") redirect(`/incidents/${incidentId}`);
+
+  // Resolve argus availability for the wand visibility gate. Same triple
+  // (org flag + permission + non-disabled profile) used by the form-assistant.
+  const orgArgusFlag = await supabase
+    .from("orgs")
+    .select("argus_enabled")
+    .eq("id", profile.org_id)
+    .maybeSingle();
+  const argusEnabled =
+    Boolean(orgArgusFlag.data?.argus_enabled) &&
+    !profile.argus_copilot_disabled &&
+    (await orgCan("argus:use"));
 
   const [{ data: injured }, { data: witnesses }, { data: attachments }] = await Promise.all([
     supabase
@@ -193,6 +205,10 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
       orgId={profile.org_id}
       siteId={incident.site_id}
       type={incident.type as IncidentType}
+      title={incident.title ?? ""}
+      description={incident.description ?? ""}
+      area={incident.area ?? null}
+      argusEnabled={argusEnabled}
       isSandbox={incident.is_sandbox}
       isUKSite={incident.sites?.country === "GB"}
       initial={{

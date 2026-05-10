@@ -1,17 +1,17 @@
 /**
  * Structured-output tool for the AI Investigator (Phase 9c).
  *
- * Unlike the Copilot tools, this one has no `execute()`. The route handler at
- * `app/api/argus/investigator/route.ts` forces `tool_choice: { type: 'tool',
- * name: 'propose_investigation_draft' }` so the model emits exactly one
- * `tool_use` block. The handler captures the input directly, validates the
- * shape client-side via TS narrowing, and streams it back as the SSE `draft`
- * payload.
+ * No `execute()` — the route handler at `app/api/argus/investigator/route.ts`
+ * forces function calling on this single tool, captures the model's arguments
+ * directly, validates the shape, and emits the SSE `draft` payload.
  *
  * No DB writes happen until the user clicks Push on a section in the UI.
  * That's the review-and-edit gate per the 2026-05-10 hard rule "Argus is
  * assistive, not authoritative."
  */
+
+import type { ToolDefinition } from "@/lib/argus/llm";
+
 export interface InvestigationDraftPayload {
   timeline: Array<{
     at?: string;
@@ -30,23 +30,19 @@ export interface InvestigationDraftPayload {
   insufficient_input: string;
 }
 
-interface ProposeTool {
-  name: string;
-  description: string;
-  input_schema: {
-    type: "object";
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
-}
-
-export const PROPOSE_INVESTIGATION_DRAFT_TOOL: ProposeTool = {
+export const PROPOSE_INVESTIGATION_DRAFT_TOOL: ToolDefinition = {
   name: "propose_investigation_draft",
   description:
     "Emit a structured draft investigation containing a chronological timeline, a 5-Why chain, a root-cause summary, and a regulator-readable findings narrative. Call exactly once. Use only information present in the input — no invention. If the input is too thin, set `insufficient_input` and leave the four output fields empty.",
-  input_schema: {
+  parameters: {
     type: "object",
-    required: ["timeline", "whys", "root_cause_summary", "findings", "insufficient_input"],
+    required: [
+      "timeline",
+      "whys",
+      "root_cause_summary",
+      "findings",
+      "insufficient_input",
+    ],
     properties: {
       timeline: {
         type: "array",
@@ -64,8 +60,7 @@ export const PROPOSE_INVESTIGATION_DRAFT_TOOL: ProposeTool = {
             relative_order: {
               type: "integer",
               minimum: 1,
-              description:
-                "Ascending order index when `at` is unknown.",
+              description: "Ascending order index when `at` is unknown.",
             },
             event: {
               type: "string",
@@ -86,19 +81,9 @@ export const PROPOSE_INVESTIGATION_DRAFT_TOOL: ProposeTool = {
           type: "object",
           required: ["level", "question", "answer"],
           properties: {
-            level: {
-              type: "integer",
-              minimum: 1,
-              maximum: 5,
-            },
-            question: {
-              type: "string",
-              maxLength: 2000,
-            },
-            answer: {
-              type: "string",
-              maxLength: 5000,
-            },
+            level: { type: "integer", minimum: 1, maximum: 5 },
+            question: { type: "string", maxLength: 2000 },
+            answer: { type: "string", maxLength: 5000 },
           },
         },
       },
@@ -106,7 +91,7 @@ export const PROPOSE_INVESTIGATION_DRAFT_TOOL: ProposeTool = {
         type: "string",
         maxLength: 20000,
         description:
-          "Plain-English statement of the underlying cause. ~2-3 sentences. What regulators and stakeholders read first.",
+          "Plain-English statement of the underlying cause. ~2-3 sentences.",
       },
       findings: {
         type: "string",
@@ -118,7 +103,7 @@ export const PROPOSE_INVESTIGATION_DRAFT_TOOL: ProposeTool = {
         type: "string",
         maxLength: 500,
         description:
-          "Set to a one-line explanation of what's missing when the input is too thin to draft responsibly (e.g. fewer than ~50 meaningful words, or no witness statements and no additional context). The other four fields must then be empty arrays / strings. Empty when generating normally.",
+          "Set to a one-line explanation of what's missing when the input is too thin to draft responsibly. The other four fields must then be empty arrays / strings. Empty when generating normally.",
       },
     },
   },

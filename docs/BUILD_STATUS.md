@@ -603,6 +603,62 @@ CHANGED
 
 ---
 
+## Phase 9d — Argus Magic Wands + LLM provider pivot to Gemini
+
+Shipped 2026-05-10 on `feat/phase-9d-argus-magic-wands`. Bundles two changes in one PR (two intermediate commits, single squash on merge): a foundation refactor that moves the Argus runtime off `@anthropic-ai/sdk` onto `@google/genai` 2.0.1 behind a provider-agnostic abstraction, and the five new magic-wand surfaces.
+
+### Foundation refactor (commit 1)
+
+- New `lib/argus/llm/`:
+  - `types.ts` — provider-agnostic interface (`generateStructured`, `streamText`), normalized `ChatTurn` / `UsageNormalized` shapes, `ToolDefinition` with JSONSchema-subset `parameters`.
+  - `schema.ts` — JSONSchema → Gemini OpenAPI-3.0-subset translator. Errors loudly on `oneOf` / `anyOf` / `$ref` / unsupported keys.
+  - `gemini-adapter.ts` — Gemini implementation. `fast` → `gemini-2.5-flash`, `smart` → `gemini-2.5-pro`. Forced function calling via `toolConfig.functionCallingConfig = { mode: 'ANY', allowedFunctionNames }`. Normalizes Gemini's `usageMetadata` to `UsageNormalized`.
+  - `index.ts` — `getLLM()` singleton. Future OpenAI adapter slots in here behind `process.env.ARGUS_PROVIDER`.
+- Migrate existing `lib/argus`:
+  - `client.ts` re-exports `getLLM` for back-compat.
+  - `models.ts` becomes `TIER_FAST` / `TIER_SMART` + `TIER_BY_SURFACE`. The concrete model id flows through results into `argus_suggestions.model`.
+  - `stream.ts` works on `StreamTextResult`, drops Anthropic types entirely.
+  - `gates.ts` returns `LLMProvider` instead of `Anthropic` client.
+  - `log.ts` accepts `model: string` (not the old `ArgusModel` union); old `claude-*` rows stay valid for audit.
+- Tools: `input_schema` → `parameters`; `MODEL_HAIKU` → `ctx.modelUsed`; `ToolContext.modelUsed` set after first `streamText.finalMessage()` resolves.
+- Route handlers rewritten:
+  - `/api/argus/stream` (9a ping) — `getLLM().streamText` → `streamArgusResponse`.
+  - `/api/argus/copilot` (9b agentic loop) — multi-turn loop preserved; SSE `token` / `tool_use` / `tool_result` / `usage` / `done` wire format identical. Tool results consolidated into a single `tool_results` ChatTurn so Gemini sees one user turn with multiple `functionResponse` parts.
+  - `/api/argus/investigator` (9c) — `streamText` with forced function call → `generateStructured`. SSE `progress → draft → usage → done` wire format identical. `progress` event now fires once at start (Anthropic's input-token deltas don't have a Gemini equivalent); minor UX regression vs. the old streaming dots.
+- Drop `@anthropic-ai/sdk` from `package.json`. `grep -rn '@anthropic-ai/sdk' .` returns zero hits outside `node_modules`.
+- `.env.local.example`: `ANTHROPIC_API_KEY` → `GEMINI_API_KEY`. `ARGUS_DEFAULT_DAILY_TOKEN_BUDGET` bumped 5M → 10M.
+- Prompt caching dropped in v1 — Gemini's `cachedContents` has a 32K-token minimum that doesn't fit our ~1–2K system prompts. Note: net cost still lower thanks to Flash's lower base price.
+
+### Wands (commit 2)
+
+- 5 new structured-output tools in `lib/argus/tools/`:
+  - `suggest-risk-matrix` (fast) — `{ likelihood, consequence, confidence, rationale, insufficient_input? }`.
+  - `suggest-finding-severity` (fast) — same shape, scoped to inspection findings being escalated.
+  - `suggest-verification-method` (fast) — picks one of `inspection | monitoring | audit_trend | re_interview | document_review`.
+  - `assess-reportability` (smart, thinking auto) — `{ verdict, citation, confidence, rationale, threshold_met[] }` against 29 CFR 1904.7 (US) or RIDDOR Schedule 1/2/Reg 4/Reg 8 (GB).
+  - `draft-capa-metadata` (smart, thinking auto) — `{ type, title, suggested_owner_role?, confidence, rationale }`.
+- 5 new system prompts (`wand-*.md`) encoding SPEC §8 risk rubric, SPEC §10 verification methods, 29 CFR 1904.7 + RIDDOR Schedule 2 thresholds, and the CAPA type taxonomy.
+- New `app/api/argus/wand/route.ts` — non-streaming JSON envelope (`{ ok, suggestionId, output, modelUsed, usage, cached, insufficient }`). Per-surface permission checks (`finding:escalate`, `capa:verify`, `capa:create`, etc.). Reportability has a 24h cache lookup keyed on `incident.updated_at` so unchanged incidents hit cache forever, not just for 24h. Zod-validates the model output as defence-in-depth.
+- Reusable UI:
+  - `<ArgusMagicWand>` — single discriminated-union component covering all five surfaces. Idle → loading → success (with surface-specific body) → outcome chip. `autoLoad` flag for the Reportability pane.
+  - `<SuggestionCard>` — Accept / Edit / Reject row with cyan accent (`var(--argus-accent, #00D4FF)`); read-only variant with `Re-assess` button for Reportability.
+  - `useArgusWand` — fetch hook around POST `/api/argus/wand`.
+- Outcome action `app/(app)/argus-wand-actions.ts` — `acceptWandSuggestion` / `rejectWandSuggestion` flip `argus_suggestions.outcome` and write `activity_events` rows (`actor_kind='human'`, verbs `argus.wand_accepted | wand_edited | wand_rejected`).
+- 5 mount points:
+  - `components/incidents/wizard/step-2-details.tsx` — risk-matrix wand above the grid (originally planned Step 3 in the master plan, but the matrix lives on Step 2 in the actual code).
+  - `components/inspections/finding-actions-card.tsx` — finding-severity wand below the resolve/escalate buttons. Informational only — escalation creates a fresh draft incident the user classifies; the wand provides a severity prediction so the user knows what they're committing to.
+  - `components/capa/detail/verification-form.tsx` — verification-method wand next to the Method dropdown. Also flips the dropdown to a controlled component so Accept fills it programmatically.
+  - `components/capa/capa-create-modal.tsx` — capa-metadata wand at the top of the form (only when context.kind === "investigation"). Type and Title flipped to controlled components.
+  - `app/(app)/reports/osha-301/[incidentId]/page.tsx` and `app/(app)/reports/riddor-f2508/[incidentId]/page.tsx` — auto-loading reportability pane (`print:hidden`). Read-only.
+- The reportability pane was originally planned for the OSHA-300 log table but moved to the per-incident pages — the 13-column print-friendly log row would balloon with an inline pane.
+- Zero schema migration. Zero new RBAC keys. Reuses 9a's `argus_suggestions` (5 new `surface` strings) + `activity_events.actor_kind` + `argus:use`. Each wand's visibility gate combines `argus:use` + the surface's underlying write permission (`finding:escalate`, `capa:verify`, `capa:create`).
+
+### Pre-merge
+
+`pnpm build` clean (types check across all 22 modified files + new `lib/argus/llm/` + new wand route + UI). Live model smoke (Copilot in wizard, Investigator on `?tab=ai`, each wand on its surface) gated on `GEMINI_API_KEY` in `.env.local` — pre-merge step for the user.
+
+---
+
 ## Workflow notes
 
-Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding + Phase 13 Site Setup OSHA + RIDDOR + Phase 9a Argus Foundation + Phase 9b Argus Copilot + Phase 9c Argus Investigator shipped. Next per the roadmap: Phase 9d magic-wands (5×5 risk-matrix · finding→incident escalation · CAPA verification method · OSHA reportability) → Phase 9e global side panel + Dashboard tiles → Phase 7 (global search backend, consumes the 6l shell) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding + Phase 13 Site Setup OSHA + RIDDOR + Phase 9a Argus Foundation + Phase 9b Argus Copilot + Phase 9c Argus Investigator + Phase 9d Argus Magic Wands (Gemini pivot) shipped. Next per the roadmap: Phase 9e global side panel + Dashboard tiles → Phase 7 (global search backend, consumes the 6l shell) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.

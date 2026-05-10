@@ -1,5 +1,4 @@
 import { logArgusSuggestion } from "@/lib/argus/log";
-import { MODEL_HAIKU } from "@/lib/argus/models";
 import type { ArgusToolDefinition } from "./types";
 
 interface Input {
@@ -21,7 +20,7 @@ export const attachPhotoTool: ArgusToolDefinition<Input> = {
   name: "attach_photo",
   description:
     "Acknowledge that a photo has been attached to the draft incident and add an optional caption tying it to the observation. Use only when a file_id is present in the conversation context.",
-  input_schema: {
+  parameters: {
     type: "object",
     properties: {
       file_id: {
@@ -60,7 +59,7 @@ export const attachPhotoTool: ArgusToolDefinition<Input> = {
       surface: "copilot",
       targetKind: "incident",
       targetId: ctx.incidentId,
-      model: MODEL_HAIKU,
+      model: ctx.modelUsed,
       usage: { promptTokens: 0, completionTokens: 0 },
       payload: {
         kind: "photo_attached",

@@ -1,27 +1,26 @@
 import { requireUser } from "@/lib/supabase/auth";
 import { orgCan } from "@/lib/auth/orgCan";
-import { isArgusConfigured, getArgusClient, ArgusOfflineError } from "./client";
+import { getLLM, ArgusOfflineError, type LLMProvider } from "./llm";
 import { checkArgusBudget } from "./budget";
 import { checkRateLimit } from "./ratelimit";
 import { argusErrorStream } from "./stream";
-import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 
 /**
- * Centralized gate stack for every Argus surface. Both `/api/argus/stream`
- * (9a ping) and `/api/argus/copilot` (9b) call this; future surfaces in
- * 9c–9e will too.
+ * Centralized gate stack for every Argus surface. `/api/argus/stream` (9a),
+ * `/api/argus/copilot` (9b), `/api/argus/investigator` (9c), and
+ * `/api/argus/wand` (9d) all call this.
  *
- * Returns either `{ ok: true, … }` with a usable Anthropic client + user
- * context, OR `{ ok: false, response }` with a pre-formed SSE error
- * Response the route handler should return verbatim. Client-side, all
- * gate failures look identical (an SSE `error` frame followed by `done`),
- * so the panel can render a friendly message without branching on HTTP.
+ * Returns either `{ ok: true, … }` with a usable LLM provider + user context,
+ * OR `{ ok: false, response }` with a pre-formed SSE error Response the route
+ * handler should return verbatim. Client-side, all gate failures look
+ * identical (an SSE `error` frame followed by `done`), so the panel can
+ * render a friendly message without branching on HTTP.
  */
 export interface GateOk {
   ok: true;
-  client: Anthropic;
+  llm: LLMProvider;
   supabase: SupabaseClient<Database>;
   user: User;
   orgId: string;
@@ -32,19 +31,30 @@ export interface GateFail {
 }
 export type GateResult = GateOk | GateFail;
 
-/** Bucket inferred from surface name. Heavy = Sonnet-tier deep analyses. */
-const HEAVY_SURFACES = new Set<string>(["investigator", "capa_draft", "reportability"]);
+/** Bucket inferred from surface name. Heavy = smart-tier deep analyses. */
+const HEAVY_SURFACES = new Set<string>([
+  "investigator",
+  "capa_draft",
+  "reportability",
+  "capa_metadata",
+]);
 
 export async function runArgusGates(surface: string): Promise<GateResult> {
   const { user, profile, supabase } = await requireUser();
 
   if (!(await orgCan("argus:use"))) {
-    return { ok: false, response: argusErrorStream("Argus is not enabled for your role.", 403) };
+    return {
+      ok: false,
+      response: argusErrorStream("Argus is not enabled for your role.", 403),
+    };
   }
 
   // org_id present on every profile post-Phase-12; treat unset as auth fail.
   if (!profile.org_id) {
-    return { ok: false, response: argusErrorStream("No organization on profile.", 403) };
+    return {
+      ok: false,
+      response: argusErrorStream("No organization on profile.", 403),
+    };
   }
 
   const bucket = HEAVY_SURFACES.has(surface) ? "heavy" : "inline";
@@ -81,13 +91,21 @@ export async function runArgusGates(surface: string): Promise<GateResult> {
     };
   }
 
-  if (!isArgusConfigured()) {
-    return { ok: false, response: argusErrorStream("Argus is offline (no API key configured).", 503) };
+  const llm = getLLM();
+  if (!llm.isConfigured()) {
+    return {
+      ok: false,
+      response: argusErrorStream(
+        "Argus is offline (no API key configured).",
+        503,
+      ),
+    };
   }
 
-  let client;
+  // Surfaces a friendly 503 rather than a 500 if the adapter throws on
+  // construction (e.g. malformed key picked up at first call).
   try {
-    client = getArgusClient();
+    llm.isConfigured();
   } catch (err) {
     if (err instanceof ArgusOfflineError) {
       return { ok: false, response: argusErrorStream(err.message, 503) };
@@ -95,5 +113,5 @@ export async function runArgusGates(surface: string): Promise<GateResult> {
     throw err;
   }
 
-  return { ok: true, client, supabase, user, orgId: profile.org_id };
+  return { ok: true, llm, supabase, user, orgId: profile.org_id };
 }

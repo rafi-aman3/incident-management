@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { orgCan } from "@/lib/auth/orgCan";
 import { FindingStatusBadge } from "@/components/inspections/inspection-status-badge";
 import { FindingActionsCard } from "@/components/inspections/finding-actions-card";
 import type { FindingStatus } from "@/lib/templates/types";
@@ -51,6 +52,20 @@ export default async function FindingDetailPage({ params }: { params: Params }) 
 
   const canResolve = await can("finding:resolve", f.site_id);
   const canEscalate = await can("finding:escalate", f.site_id);
+
+  // Argus availability for the finding-severity wand. Reuses the same triple
+  // (org flag + permission + per-profile opt-out) as everywhere else.
+  const { profile } = await requireUser();
+  const orgArgusFlag = await supabase
+    .from("orgs")
+    .select("argus_enabled")
+    .eq("id", profile.org_id)
+    .maybeSingle();
+  const argusEnabled =
+    Boolean(orgArgusFlag.data?.argus_enabled) &&
+    !profile.argus_copilot_disabled &&
+    canEscalate &&
+    (await orgCan("argus:use"));
 
   // Sign URLs for photos
   let signedPhotos: { path: string; url: string | null }[] = [];
@@ -155,9 +170,14 @@ export default async function FindingDetailPage({ params }: { params: Params }) 
         <FindingActionsCard
           findingId={f.id}
           inspectionId={inspectionId}
+          siteId={f.site_id}
           status={f.status}
           canResolve={canResolve}
           canEscalate={canEscalate}
+          argusEnabled={argusEnabled}
+          findingDescription={[f.item_label, f.failed_response_label, f.comment]
+            .filter(Boolean)
+            .join(" — ")}
         />
       </div>
     </div>

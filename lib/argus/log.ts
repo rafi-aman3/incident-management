@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
-import type { ArgusModel } from "./models";
 
 type JsonObject = { [key: string]: Json | undefined };
 
@@ -10,31 +9,39 @@ type JsonObject = { [key: string]: Json | undefined };
  * `actor_kind='argus'`. Both writes go through the user's RLS-bound client
  * — RLS policy lets the suggestion's author INSERT their own rows.
  *
- * This is the ONLY path that should write actor_kind='argus' rows.
+ * `model` accepts any concrete model id string returned by the provider
+ * adapter (`gemini-2.5-flash`, `gemini-2.5-pro`, …). Old rows from the
+ * Anthropic-era keep their `claude-*` strings — fine for audit, no migration.
  */
 
-export type ArgusOutcome = "pending" | "accepted" | "edited" | "rejected" | "expired";
+export type ArgusOutcome =
+  | "pending"
+  | "accepted"
+  | "edited"
+  | "rejected"
+  | "expired";
 
 export interface ArgusUsage {
   promptTokens: number;
   completionTokens: number;
   cacheReadTokens?: number;
   cacheCreateTokens?: number;
+  thinkingTokens?: number;
 }
 
 export interface LogSuggestionInput {
   orgId: string;
   siteId: string | null;
   userId: string;
-  surface: string; // 'copilot' | 'investigator' | 'severity' | …
+  surface: string; // 'copilot' | 'investigator' | 'risk_matrix' | …
   targetKind?: "incident" | "investigation" | "capa" | "finding" | null;
   targetId?: string | null;
-  model: ArgusModel;
+  /** Concrete model id from the provider adapter. */
+  model: string;
   usage: ArgusUsage;
   payload: JsonObject;
   outcome?: ArgusOutcome;
-  /** Optional verb for the matching activity_events row. Pass to record an
-   *  audit-trail entry alongside the suggestion (e.g. 'argus.severity_suggested'). */
+  /** Optional verb for the matching activity_events row. */
   activityVerb?: string;
   activityIncidentId?: string | null;
   activityInvestigationId?: string | null;
@@ -50,6 +57,13 @@ export async function logArgusSuggestion(
 ): Promise<LogSuggestionResult> {
   const supabase = await createClient();
 
+  const payload: JsonObject = {
+    ...input.payload,
+    ...(input.usage.thinkingTokens
+      ? { _thinking_tokens: input.usage.thinkingTokens }
+      : {}),
+  };
+
   const { data, error } = await supabase
     .from("argus_suggestions")
     .insert({
@@ -64,7 +78,7 @@ export async function logArgusSuggestion(
       completion_tokens: input.usage.completionTokens,
       cache_read_tokens: input.usage.cacheReadTokens ?? 0,
       cache_create_tokens: input.usage.cacheCreateTokens ?? 0,
-      payload: input.payload,
+      payload,
       outcome: input.outcome ?? "pending",
     })
     .select("id")
@@ -82,7 +96,11 @@ export async function logArgusSuggestion(
       incident_id: input.activityIncidentId ?? null,
       investigation_id: input.activityInvestigationId ?? null,
       capa_id: input.activityCapaId ?? null,
-      payload: { suggestion_id: data.id, surface: input.surface, model: input.model },
+      payload: {
+        suggestion_id: data.id,
+        surface: input.surface,
+        model: input.model,
+      },
     });
   }
 

@@ -483,6 +483,11 @@ export default async function InvestigationDetailPage({
           context={{
             kind: "investigation",
             investigationId: inv.id,
+            siteId: inv.site_id,
+            argusEnabled:
+              Boolean(orgRow?.argus_enabled) &&
+              canUseArgus &&
+              !profile.argus_copilot_disabled,
             defaultOwnerId: inv.lead_investigator_id ?? null,
           }}
         />
