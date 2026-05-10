@@ -4,6 +4,7 @@ import { HelpDrawer } from "./help-drawer";
 import { UserMenu } from "./user-menu";
 import { SearchTrigger } from "./search-trigger";
 import { MobileMenuButton } from "./mobile-menu-button";
+import { ArgusSidePanel } from "@/components/argus/argus-side-panel";
 import type { RoleKey } from "@/lib/supabase/auth";
 
 export function Topbar({
@@ -16,6 +17,7 @@ export function Topbar({
   roleLabel,
   currentSiteName,
   roleKey,
+  argusEnabled,
 }: {
   sites: SwitcherSite[];
   currentSiteId: string | null;
@@ -26,6 +28,7 @@ export function Topbar({
   roleLabel: string;
   currentSiteName: string | null;
   roleKey: RoleKey;
+  argusEnabled: boolean;
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -41,6 +44,7 @@ export function Topbar({
           <SearchTrigger variant="icon" />
         </div>
         <HelpDrawer roleKey={roleKey} />
+        {argusEnabled && <ArgusSidePanel />}
         <NotificationBell notifications={notifications} />
         <UserMenu
           fullName={fullName}

@@ -504,6 +504,8 @@ Plus: incident detail (`/incidents/[id]`), CAPA detail (`/capa/[id]`), per-repor
 | 2026-05-06 | **Phase 5 ships an app-level aggregator over 6 sources, NOT a Postgres union view** | `lib/planner/aggregate.ts` runs up to 6 parallel `supabase.from(...)` queries (one per source kind), merged + sorted in TS. Each query reads through the existing per-table RLS — the caller-provided `siteIds` is an extra `.in()` filter on top, so per-source perm filtering is "free." Trade-off: N=6 round trips per render, vs a single union-view query. For seed-scale data (dozens of events per month) this stays well under any cache budget, and each fetcher swallows its own error so one source failing never blanks the calendar. v2 may add a `planner_events` materialized view if dashboard widgets need the same shape; until then the JS aggregator is easier to extend. |
 | 2026-05-06 | **Phase 5 is read-only by design — no event creation, drag-to-reschedule, iCal export, conflict detection, or team-lane grouping** | The planner is observability over the existing 4 modules; every dated artefact already has a create flow at its source (Report Wizard, CAPA-create modal, asset edit, inspection runner) and we don't duplicate it here. Drag-to-reschedule would require write-back across 4 different tables (`incidents.occurred_at`, `capas.due_date`, `assets.next_pm_at`, `investigations.due_date`) plus per-source permission gating — all deferred to v2 alongside iCal / Google Calendar export, conflict detection, printable view, mobile-optimized week layout, and the recurring-inspection materialization that would let unstarted scheduled inspections surface as a "future" lane. URL filter shape is verbose (`?incident=0&capa_due=0` — absence = enabled) so each chip self-documents in shared links. |
 
+| 2026-05-10 | **Phase 9 — Argus AI assistant; AI inverted from "permanent non-goal" to flagship pillar** | `PLANNING/IMS_PLANNING.md` §17.8 + §2.4.3 declared AI a permanent non-goal ("competitors compete on AI; we compete on filing forms correctly"). User direction reframes AI as the headline product surface — voice copilot, AI investigator, magic-wands across decision points. New hard rule replaces the non-goal: **Argus is assistive, not authoritative** — never auto-classifies severity, auto-routes incidents, auto-closes CAPAs, or files OSHA/RIDDOR. Every load-bearing decision keeps a named human signature. Foundation (Phase 9a, this PR): `@anthropic-ai/sdk` + env vars + `lib/argus/` library + SSE route handler at `app/api/argus/stream` + empty `<ArgusSidePanel>` mounted from topbar (gated by org-flag `argus_enabled` AND user perm `argus:use`) + new audit table `argus_suggestions` + `activity_events.actor_kind` enum (`'human' \| 'argus'`) + `incidents.stop_work*` columns. Voice = browser Web Speech API (zero infra; text-input fallback for Firefox). Stop-work = boolean flag on incidents (no new entity). Per-org daily token budget + per-user rate limit enforced server-side. PII redactor strips known names + emails + phone + UK NI before requests; not a guarantee, defence-in-depth on top of Anthropic's no-training policy. Phase 9 splits into 9a foundation (this PR) → 9b Copilot in Report Wizard → 9c AI Investigator on Investigation detail → 9d magic-wands → 9e global panel + Dashboard insight tiles. See `plans/09-argus-ai-assistant.md` for the full sub-phase plan and §16 below for the Argus runtime architecture. |
+
 | 2026-05-09 | **Phase 13 — Site Setup OSHA + RIDDOR alignment** | Reshapes the wizard from 7 steps to 9 with self-explanatory slugs (`/admin/site-setup/<slug>` instead of `/<n>`). Adds 22 new columns on `sites` covering structured address (street_1/2 + city + state_or_region + postal_code), lat/long (`numeric(9,6)` paired-or-null with range CHECK; PostGIS deferred until spatial queries land), jurisdiction (`osha_jurisdiction` federal vs state_plan + `state_plan_code`; `gb_jurisdiction` HSE vs local-authority), identifiers (US: `ein`, `sic_code`, `ita_establishment_id`; GB: `crn`, `uk_sic_2007`, `hse_establishment_number` promoted from JSONB), workforce (`peak_employees_year`, `avg_employees_year`, `partially_exempt_override`), hazards (`applicable_standards text[]` ⊆ {1910/1926/1915/1917/1918/1928}, `psm_applicable`, `hazard_tags text[]` ⊆ 10-tag catalog), lifecycle (`site_type`, `operational_status`, `opened_on`, `closed_on`), and people (`site_ehs_lead_id` FK to profiles, `riddor_responsible_person_{name,role}`). New child table `site_emergency_contacts` (name + role + phone + email + sort_order) for per-site contacts. Two computed-read SQL functions (`is_ita_required(naics, peak_employees)`, `is_partially_exempt(naics, peak_employees)`) curated from 29 CFR 1904.2 + 1904.41 Appendix A — derive recordkeeping flags at read time so the wizard's badges stay live without storage drift. Tag/standard/state-plan catalogs live as TS constants under `lib/site-setup/` (text[] over lookup tables — premature abstraction otherwise). **Also** fixes a Phase-0-era RLS bug: `notification_recipients` shipped with a SELECT-only policy, so site setup Step 6 (now Step 8 — recipients) silently 401'd on Save. Adds INSERT/UPDATE/DELETE policies gated on `site:configure`, mirroring 11a's site-edit perms. URL slugs add `slug` field to `SETUP_STEPS` catalog; `nextIncompleteStep()` returns slug strings; numeric URL backward-compat dropped (admin-only chrome, no external links, redirector at `/admin/site-setup` handles stale tabs). Existing `address text` column stays as legacy denormalized string for one phase; migration runs `update sites set street_1 = address` for backfill — no regex parsing (US/GB formats vary too much; admin re-splits on next walkthrough). All recommendations in `plans/13-site-setup-osha-riddor.md` locked as decisions per kickoff Q&A. |
 
 ### Open questions
@@ -511,3 +513,58 @@ Plus: incident detail (`/incidents/[id]`), CAPA detail (`/capa/[id]`), per-repor
 2. **Email delivery** — for demo, notifications stay in-app only. Confirm OK.
 3. **Multi-tenancy** — single org, multi-site (US Houston + UK Manchester). Confirm OK (vs multi-org).
 4. **Real-time updates** — polling on focus is good enough for the demo? (Supabase Realtime available but adds complexity.)
+
+## 16. Argus (AI assistant)
+
+Phase 9 introduces Argus — a voice + text co-pilot that lives across the product. This section is the runtime reference; per-phase scope and timeline are in `plans/09-argus-ai-assistant.md`.
+
+### Hard rules
+
+1. **Assistive only, never authoritative.** Every Argus output renders into a human-controllable form field with accept / edit / reject. The model never finalizes severity, track, CAPA closure, or regulatory submissions — those keep a named human signature.
+2. **Every suggestion is logged.** `argus_suggestions` rows + `activity_events` rows with `actor_kind='argus'`. Includes model, prompt + completion + cache tokens, and the user's outcome (`pending` → `accepted` | `edited` | `rejected` | `expired`).
+3. **Existing RBAC governs actions.** A magic-wand that "creates a CAPA" requires the user to hold `capa:create`. The single feature gate is `argus:use` (default-on for all four seeded roles).
+4. **No auto-classification, no auto-routing, no auto-closure** — carried forward from `PLANNING/IMS_PLANNING.md` §2.4.3 even after the AI pivot. Non-negotiable.
+5. **PII redaction before egress.** `lib/argus/redact.ts` strips known names (profiles + injured persons), emails, phone numbers, UK NI codes. Defence-in-depth on top of Anthropic's no-training-on-API-input policy — free-text descriptions can still re-leak.
+6. **Server-side cost guardrails.** `orgs.argus_daily_token_budget` is a per-org cap (soft warn at 80%, hard block at 100%). Per-user rate limit: 10 inline / 3 deep / minute. Prompt caching on system + tool blocks via the SDK's `cache_control: ephemeral`.
+
+### Architecture (Phase 9a foundation)
+
+| Layer | Path | Notes |
+|---|---|---|
+| SDK singleton | `lib/argus/client.ts` | `getArgusClient()` — lazy-init; `ArgusOfflineError` when key missing (route handler returns 503 + SSE error frame, never a 500) |
+| Models | `lib/argus/models.ts` | Aliases only — `claude-haiku-4-5` (inline classifiers), `claude-sonnet-4-6` (RCA + reportability), `claude-opus-4-7` reserved |
+| Streaming | `lib/argus/stream.ts` + `app/api/argus/stream/route.ts` | Route handler returns `text/event-stream` with three event names: `token` (delta), `usage` (one-shot at end), `done`. Client consumes via `fetch + getReader()` (not `EventSource` — needs POST body) |
+| PII redactor | `lib/argus/redact.ts` | Replaces known names with initials; emails → `[EMAIL]`; phones → `[PHONE]`; UK NI → `[NI]` |
+| Budget | `lib/argus/budget.ts` | Sums tokens for org from start-of-UTC-day; uses admin client to bypass RLS for the aggregate |
+| Rate limit | `lib/argus/ratelimit.ts` | In-memory map keyed `userId:bucket` (single-instance only — escalate to Upstash Redis if/when horizontally scaled) |
+| Audit logger | `lib/argus/log.ts` | `logArgusSuggestion()` writes both `argus_suggestions` and `activity_events`; `setSuggestionOutcome()` flips outcome within 24h |
+| Voice contracts | `lib/argus/voice.ts` | Type surface only; impl in `components/argus/use-voice.ts` (Phase 9b) |
+
+### Schema additions
+
+- `activity_events.actor_kind text not null check (in 'human','argus')` — grandfathers existing rows as `'human'`.
+- `orgs.argus_enabled boolean default true` + `orgs.argus_daily_token_budget bigint default 5_000_000`.
+- `argus_suggestions(id, org_id, site_id, user_id, surface, target_kind, target_id, model, prompt_tokens, completion_tokens, cache_read_tokens, cache_create_tokens, payload jsonb, outcome, outcome_at, created_at)`. RLS: SELECT/INSERT for site members via `user_can_access_site`; UPDATE only on `outcome` columns by author within 24h; DELETE revoked from PUBLIC.
+- `incidents.stop_work boolean default false` + `stop_work_raised_at` + `stop_work_raised_by` + `stop_work_reason` + `stop_work_acknowledged_at` + `stop_work_acknowledged_by`. The `_by` columns are plain `uuid` (no FK to `profiles`) — adding three FKs from `incidents` → `profiles` broke PostgREST relationship inference for the existing `reporter_id` join, so we trade referential integrity (which we never relied on; profiles are soft-delete only) for clean Supabase type generation. See migration `20260518130000_phase9a_drop_stop_work_profile_fks.sql`.
+- New permission `argus:use` granted to all four default roles (worker / supervisor / ehs_manager / site_admin). `seed_default_roles()` updated for new orgs.
+
+### Wire format (SSE)
+
+```
+event: token   data: {"text": "..."}      // delta of model output
+event: usage   data: {"inputTokens": N, "outputTokens": N, "cacheReadTokens": N, "cacheCreateTokens": N}
+event: done    data: {"reason": "end_turn"}
+event: error   data: {"message": "..."}   // gate-failure path; same shape as success terminus
+```
+
+Gates run in order: `requireUser` → `orgCan('argus:use')` → `argus_enabled` flag → `checkRateLimit` → `checkArgusBudget` → `isArgusConfigured`. Each gate returns the SSE error frame so the client renders a friendly message instead of a 500.
+
+### Phase 9.0 sub-phase split
+
+| Sub-phase | What ships |
+|---|---|
+| **9a (this PR)** | Foundation: SDK + env + library + migration + RLS + permission + empty side-panel shell mounted from topbar |
+| **9b** | Floating `<ArgusCopilot>` on all 3 Report Wizard steps; mic + photo capture + log-observation + raise-stop-work tool calls |
+| **9c** | `<ArgusInvestigator>` on `/investigations/[id]` — paste description + voice/text witness statements → streamed timeline + RCA narrative draft → "Push to investigation" approval gate |
+| **9d** | `<ArgusMagicWand>` on risk-matrix cells, finding-→incident escalation, CAPA verification method, OSHA reportability confidence pane |
+| **9e** | Global side panel page-context aware; 4 Dashboard `<ArgusInsightTile>` cards + tiles on CAPA / Inspections / Reports |

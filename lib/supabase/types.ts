@@ -42,6 +42,7 @@ export type Database = {
       activity_events: {
         Row: {
           actor_id: string | null
+          actor_kind: string
           asset_id: string | null
           capa_id: string | null
           created_at: string
@@ -58,6 +59,7 @@ export type Database = {
         }
         Insert: {
           actor_id?: string | null
+          actor_kind?: string
           asset_id?: string | null
           capa_id?: string | null
           created_at?: string
@@ -74,6 +76,7 @@ export type Database = {
         }
         Update: {
           actor_id?: string | null
+          actor_kind?: string
           asset_id?: string | null
           capa_id?: string | null
           created_at?: string
@@ -185,6 +188,85 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      argus_suggestions: {
+        Row: {
+          cache_create_tokens: number
+          cache_read_tokens: number
+          completion_tokens: number
+          created_at: string
+          id: string
+          model: string
+          org_id: string
+          outcome: string | null
+          outcome_at: string | null
+          payload: Json
+          prompt_tokens: number
+          site_id: string | null
+          surface: string
+          target_id: string | null
+          target_kind: string | null
+          user_id: string
+        }
+        Insert: {
+          cache_create_tokens?: number
+          cache_read_tokens?: number
+          completion_tokens: number
+          created_at?: string
+          id?: string
+          model: string
+          org_id: string
+          outcome?: string | null
+          outcome_at?: string | null
+          payload: Json
+          prompt_tokens: number
+          site_id?: string | null
+          surface: string
+          target_id?: string | null
+          target_kind?: string | null
+          user_id: string
+        }
+        Update: {
+          cache_create_tokens?: number
+          cache_read_tokens?: number
+          completion_tokens?: number
+          created_at?: string
+          id?: string
+          model?: string
+          org_id?: string
+          outcome?: string | null
+          outcome_at?: string | null
+          payload?: Json
+          prompt_tokens?: number
+          site_id?: string | null
+          surface?: string
+          target_id?: string | null
+          target_kind?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "argus_suggestions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "argus_suggestions_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "argus_suggestions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -708,6 +790,12 @@ export type Database = {
           severity: Database["public"]["Enums"]["severity"] | null
           site_id: string
           status: Database["public"]["Enums"]["incident_status"]
+          stop_work: boolean
+          stop_work_acknowledged_at: string | null
+          stop_work_acknowledged_by: string | null
+          stop_work_raised_at: string | null
+          stop_work_raised_by: string | null
+          stop_work_reason: string | null
           substance: string | null
           title: string
           track: Database["public"]["Enums"]["track"] | null
@@ -739,6 +827,12 @@ export type Database = {
           severity?: Database["public"]["Enums"]["severity"] | null
           site_id: string
           status?: Database["public"]["Enums"]["incident_status"]
+          stop_work?: boolean
+          stop_work_acknowledged_at?: string | null
+          stop_work_acknowledged_by?: string | null
+          stop_work_raised_at?: string | null
+          stop_work_raised_by?: string | null
+          stop_work_reason?: string | null
           substance?: string | null
           title: string
           track?: Database["public"]["Enums"]["track"] | null
@@ -770,6 +864,12 @@ export type Database = {
           severity?: Database["public"]["Enums"]["severity"] | null
           site_id?: string
           status?: Database["public"]["Enums"]["incident_status"]
+          stop_work?: boolean
+          stop_work_acknowledged_at?: string | null
+          stop_work_acknowledged_by?: string | null
+          stop_work_raised_at?: string | null
+          stop_work_raised_by?: string | null
+          stop_work_reason?: string | null
           substance?: string | null
           title?: string
           track?: Database["public"]["Enums"]["track"] | null
@@ -1646,6 +1746,8 @@ export type Database = {
       }
       orgs: {
         Row: {
+          argus_daily_token_budget: number
+          argus_enabled: boolean
           created_at: string
           id: string
           industry: Database["public"]["Enums"]["industry_type"] | null
@@ -1655,6 +1757,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          argus_daily_token_budget?: number
+          argus_enabled?: boolean
           created_at?: string
           id?: string
           industry?: Database["public"]["Enums"]["industry_type"] | null
@@ -1664,6 +1768,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          argus_daily_token_budget?: number
+          argus_enabled?: boolean
           created_at?: string
           id?: string
           industry?: Database["public"]["Enums"]["industry_type"] | null

@@ -9,6 +9,7 @@ import { NAV_ITEMS, ROLE_BADGE } from "@/components/app-shell/nav-config";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { orgCan } from "@/lib/auth/orgCan";
 import type { NotificationItem } from "@/components/app-shell/notification-bell";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -108,6 +109,15 @@ async function AppShell({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
   const sidebarPinned = cookieStore.get(SIDEBAR_PINNED_COOKIE)?.value === "true";
 
+  // Argus availability: org-flag AND user-permission AND key-configured.
+  // Topbar hides the trigger when any of the three is false; route handler
+  // enforces the same gates server-side.
+  const [orgArgusFlag, userArgusPerm] = await Promise.all([
+    supabase.from("orgs").select("argus_enabled").eq("id", profile.org_id).maybeSingle(),
+    orgCan("argus:use"),
+  ]);
+  const argusEnabled = Boolean(orgArgusFlag.data?.argus_enabled) && userArgusPerm;
+
   return (
     <SidebarShell
       defaultPinned={sidebarPinned}
@@ -125,6 +135,7 @@ async function AppShell({ children }: { children: ReactNode }) {
           roleLabel={roleLabel}
           roleKey={currentRoleKey}
           currentSiteName={currentMembership?.site?.name ?? null}
+          argusEnabled={argusEnabled}
         />
       }
       banner={<RegulatoryBanner deadlines={notifications} />}

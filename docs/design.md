@@ -486,7 +486,7 @@ I adapted the SmartQHSE system rather than copying it verbatim. Here's what chan
 
 7. **Font: Inter, not Montserrat.** Inter has better tabular numerals and reads better at small sizes — matters for OSHA 300 Log columns and CAPA dates. Inter is also already installed. (If you specifically want Montserrat for SDSM brand parity, swap the `--font-sans` binding — it's a one-line change.)
 
-8. **Cyan reserved.** The source spec uses cyan `#00D4FF` for "AI / ARIA" indicators. We don't have AI in v1, so cyan currently maps to `--color-info` for non-critical informational chips (e.g., "Auto-classified"). If you want to reserve it for a future AI assistant, we can drop `info` to a softer blue and keep cyan dormant.
+8. **Cyan promoted to Argus accent (Phase 9a, 2026-05-10).** Cyan `#00D4FF` is now the active Argus AI indicator: topbar trigger icon, suggestion-card streaming-state border, "AI is thinking" pulse. Brand purple `#735CDD` keeps the "AI-suggested" form-field treatment (after the user has accepted the suggestion the field looks like normal user input). The `--color-info` token still resolves to cyan today — Phase 9d adds a `--argus-accent` token alias that defaults to `var(--accent)` so the two roles can decouple if `info` ever needs its own (softer) blue. See `docs/SPEC.md` §16 for the full Argus runtime; `<ArgusSidePanel>` lives in `components/argus/argus-side-panel.tsx`.
 
 9. **Critical regulatory banner (level-4 elevation).** Added a fourth elevation step specifically for the OSHA 8hr / RIDDOR immediate countdown banner. It needs to float visually above the dashboard so a glance reads urgency without reading copy.
 

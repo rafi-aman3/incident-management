@@ -63,6 +63,7 @@ export const PERMISSIONS = [
   "document_link:create",
   "document_link:remove",
   "planner:read",
+  "argus:use",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
