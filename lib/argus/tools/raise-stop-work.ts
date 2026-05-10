@@ -1,5 +1,4 @@
 import { logArgusSuggestion } from "@/lib/argus/log";
-import { MODEL_HAIKU } from "@/lib/argus/models";
 import type { ArgusToolDefinition } from "./types";
 
 interface Input {
@@ -25,7 +24,7 @@ export const raiseStopWorkTool: ArgusToolDefinition<Input> = {
   name: "raise_stop_work",
   description:
     "Raise a stop-work alert on the draft incident. The site EHS lead is notified immediately and a banner appears on the dashboard until acknowledged. Use only when there is an active, imminent hazard. Confirm with the worker first unless they explicitly said 'raise stop-work'.",
-  input_schema: {
+  parameters: {
     type: "object",
     properties: {
       reason: {
@@ -92,7 +91,7 @@ export const raiseStopWorkTool: ArgusToolDefinition<Input> = {
       surface: "copilot",
       targetKind: "incident",
       targetId: ctx.incidentId,
-      model: MODEL_HAIKU,
+      model: ctx.modelUsed,
       usage: { promptTokens: 0, completionTokens: 0 },
       payload: {
         kind: "stop_work_raised",

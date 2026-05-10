@@ -1,45 +1,44 @@
 import { NextRequest } from "next/server";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type Anthropic from "@anthropic-ai/sdk";
 import { runArgusGates } from "@/lib/argus/gates";
-import { MODEL_SONNET } from "@/lib/argus/models";
-import { argusErrorStream } from "@/lib/argus/stream";
+import { argusErrorStream, sseFrame } from "@/lib/argus/stream";
 import { logArgusSuggestion } from "@/lib/argus/log";
-import { investigatorToolsForAnthropic, type InvestigationDraftPayload } from "@/lib/argus/tools";
+import {
+  INVESTIGATOR_TOOL,
+  type InvestigationDraftPayload,
+} from "@/lib/argus/tools";
 import { redactText, initialsOf } from "@/lib/argus/redact";
 import { can } from "@/lib/auth/can";
+import { ArgusInvalidResponseError } from "@/lib/argus/llm";
 import type { Json } from "@/lib/supabase/types";
 
 /**
  * Phase 9c — AI Investigator. POST { investigationId, paste, witnessAdds[] } →
  * SSE stream:
- *   event: progress  data: {"phase":"reading"|"streaming"}
+ *   event: progress  data: {"phase":"reading"|"thinking"}
  *   event: draft     data: {<InvestigationDraftPayload>, suggestionId}
- *   event: usage     data: {<token totals>}
+ *   event: usage     data: {<UsageNormalized>}
  *   event: error     data: {"message":"…"}
  *   event: done      data: {"reason":"end_turn"|"insufficient_input"|"error"}
  *
- * One Sonnet 4.6 call per request — no agentic loop. `tool_choice` is forced
- * to `propose_investigation_draft` so the model emits exactly one tool_use
- * block; we capture its `input` directly as the structured draft and stream
- * it back. The user reviews, edits, and Pushes per-section in the UI; the
- * draft does NOT persist to investigations.{findings, root_cause_summary} or
- * rca_whys until the user clicks Push (gated on `investigation:edit` via the
- * existing actions).
+ * One Gemini 2.5 Pro call per request — no agentic loop. Forced function
+ * calling guarantees the model emits a single function call matching our
+ * `propose_investigation_draft` schema. The user reviews, edits, and Pushes
+ * per-section in the UI; the draft does NOT persist to
+ * `investigations.{findings, root_cause_summary}` or `rca_whys` until the user
+ * clicks Push (gated on `investigation:edit` via the existing actions).
  */
 
 let cachedSystemPrompt: string | null = null;
 async function loadSystemPrompt(): Promise<string> {
   if (cachedSystemPrompt) return cachedSystemPrompt;
-  const filePath = path.join(process.cwd(), "lib/argus/system-prompts/investigator.md");
+  const filePath = path.join(
+    process.cwd(),
+    "lib/argus/system-prompts/investigator.md",
+  );
   cachedSystemPrompt = await fs.readFile(filePath, "utf-8");
   return cachedSystemPrompt;
-}
-
-const encoder = new TextEncoder();
-function sseEvent(event: string, data: unknown): Uint8Array {
-  return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
 interface WitnessAdd {
@@ -68,7 +67,6 @@ export async function POST(request: NextRequest) {
   const gate = await runArgusGates("investigator");
   if (!gate.ok) return gate.response;
 
-  // Look up the investigation + the source incident in one round-trip.
   const { data: inv, error: invErr } = await gate.supabase
     .from("investigations")
     .select(
@@ -89,20 +87,17 @@ export async function POST(request: NextRequest) {
     return argusErrorStream("This investigation is closed.", 400);
   }
   if (!(await can("investigation:edit", inv.site_id))) {
-    return argusErrorStream("You do not have permission to edit this investigation.", 403);
+    return argusErrorStream(
+      "You do not have permission to edit this investigation.",
+      403,
+    );
   }
 
-  // Existing witness statements on the source incident — these get folded
-  // into the prompt as part of the source material.
   const { data: existingWitnesses } = await gate.supabase
     .from("witnesses")
     .select("name, statement")
     .eq("incident_id", inv.incident.id);
 
-  // Build the redaction list from every name we know about: injured persons,
-  // existing witnesses, and any names the caller submitted via witnessAdds.
-  // Defence-in-depth — Anthropic's no-training-on-API-input policy is the
-  // actual privacy backstop. Per SPEC §17.
   const knownNames = [
     ...(inv.incident.injured_persons ?? []).map((p) => p.name),
     ...(existingWitnesses ?? []).map((w) => w.name),
@@ -111,9 +106,6 @@ export async function POST(request: NextRequest) {
     .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
     .map((fullName) => ({ fullName, initials: initialsOf(fullName) }));
 
-  // Validate input gate before paying for a Sonnet call. The system prompt
-  // also enforces this server-side by setting `insufficient_input`, but a
-  // pre-flight check saves a round-trip on obviously empty input.
   const pasteText = (body.paste ?? "").trim();
   const witnessAdds = (body.witnessAdds ?? [])
     .filter((w) => w.statement?.trim() && w.name?.trim())
@@ -126,7 +118,10 @@ export async function POST(request: NextRequest) {
   const totalWords =
     countWords(inv.incident.description ?? "") +
     countWords(pasteText) +
-    (existingWitnesses ?? []).reduce((acc, w) => acc + countWords(w.statement ?? ""), 0) +
+    (existingWitnesses ?? []).reduce(
+      (acc, w) => acc + countWords(w.statement ?? ""),
+      0,
+    ) +
     witnessAdds.reduce((acc, w) => acc + countWords(w.statement), 0);
 
   if (witnessCount === 0 && totalWords < 50 && !pasteText) {
@@ -153,7 +148,8 @@ export async function POST(request: NextRequest) {
               `- ${initialsOf(w.name ?? "")}: "${redactText(w.statement ?? "", knownNames)}"`,
           ),
           ...witnessAdds.map(
-            (w) => `- ${initialsOf(w.name)}: "${redactText(w.statement, knownNames)}"`,
+            (w) =>
+              `- ${initialsOf(w.name)}: "${redactText(w.statement, knownNames)}"`,
           ),
         ]),
     "",
@@ -161,64 +157,26 @@ export async function POST(request: NextRequest) {
     pasteText ? redactText(pasteText, knownNames) : "(none)",
   ].join("\n");
 
-  const body_messages: Anthropic.MessageParam[] = [{ role: "user", content: userBlock }];
-
   const responseBody = new ReadableStream<Uint8Array>({
     async start(controller) {
-      controller.enqueue(sseEvent("progress", { phase: "reading" }));
+      controller.enqueue(sseFrame("progress", { phase: "reading" }));
 
       try {
-        const stream = gate.client.messages.stream({
-          model: MODEL_SONNET,
-          max_tokens: 4096,
-          system: [
-            { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
-          ],
-          tools: investigatorToolsForAnthropic(),
-          tool_choice: { type: "tool", name: "propose_investigation_draft" },
-          messages: body_messages,
+        controller.enqueue(sseFrame("progress", { phase: "thinking" }));
+
+        const result = await gate.llm.generateStructured<InvestigationDraftPayload>({
+          surface: "investigator",
+          tier: "smart",
+          system: systemPrompt,
+          user: userBlock,
+          tool: INVESTIGATOR_TOOL,
+          maxOutputTokens: 4096,
+          thinking: "auto",
         });
 
-        controller.enqueue(sseEvent("progress", { phase: "streaming" }));
-
-        // Consume input_json deltas only as a heartbeat — we don't stream the
-        // (partial) JSON to the client because half-built objects can't be
-        // safely rendered. The full structured draft is emitted once the
-        // model completes via finalMessage().
-        stream.on("inputJson", () => {
-          controller.enqueue(sseEvent("progress", { phase: "streaming" }));
-        });
-
-        const finalMessage = await stream.finalMessage();
-
-        const usage = {
-          inputTokens: finalMessage.usage.input_tokens ?? 0,
-          outputTokens: finalMessage.usage.output_tokens ?? 0,
-          cacheReadTokens: finalMessage.usage.cache_read_input_tokens ?? 0,
-          cacheCreateTokens: finalMessage.usage.cache_creation_input_tokens ?? 0,
-        };
-
-        const toolUse = finalMessage.content.find(
-          (b) => b.type === "tool_use" && b.name === "propose_investigation_draft",
-        );
-
-        if (!toolUse || toolUse.type !== "tool_use") {
-          controller.enqueue(
-            sseEvent("error", {
-              message:
-                "Argus did not return a structured draft. Try again with more detail.",
-            }),
-          );
-          controller.enqueue(sseEvent("done", { reason: "error" }));
-          controller.close();
-          return;
-        }
-
-        const draft = toolUse.input as InvestigationDraftPayload;
+        const draft = result.output;
         const refused = (draft.insufficient_input ?? "").trim().length > 0;
 
-        // Persist the suggestion (pending). The acceptance flip happens in
-        // argus-actions.ts when the user Pushes a section.
         const { suggestionId } = await logArgusSuggestion({
           orgId: gate.orgId,
           siteId: inv.site_id,
@@ -226,12 +184,13 @@ export async function POST(request: NextRequest) {
           surface: "investigator",
           targetKind: "investigation",
           targetId: inv.id,
-          model: MODEL_SONNET,
+          model: result.modelUsed,
           usage: {
-            promptTokens: usage.inputTokens,
-            completionTokens: usage.outputTokens,
-            cacheReadTokens: usage.cacheReadTokens,
-            cacheCreateTokens: usage.cacheCreateTokens,
+            promptTokens: result.usage.inputTokens,
+            completionTokens: result.usage.outputTokens,
+            cacheReadTokens: result.usage.cachedInputTokens,
+            cacheCreateTokens: 0,
+            thinkingTokens: result.usage.thinkingTokens,
           },
           payload: {
             kind: "investigator_draft",
@@ -248,21 +207,23 @@ export async function POST(request: NextRequest) {
           activityInvestigationId: inv.id,
         });
 
-        controller.enqueue(sseEvent("draft", { suggestionId, draft }));
-        controller.enqueue(sseEvent("usage", usage));
+        controller.enqueue(sseFrame("draft", { suggestionId, draft }));
+        controller.enqueue(sseFrame("usage", result.usage));
         controller.enqueue(
-          sseEvent("done", {
-            reason: refused ? "insufficient_input" : (finalMessage.stop_reason ?? "end_turn"),
+          sseFrame("done", {
+            reason: refused ? "insufficient_input" : "end_turn",
           }),
         );
         controller.close();
       } catch (err) {
-        controller.enqueue(
-          sseEvent("error", {
-            message: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        controller.enqueue(sseEvent("done", { reason: "error" }));
+        const message =
+          err instanceof ArgusInvalidResponseError
+            ? "Argus did not return a structured draft. Try again with more detail."
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        controller.enqueue(sseFrame("error", { message }));
+        controller.enqueue(sseFrame("done", { reason: "error" }));
         controller.close();
       }
     },
@@ -278,8 +239,5 @@ export async function POST(request: NextRequest) {
 }
 
 function countWords(s: string): number {
-  return s
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
+  return s.trim().split(/\s+/).filter(Boolean).length;
 }

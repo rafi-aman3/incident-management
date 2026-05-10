@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { runArgusGates } from "@/lib/argus/gates";
-import { MODEL_HAIKU, MODEL_BY_SURFACE, type ArgusSurface } from "@/lib/argus/models";
+import { TIER_BY_SURFACE, type ArgusSurface } from "@/lib/argus/models";
 import { argusErrorStream, streamArgusResponse } from "@/lib/argus/stream";
 import { logArgusSuggestion } from "@/lib/argus/log";
 
@@ -8,15 +8,18 @@ import { logArgusSuggestion } from "@/lib/argus/log";
  * Phase 9a "ping" endpoint — single-turn, no tool-use. POST { surface, prompt } → SSE.
  *
  * 9b's Copilot lives at `/api/argus/copilot` because it needs an agentic
- * tool-use loop; this endpoint stays as the simple-stream surface for
- * future inline classifiers (9d severity / capa_method / etc.) where one
- * model call → one suggestion is the whole interaction.
+ * tool-use loop; this endpoint is the simple-stream surface kept for
+ * fallback / future inline classifiers where one model call → one
+ * suggestion is the whole interaction.
  */
 
 type ArgusBody = {
   surface: "ping" | ArgusSurface;
   prompt?: string;
 };
+
+const SYSTEM_PROMPT =
+  "You are Argus, an EHS safety co-pilot. Be brief, specific, and action-oriented. You never finalize decisions — you suggest and let the human commit.";
 
 export async function POST(request: NextRequest) {
   let body: ArgusBody;
@@ -35,36 +38,31 @@ export async function POST(request: NextRequest) {
   const gate = await runArgusGates(surface);
   if (!gate.ok) return gate.response;
 
-  const model =
+  const tier =
     surface === "ping"
-      ? MODEL_HAIKU
-      : (MODEL_BY_SURFACE[surface as ArgusSurface] ?? MODEL_HAIKU);
+      ? "fast"
+      : (TIER_BY_SURFACE[surface as ArgusSurface] ?? "fast");
 
-  const messageStream = gate.client.messages.stream({
-    model,
-    max_tokens: 1024,
-    system: [
-      {
-        type: "text",
-        text: "You are Argus, an EHS safety co-pilot. Be brief, specific, and action-oriented. You never finalize decisions — you suggest and let the human commit.",
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages: [{ role: "user", content: prompt }],
+  const stream = await gate.llm.streamText({
+    surface,
+    tier,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", text: prompt }],
   });
 
-  return streamArgusResponse(messageStream, async (usage, fullText) => {
+  return streamArgusResponse(stream, async (final, fullText) => {
     await logArgusSuggestion({
       orgId: gate.orgId,
       siteId: null,
       userId: gate.user.id,
       surface,
-      model,
+      model: final.modelUsed,
       usage: {
-        promptTokens: usage.inputTokens,
-        completionTokens: usage.outputTokens,
-        cacheReadTokens: usage.cacheReadTokens,
-        cacheCreateTokens: usage.cacheCreateTokens,
+        promptTokens: final.usage.inputTokens,
+        completionTokens: final.usage.outputTokens,
+        cacheReadTokens: final.usage.cachedInputTokens,
+        cacheCreateTokens: 0,
+        thinkingTokens: final.usage.thinkingTokens,
       },
       payload: { prompt, response: fullText },
     });

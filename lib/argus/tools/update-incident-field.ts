@@ -1,5 +1,4 @@
 import { logArgusSuggestion } from "@/lib/argus/log";
-import { MODEL_HAIKU } from "@/lib/argus/models";
 import type { ArgusToolDefinition } from "./types";
 
 interface Input {
@@ -51,7 +50,7 @@ export const updateIncidentFieldTool: ArgusToolDefinition<Input> = {
   name: "update_incident_field",
   description:
     "Auto-fill a single field on the draft incident the worker is reporting. Use this aggressively to populate Title, Description, Area, Location, Substance, or Equipment from what the worker dictated. The user can edit any value before submitting. Do NOT use this for severity, track, or status — those need a human signature.",
-  input_schema: {
+  parameters: {
     type: "object",
     properties: {
       field: {
@@ -148,7 +147,7 @@ export const updateIncidentFieldTool: ArgusToolDefinition<Input> = {
       surface: "copilot",
       targetKind: "incident",
       targetId: ctx.incidentId,
-      model: MODEL_HAIKU,
+      model: ctx.modelUsed,
       usage: { promptTokens: 0, completionTokens: 0 },
       payload: {
         kind: "field_filled",
