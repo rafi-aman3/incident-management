@@ -20,6 +20,11 @@ import {
   CapaCreateModal,
   type CapaCreateMember,
 } from "@/components/capa/capa-create-modal";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import { ArgusInsightTile } from "@/components/argus/argus-insight-tile";
+import { isArgusAvailable } from "@/lib/argus/availability";
+import { getCapaIndexSummaryTilePayload } from "@/lib/argus/tiles/capa-index-summary";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const VALID_TABS: ReadonlyArray<CapaTabKey> = CAPA_TABS.map((t) => t.key);
@@ -257,8 +262,40 @@ export default async function CapaPage({
     }
   }
 
+  const [argusAvailable, capaIndexPayload] = await Promise.all([
+    isArgusAvailable(profile.org_id),
+    canRead ? getCapaIndexSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
+  ]);
+
+  const argusContext: ArgusPageContext = {
+    route: "capa_index",
+    routeLabel: "CAPA",
+    siteId: currentSiteId,
+    aggregates: {
+      active: counts.active,
+      pending_verification: counts.pendingVerification,
+      overdue: counts.overdue,
+      closed: counts.closed,
+    },
+    records: rows.slice(0, 5).map((r) => ({
+      kind: "capa" as const,
+      id: r.id,
+      refCode: r.ref_code,
+      title: `${r.type} · ${r.status}${r.is_overdue ? " · overdue" : ""}`,
+    })),
+    hasActiveSignal:
+      argusAvailable && counts.overdue + counts.pendingVerification > 0,
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
+      {argusAvailable && canRead && currentSiteId && capaIndexPayload && (
+        <ArgusInsightTile
+          tile="capa_index_summary"
+          payload={{ ...capaIndexPayload, siteId: currentSiteId }}
+        />
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">CAPA</h1>

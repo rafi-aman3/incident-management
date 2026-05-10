@@ -43,6 +43,8 @@ import {
   type ActivityEvent,
 } from "@/components/investigations/detail/activity-timeline";
 import { CapaCreateModal } from "@/components/capa/capa-create-modal";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type { InvestigationStatus } from "@/lib/investigations/types";
 
 type Params = Promise<{ id: string }>;
@@ -325,8 +327,36 @@ export default async function InvestigationDetailPage({
 
   const basePath = `/investigations/${inv.id}`;
 
+  const argusContext: ArgusPageContext = {
+    route: "investigation_detail",
+    routeLabel: inv.ref_code ? `Investigation ${inv.ref_code}` : "Investigation",
+    siteId: inv.site_id,
+    aggregates: {
+      whys_filled: 0,
+      findings: Array.isArray(inv.findings) ? inv.findings.length : 0,
+      witness_statements: statements.length,
+    },
+    records: [
+      {
+        kind: "investigation" as const,
+        id: inv.id,
+        refCode: inv.ref_code,
+        title: `Status ${status}${inv.due_date ? " · due " + inv.due_date : ""}`,
+      },
+      {
+        kind: "incident" as const,
+        id: incident.id,
+        refCode: incident.ref_code,
+        title: incident.severity
+          ? `${incident.severity} ${incident.type}`
+          : incident.type,
+      },
+    ],
+  };
+
   return (
     <div className="space-y-4">
+      <ArgusContextPayload context={argusContext} />
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

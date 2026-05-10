@@ -8,6 +8,11 @@ import {
   StartInspectionDialog,
   type StartTemplateOption,
 } from "@/components/inspections/start-inspection-dialog";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import { ArgusInsightTile } from "@/components/argus/argus-insight-tile";
+import { isArgusAvailable } from "@/lib/argus/availability";
+import { getInspectionsDueSummaryTilePayload } from "@/lib/argus/tiles/inspections-due-summary";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type { InspectionStatus } from "@/lib/templates/types";
 import type { IndustryEnum } from "@/lib/templates/industry-map";
 
@@ -46,7 +51,7 @@ export default async function InspectionsPage({
   searchParams: SearchParams;
 }) {
   const sp = await searchParams;
-  const { supabase, currentSiteId } = await requireUser();
+  const { supabase, profile, currentSiteId } = await requireUser();
 
   const canRead = currentSiteId ? await can("inspection:read_site", currentSiteId) : false;
   const canStart = currentSiteId ? await can("inspection:start", currentSiteId) : false;
@@ -131,8 +136,43 @@ export default async function InspectionsPage({
     startOptions = collected;
   }
 
+  const [argusAvailable, inspectionsTilePayload] = await Promise.all([
+    isArgusAvailable(profile.org_id),
+    canRead ? getInspectionsDueSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
+  ]);
+
+  const inspectionsActiveSignal =
+    (inspectionsTilePayload?.aggregates?.in_progress ?? 0) > 0 ||
+    (inspectionsTilePayload?.aggregates?.recent_failed ?? 0) > 0;
+
+  const argusContext: ArgusPageContext = {
+    route: "inspections_index",
+    routeLabel: "Inspections",
+    siteId: currentSiteId,
+    aggregates: {
+      visible_rows: rows.length,
+      failed: rows.filter((r) => r.is_failed).length,
+      in_progress: rows.filter((r) => r.status === "in_progress").length,
+      assignable_templates: startOptions.length,
+    },
+    records: rows.slice(0, 5).map((r) => ({
+      kind: "inspection" as const,
+      id: r.id,
+      refCode: r.ref_code,
+      title: `${r.status}${r.is_failed ? " · failed" : ""}`,
+    })),
+    hasActiveSignal: argusAvailable && inspectionsActiveSignal,
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
+      {argusAvailable && canRead && currentSiteId && inspectionsTilePayload && (
+        <ArgusInsightTile
+          tile="inspections_due_summary"
+          payload={{ ...inspectionsTilePayload, siteId: currentSiteId }}
+        />
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Inspections</h1>

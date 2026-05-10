@@ -44,8 +44,8 @@ export function Topbar({
           <SearchTrigger variant="icon" />
         </div>
         <HelpDrawer roleKey={roleKey} />
-        {argusEnabled && <ArgusSidePanel />}
         <NotificationBell notifications={notifications} />
+        {argusEnabled && <ArgusSidePanel />}
         <UserMenu
           fullName={fullName}
           email={email}

@@ -599,3 +599,54 @@ Push commits via the existing `saveInvestigationText` / `saveWhy` actions — no
 **Schema.** No migration. Reuses `argus_suggestions` (9a) + `activity_events` (9a) + `investigations.{findings, root_cause_summary}` + `rca_whys` (Phase 2) + `witnesses` (Phase 1). Two new activity verbs (`verb` is `text`, no enum change).
 
 **Cost guardrails.** `runArgusGates("investigator")` puts the call in the **heavy** rate-limit bucket (3/min/user). Per-org daily token budget is enforced unchanged. Sonnet 4.6 is ~5× Haiku per token; a 5M-token org daily cap absorbs ~250 Generates.
+
+### 9e — Global panel page-context + Insight Tiles (runtime reference)
+
+**Surface 1 — page-context-aware side panel.** The 9a side-panel shell stays at the topbar Sparkles avatar (now positioned right of `<NotificationBell>`). Pages opt in by rendering `<ArgusContextPayload context={ctx} />` inside their server tree; the client-side `<ArgusContextProvider>` wrapping `(app)/layout.tsx` registers the latest mount and exposes it via `useArgusPageContext()`. The panel reads the route + redacted record summaries + small numeric aggregates and:
+
+- shows a header chip — e.g. `Incident IR-014 · UCB Houston (US)` — so the user can see what Argus is grounded on;
+- offers per-route suggestion chips (`ARGUS_PANEL_SUGGESTIONS` keyed by `route`) that auto-fill + auto-submit;
+- POSTs to `/api/argus/stream` with `surface: 'panel_chat'`. The route handler builds the system prompt from `lib/argus/system-prompts/panel.md` plus a `# Page context` block (route, label, aggregates, records); free-text fields run through `redactText()` a second time server-side as defence-in-depth;
+- writes `argus_suggestions` rows with `target_kind` keyed to the page's primary record (`'incident' | 'investigation' | 'capa' | 'inspection'`) on detail pages and `'page'` on index pages.
+
+A `pageContext.hasActiveSignal` flag — set by tile-rendering pages when any aggregator signals attention — paints a small cyan dot on the Sparkles trigger. No multi-turn yet (single user turn → single Argus turn per panel open); tracked in 9.1.
+
+**Surface 2 — Insight Tiles.** Seven `<ArgusInsightTile>` mounts share one route handler at `/api/argus/tile` and one structured-output tool (`tile_insight`). **Tiles never auto-fire** — each card opens in an idle state with an "Analyse with Argus" button; the user clicks to spend any tokens. The Sparkles trigger's `hasActiveSignal` dot is still set server-side from the aggregator output (no model call), so users can tell where attention is needed before clicking. Output envelope is identical across tiles so the component never branches:
+
+```ts
+{ summary, rationale, confidence, nothing_to_flag?, recommended_action_label? }
+```
+
+| Tile | Mount | Permission | TTL | Tier |
+|---|---|---|---|---|
+| `overdue_investigations` | `/dashboard` | `investigation:lead` | 24h | smart |
+| `stop_work_active` | `/dashboard` | `incident:read_site` | 1h | smart |
+| `reportability_uncertain` | `/dashboard` | `report:read` | 24h | smart |
+| `capa_overdue` | `/dashboard` | `capa:complete` | 24h | smart |
+| `capa_index_summary` | `/capa` | `capa:complete` | 24h | smart |
+| `inspections_due_summary` | `/inspections` | `inspection:read_site` | 24h | smart |
+| `reports_pending_summary` | `/reports` | `report:read` | 24h | smart |
+
+Smart-tier with `thinking: 'off'` — Pro produces tighter prose for the same cost as Flash here, and the latency overhead from thinking would be visible on first-paint.
+
+**Cache strategy.** Each aggregator computes a `freshnessKey` that flips the moment the underlying data changes (e.g. `count + max(updated_at)`, or `count + max(stop_work_raised_at)` for the high-stakes stop-work tile). The route handler hashes `tile + freshnessKey` to a deterministic UUIDv5 and looks up `argus_suggestions WHERE surface='tile_<key>' AND target_kind='page' AND target_id=<hash> AND created_at >= now() - TTL`. Cache hits skip the model entirely; cache misses write a fresh row (`outcome='pending'`, `payload.kind='tile'`). The deterministic UUID means multiple users on the same org can share a single model call per (tile, freshness) snapshot — useful even with the explicit-Analyse default, because the second viewer to click on the same signal hits the cache for free.
+
+**Wire format.** Non-streaming JSON envelope, mirroring 9d's wand route:
+
+```
+POST /api/argus/tile
+{ tile, payload: { siteId, aggregates, recordRefs, freshnessKey } }
+
+→ { ok: true,  suggestionId, output, modelUsed, cached }
+→ { ok: false, error }
+```
+
+**Rate limit.** New `tile` bucket (20/min/user) — wider than `inline` (10/min) since dashboard first-paint can fan out 4 tiles in one go. Heavy bucket (3/min) is reserved for the deep-analysis surfaces (Investigator, CAPA-draft, Reportability wand). `runArgusGates(surface)` infers the bucket from `surface.startsWith('tile_')`.
+
+**Recommended-action link.** The model can suggest a label via `recommended_action_label`; the destination URL is server-controlled via `TILE_CONFIG[tile].defaultHref`. The tile component never renders a model-supplied URL — keeps the model from steering users to arbitrary routes.
+
+**Schema.** No migration. Reuses `argus_suggestions` (9a) — eight new `surface` strings (`panel_chat` + seven `tile_*` keys), `target_kind='page'` for tile rows, `target_id` carrying the deterministic UUIDv5 cache key. Old `'incident' | 'investigation' | 'capa' | 'finding'` target_kinds stay valid; new strings (`'inspection' | 'report' | 'page'`) widen the TS union without touching the Postgres column (it's `text`).
+
+**RBAC.** No new permission keys. Visibility per tile uses the site's existing read permission (mirroring how each index page gates itself). The single feature flag is `argus:use`. `argus_enabled` on the org turns every Argus surface off.
+
+**PII.** Aggregators only send small integer counts + ref_codes to the model. Free-text titles never enter the user block. Detail-page payloads pass redacted record summaries (`severity + type` instead of free-text titles for v1).

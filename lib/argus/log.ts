@@ -34,7 +34,15 @@ export interface LogSuggestionInput {
   siteId: string | null;
   userId: string;
   surface: string; // 'copilot' | 'investigator' | 'risk_matrix' | …
-  targetKind?: "incident" | "investigation" | "capa" | "finding" | null;
+  targetKind?:
+    | "incident"
+    | "investigation"
+    | "capa"
+    | "finding"
+    | "inspection"
+    | "report"
+    | "page"
+    | null;
   targetId?: string | null;
   /** Concrete model id from the provider adapter. */
   model: string;

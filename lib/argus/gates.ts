@@ -57,7 +57,14 @@ export async function runArgusGates(surface: string): Promise<GateResult> {
     };
   }
 
-  const bucket = HEAVY_SURFACES.has(surface) ? "heavy" : "inline";
+  // Tile surfaces (`tile_*`) auto-load on dashboard/index first paint and can
+  // fan out 4+ at once — they get the wider 20/min bucket. Heavy is the
+  // smart-tier deep analyses; everything else uses the inline bucket.
+  const bucket = surface.startsWith("tile_")
+    ? "tile"
+    : HEAVY_SURFACES.has(surface)
+      ? "heavy"
+      : "inline";
   const rl = checkRateLimit(user.id, bucket);
   if (!rl.allowed) {
     return {

@@ -7,6 +7,7 @@ import { Topbar } from "@/components/app-shell/topbar";
 import { RegulatoryBanner } from "@/components/app-shell/regulatory-banner";
 import { StopWorkBanner, type ActiveStopWork } from "@/components/app-shell/stop-work-banner";
 import { NAV_ITEMS, ROLE_BADGE } from "@/components/app-shell/nav-config";
+import { ArgusContextProvider } from "@/components/argus/argus-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
@@ -140,34 +141,36 @@ async function AppShell({ children }: { children: ReactNode }) {
   }));
 
   return (
-    <SidebarShell
-      defaultPinned={sidebarPinned}
-      allowedHrefs={allowedHrefs}
-      userLabel={fullName}
-      roleLabel={roleLabel}
-      topbar={
-        <Topbar
-          sites={sites}
-          currentSiteId={currentSiteId}
-          canCreateSite={canCreateSite}
-          notifications={notifications}
-          fullName={fullName}
-          email={profile.email}
-          roleLabel={roleLabel}
-          roleKey={currentRoleKey}
-          currentSiteName={currentMembership?.site?.name ?? null}
-          argusEnabled={argusEnabled}
-        />
-      }
-      banner={
-        <>
-          <RegulatoryBanner deadlines={notifications} />
-          <StopWorkBanner active={activeStopWorks} />
-        </>
-      }
-    >
-      {children}
-    </SidebarShell>
+    <ArgusContextProvider>
+      <SidebarShell
+        defaultPinned={sidebarPinned}
+        allowedHrefs={allowedHrefs}
+        userLabel={fullName}
+        roleLabel={roleLabel}
+        topbar={
+          <Topbar
+            sites={sites}
+            currentSiteId={currentSiteId}
+            canCreateSite={canCreateSite}
+            notifications={notifications}
+            fullName={fullName}
+            email={profile.email}
+            roleLabel={roleLabel}
+            roleKey={currentRoleKey}
+            currentSiteName={currentMembership?.site?.name ?? null}
+            argusEnabled={argusEnabled}
+          />
+        }
+        banner={
+          <>
+            <RegulatoryBanner deadlines={notifications} />
+            <StopWorkBanner active={activeStopWorks} />
+          </>
+        }
+      >
+        {children}
+      </SidebarShell>
+    </ArgusContextProvider>
   );
 }
 

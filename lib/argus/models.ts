@@ -32,7 +32,15 @@ export type ArgusSurface =
   | "risk_matrix"
   | "finding_severity"
   | "verification_method"
-  | "capa_metadata";
+  | "capa_metadata"
+  | "panel_chat"
+  | "tile_overdue_investigations"
+  | "tile_stop_work_active"
+  | "tile_reportability_uncertain"
+  | "tile_capa_overdue"
+  | "tile_capa_index_summary"
+  | "tile_inspections_due_summary"
+  | "tile_reports_pending_summary";
 
 export const TIER_BY_SURFACE: Record<ArgusSurface, ModelTier> = {
   copilot: TIER_FAST,
@@ -47,4 +55,12 @@ export const TIER_BY_SURFACE: Record<ArgusSurface, ModelTier> = {
   finding_severity: TIER_FAST,
   verification_method: TIER_FAST,
   capa_metadata: TIER_SMART,
+  panel_chat: TIER_FAST,
+  tile_overdue_investigations: TIER_SMART,
+  tile_stop_work_active: TIER_SMART,
+  tile_reportability_uncertain: TIER_SMART,
+  tile_capa_overdue: TIER_SMART,
+  tile_capa_index_summary: TIER_SMART,
+  tile_inspections_due_summary: TIER_SMART,
+  tile_reports_pending_summary: TIER_SMART,
 };
