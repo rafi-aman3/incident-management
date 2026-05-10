@@ -17,8 +17,12 @@ function fieldErrors(error: import("zod").ZodError): Record<string, string[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Step 1 — createDraft. INSERT incidents row in status='draft', redirect to
-// step 2 with ?id=<uuid>.
+// Step 1 — createDraft (legacy). INSERT incidents row in status='draft',
+// redirect to step 2 with ?id=<uuid>. Only used by the page-load helper
+// `ensureBlankDraft` below — the form submit path now goes through saveStep1
+// instead, which UPDATEs the existing draft. Phase 9b switched to
+// pre-creating the row on page load so the Argus Form Assistant can target
+// `incidentId` from Step 1 onward (its tool calls all need it).
 // ---------------------------------------------------------------------------
 export async function createDraft(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const { supabase, user, profile, currentSiteId } = await requireUser();
@@ -58,6 +62,103 @@ export async function createDraft(_prev: ActionResult | null, fd: FormData): Pro
   if (error || !data) return { ok: false, error: error?.message ?? "Insert failed" };
 
   redirect(`/incidents/new/2?id=${data.id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Step 1 — saveStep1 (Phase 9b). UPDATE the existing draft created on page
+// load via ensureBlankDraft, redirect to step 2 with ?id=<uuid>.
+// ---------------------------------------------------------------------------
+export async function saveStep1(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  void user;
+
+  const incidentId = (fd.get("incident_id") as string | null) ?? null;
+  if (!incidentId) return { ok: false, error: "Missing incident_id" };
+
+  const parsed = Step1Schema.safeParse({
+    type: fd.get("type"),
+    title: fd.get("title"),
+    occurred_at: fd.get("occurred_at"),
+    area: fd.get("area") ?? "",
+    location: fd.get("location") ?? "",
+    description: fd.get("description") ?? "",
+    is_sandbox: fd.get("is_sandbox") === "on" || fd.get("is_sandbox") === "true",
+  });
+  if (!parsed.success) {
+    return { ok: false, error: "Validation failed", fieldErrors: fieldErrors(parsed.error) };
+  }
+  const v = parsed.data;
+
+  const { error } = await supabase
+    .from("incidents")
+    .update({
+      type: v.type,
+      title: v.title,
+      description: v.description || null,
+      occurred_at: new Date(v.occurred_at).toISOString(),
+      area: v.area || null,
+      location: v.location || null,
+      is_sandbox: Boolean(v.is_sandbox),
+    })
+    .eq("id", incidentId);
+  if (error) return { ok: false, error: error.message };
+
+  redirect(`/incidents/new/2?id=${incidentId}`);
+}
+
+// ---------------------------------------------------------------------------
+// ensureBlankDraft — server-side helper. On first /incidents/new/1 load
+// (no ?id=), creates an empty draft row so the Argus Form Assistant has an
+// incidentId to target. Reuses an existing blank draft if one was created
+// in the last hour (avoids duplicating on back/forward navigation).
+// Returns the incident id; caller redirects.
+// ---------------------------------------------------------------------------
+export async function ensureBlankDraft(): Promise<string> {
+  const { supabase, user, profile, currentSiteId } = await requireUser();
+  if (!currentSiteId) {
+    throw new Error("No site selected — pick one from the topbar first.");
+  }
+
+  // Look for an existing untouched draft from this user in the last hour.
+  // 'untouched' = title is empty AND description is null (the blank-draft
+  // shape). If the user typed anything and bounced, we treat it as a real
+  // draft and let them continue from where they left off.
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { data: existing } = await supabase
+    .from("incidents")
+    .select("id")
+    .eq("reporter_id", user.id)
+    .eq("status", "draft")
+    .eq("title", "")
+    .is("description", null)
+    .gte("created_at", oneHourAgo)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  // Insert a blank draft. type / title / occurred_at are NOT NULL on the
+  // schema, so we seed them with placeholders that the Step 1 form (or
+  // Argus auto-fill) will override before submit.
+  const { data, error } = await supabase
+    .from("incidents")
+    .insert({
+      org_id: profile.org_id,
+      site_id: currentSiteId,
+      type: "unsafe_condition",
+      title: "",
+      occurred_at: new Date().toISOString(),
+      reporter_id: user.id,
+      status: "draft",
+      is_sandbox: false,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(`Could not create draft: ${error?.message ?? "unknown"}`);
+  }
+  return data.id;
 }
 
 // ---------------------------------------------------------------------------

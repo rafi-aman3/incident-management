@@ -3,19 +3,30 @@ import { MODEL_HAIKU } from "@/lib/argus/models";
 import type { ArgusToolDefinition } from "./types";
 
 interface Input {
-  field: "title" | "description" | "area" | "location" | "substance" | "equipment";
+  field: "type" | "title" | "description" | "area" | "location" | "substance" | "equipment";
   value: string;
   /** When `field='description'`, append to the existing text instead of replacing. */
   append?: boolean;
 }
 
 const ALLOWED_FIELDS = new Set<Input["field"]>([
+  "type",
   "title",
   "description",
   "area",
   "location",
   "substance",
   "equipment",
+]);
+
+const VALID_TYPES = new Set([
+  "injury",
+  "illness",
+  "near_miss",
+  "environmental_release",
+  "property_damage",
+  "dangerous_occurrence",
+  "unsafe_condition",
 ]);
 
 /**
@@ -45,9 +56,9 @@ export const updateIncidentFieldTool: ArgusToolDefinition<Input> = {
     properties: {
       field: {
         type: "string",
-        enum: ["title", "description", "area", "location", "substance", "equipment"],
+        enum: ["type", "title", "description", "area", "location", "substance", "equipment"],
         description:
-          "Which draft field to write. 'title' is the short headline (≤200 chars). 'description' is the long-form narrative. 'area' / 'location' are the where. 'substance' / 'equipment' apply only when relevant to the incident type.",
+          "Which draft field to write. 'type' is the incident kind (one of: injury, illness, near_miss, environmental_release, property_damage, dangerous_occurrence, unsafe_condition). 'title' is the short headline (≤200 chars). 'description' is the long-form narrative. 'area' / 'location' are the where. 'substance' / 'equipment' apply only when relevant to the incident type.",
       },
       value: {
         type: "string",
@@ -70,6 +81,11 @@ export const updateIncidentFieldTool: ArgusToolDefinition<Input> = {
     }
 
     let valueToWrite = input.value.trim();
+
+    // type is enum-validated against the incident_type enum.
+    if (input.field === "type" && !VALID_TYPES.has(valueToWrite)) {
+      return `Error: '${valueToWrite}' is not a valid incident type. Use one of: ${Array.from(VALID_TYPES).join(", ")}.`;
+    }
 
     // append mode for description
     if (input.field === "description" && input.append) {
@@ -95,6 +111,11 @@ export const updateIncidentFieldTool: ArgusToolDefinition<Input> = {
     const eq = (q: ReturnType<typeof writer.update>) => q.eq("id", ctx.incidentId);
     let result;
     switch (input.field) {
+      case "type":
+        result = await eq(
+          writer.update({ type: valueToWrite as Parameters<typeof writer.update>[0]["type"] }),
+        );
+        break;
       case "title":
         result = await eq(writer.update({ title: valueToWrite }));
         break;
