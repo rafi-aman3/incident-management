@@ -15,9 +15,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
 import type { TooltipKey } from "@/lib/constants/tooltips";
 import { trir, dart, formatKpi, isDartCase } from "@/lib/format/kpi";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 
 export default async function DashboardPage() {
-  const { supabase, profile, currentSiteId, currentRoleKey } = await requireUser();
+  const { supabase, profile, currentMembership, currentSiteId, currentRoleKey } =
+    await requireUser();
 
   // Site_admin viewing an unfinished site sees a yellow banner above the
   // dashboard with a "Finish setup" link. We do NOT force-redirect into the
@@ -155,9 +158,29 @@ export default async function DashboardPage() {
   const firstName =
     profile.full_name?.split(" ")[0] ?? profile.email.split("@")[0] ?? "there";
 
+  const argusContext: ArgusPageContext = {
+    route: "dashboard",
+    routeLabel: "Dashboard",
+    siteId: currentSiteId,
+    siteLabel: currentMembership?.site?.name ?? null,
+    aggregates: {
+      open_incidents: openCount,
+      s1_s2_open: s1s2Count,
+      recordable_ytd: recordableCases,
+      dart_ytd: dartCases,
+    },
+    records: recentIncidents.slice(0, 5).map((inc) => ({
+      kind: "incident" as const,
+      id: inc.id,
+      refCode: inc.ref_code,
+      title: inc.severity ? `${inc.severity} ${inc.type}` : inc.type,
+    })),
+  };
+
   return (
     <TooltipProvider>
       <div className="space-y-6">
+        <ArgusContextPayload context={argusContext} />
         <Suspense fallback={null}>
           <SiteCreatedToast />
           <InvitedToast />

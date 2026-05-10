@@ -20,6 +20,8 @@ import {
   CapaCreateModal,
   type CapaCreateMember,
 } from "@/components/capa/capa-create-modal";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const VALID_TABS: ReadonlyArray<CapaTabKey> = CAPA_TABS.map((t) => t.key);
@@ -257,8 +259,27 @@ export default async function CapaPage({
     }
   }
 
+  const argusContext: ArgusPageContext = {
+    route: "capa_index",
+    routeLabel: "CAPA",
+    siteId: currentSiteId,
+    aggregates: {
+      active: counts.active,
+      pending_verification: counts.pendingVerification,
+      overdue: counts.overdue,
+      closed: counts.closed,
+    },
+    records: rows.slice(0, 5).map((r) => ({
+      kind: "capa" as const,
+      id: r.id,
+      refCode: r.ref_code,
+      title: `${r.type} · ${r.status}${r.is_overdue ? " · overdue" : ""}`,
+    })),
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">CAPA</h1>

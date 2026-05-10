@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ArrowRight, FileText, FileBarChart, FileCheck, Flag } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -71,8 +73,23 @@ export default async function ReportsLandingPage({
     riddorCount = riddorRes.count ?? 0;
   }
 
+  const argusContext: ArgusPageContext = {
+    route: "reports_index",
+    routeLabel: `Reports · ${year}`,
+    siteId: currentSiteId,
+    aggregates: {
+      year,
+      osha_recordable_ytd: oshaRecordableCount,
+      osha_301_pending: osha301PendingCount,
+      riddor_ytd: riddorCount,
+      gb_sites_visible: hasGbSite ? 1 : 0,
+    },
+    records: [],
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Reports</h1>

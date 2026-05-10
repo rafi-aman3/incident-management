@@ -32,7 +32,8 @@ export type ArgusSurface =
   | "risk_matrix"
   | "finding_severity"
   | "verification_method"
-  | "capa_metadata";
+  | "capa_metadata"
+  | "panel_chat";
 
 export const TIER_BY_SURFACE: Record<ArgusSurface, ModelTier> = {
   copilot: TIER_FAST,
@@ -47,4 +48,5 @@ export const TIER_BY_SURFACE: Record<ArgusSurface, ModelTier> = {
   finding_severity: TIER_FAST,
   verification_method: TIER_FAST,
   capa_metadata: TIER_SMART,
+  panel_chat: TIER_FAST,
 };

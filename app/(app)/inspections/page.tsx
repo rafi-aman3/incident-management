@@ -8,6 +8,8 @@ import {
   StartInspectionDialog,
   type StartTemplateOption,
 } from "@/components/inspections/start-inspection-dialog";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type { InspectionStatus } from "@/lib/templates/types";
 import type { IndustryEnum } from "@/lib/templates/industry-map";
 
@@ -131,8 +133,27 @@ export default async function InspectionsPage({
     startOptions = collected;
   }
 
+  const argusContext: ArgusPageContext = {
+    route: "inspections_index",
+    routeLabel: "Inspections",
+    siteId: currentSiteId,
+    aggregates: {
+      visible_rows: rows.length,
+      failed: rows.filter((r) => r.is_failed).length,
+      in_progress: rows.filter((r) => r.status === "in_progress").length,
+      assignable_templates: startOptions.length,
+    },
+    records: rows.slice(0, 5).map((r) => ({
+      kind: "inspection" as const,
+      id: r.id,
+      refCode: r.ref_code,
+      title: `${r.status}${r.is_failed ? " · failed" : ""}`,
+    })),
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Inspections</h1>

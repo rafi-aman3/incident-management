@@ -9,6 +9,8 @@ import {
   InspectionStatusBadge,
   FindingStatusBadge,
 } from "@/components/inspections/inspection-status-badge";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type {
   InspectionStatus,
   TemplateNodeItem,
@@ -141,8 +143,28 @@ export default async function InspectionDetailPage({
 
   const findingList = findings ?? [];
 
+  const argusContext: ArgusPageContext = {
+    route: "inspection_detail",
+    routeLabel: ins.ref_code ? `Inspection ${ins.ref_code}` : "Inspection",
+    siteId: ins.site_id,
+    aggregates: {
+      findings: findingList.length,
+      score_total: ins.score_total ?? 0,
+      score_max: ins.score_max ?? 0,
+    },
+    records: [
+      {
+        kind: "inspection" as const,
+        id: ins.id,
+        refCode: ins.ref_code,
+        title: `${tmpl?.name ?? "Inspection"} · status ${ins.status}`,
+      },
+    ],
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
       <Link
         href="/inspections"
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline"

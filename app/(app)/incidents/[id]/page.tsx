@@ -9,6 +9,8 @@ import { SeverityBadge, TrackBadge, StatusBadge } from "@/components/incidents/b
 import { BodyMap, BODY_PART_LABELS, type BodyPart } from "@/components/body-map/body-map";
 import { TriageModals, type SiteMemberOption } from "@/components/incidents/triage-modals";
 import { LinkedDocumentsSection } from "@/components/documents/linked-documents-section";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 
 type Params = Promise<{ id: string }>;
 
@@ -99,8 +101,29 @@ export default async function IncidentDetailPage({ params }: { params: Params })
       role_key: m.role?.key ?? "worker",
     }));
 
+  const argusContext: ArgusPageContext = {
+    route: "incident_detail",
+    routeLabel: incident.ref_code ? `Incident ${incident.ref_code}` : "Incident",
+    siteId: incident.site_id,
+    aggregates: {
+      injured_persons: incident.injured_persons?.length ?? 0,
+      witnesses: incident.witnesses?.length ?? 0,
+    },
+    records: [
+      {
+        kind: "incident" as const,
+        id: incident.id,
+        refCode: incident.ref_code,
+        title: incident.severity
+          ? `${incident.severity} ${incident.type}${incident.track ? ` · Track ${incident.track}` : ""}`
+          : incident.type,
+      },
+    ],
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
       <Header
         refCode={incident.ref_code}
         title={incident.title}

@@ -15,6 +15,8 @@ import { VerificationForm } from "@/components/capa/detail/verification-form";
 import { LinkedDocumentsSection } from "@/components/documents/linked-documents-section";
 import { CapaModals, type CapaSiteMember } from "@/components/capa/detail/capa-modals";
 import { VerifierWelcomeCard } from "@/components/onboarding/verifier-welcome-card";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 import {
   ActivityTimeline,
   type ActivityEvent,
@@ -143,8 +145,27 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
   const basePath = `/capa/${capa.id}`;
   const editable = isOwner && status !== "pending_verification" && status !== "verified" && status !== "closed";
 
+  const argusContext: ArgusPageContext = {
+    route: "capa_detail",
+    routeLabel: capa.ref_code ? `CAPA ${capa.ref_code}` : "CAPA",
+    siteId: capa.site_id,
+    aggregates: {
+      progress_pct: capa.progress_pct ?? 0,
+      timeline_events: timeline.length,
+    },
+    records: [
+      {
+        kind: "capa" as const,
+        id: capa.id,
+        refCode: capa.ref_code,
+        title: `${capa.type} · status ${status}${capa.due_date ? " · due " + capa.due_date : ""}`,
+      },
+    ],
+  };
+
   return (
     <div className="space-y-4">
+      <ArgusContextPayload context={argusContext} />
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
