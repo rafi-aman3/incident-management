@@ -565,6 +565,35 @@ Gates run in order: `requireUser` → `orgCan('argus:use')` → `argus_enabled` 
 |---|---|
 | **9a (this PR)** | Foundation: SDK + env + library + migration + RLS + permission + empty side-panel shell mounted from topbar |
 | **9b** | Floating `<ArgusCopilot>` on all 3 Report Wizard steps; mic + photo capture + log-observation + raise-stop-work tool calls |
-| **9c** | `<ArgusInvestigator>` on `/investigations/[id]` — paste description + voice/text witness statements → streamed timeline + RCA narrative draft → "Push to investigation" approval gate |
+| **9c (shipped 2026-05-10)** | `<ArgusInvestigator>` on `/investigations/[id]?tab=ai` — paste description + voice/text witness statements → Sonnet 4.6 with forced `tool_choice` returns a structured `{ timeline, 5-Why, root_cause_summary, findings }` draft → per-section "Push to investigation" approval gate |
 | **9d** | `<ArgusMagicWand>` on risk-matrix cells, finding-→incident escalation, CAPA verification method, OSHA reportability confidence pane |
 | **9e** | Global side panel page-context aware; 4 Dashboard `<ArgusInsightTile>` cards + tiles on CAPA / Inspections / Reports |
+
+### 9c — AI Investigator (runtime reference)
+
+**Surface.** New `ai` tab on `/investigations/[id]` between Findings and Timeline (Sparkles + cyan accent). Hidden when `orgs.argus_enabled = false`, when caller lacks `argus:use` or `investigation:edit`, or when the investigation is closed. URL `?tab=ai` falls back to Summary in any of those cases.
+
+**Wire.** POST `/api/argus/investigator` `{ investigationId, paste, witnessAdds[] }` → SSE: `progress` (heartbeat) → `draft` (structured payload + suggestionId) → `usage` → `done`. One Sonnet 4.6 call per Generate (no agentic loop). `tool_choice: { type: 'tool', name: 'propose_investigation_draft' }` is forced so the model emits exactly one `tool_use` block; the route handler captures its `input` directly as the structured draft and streams it back. Half-formed JSON deltas are not streamed — the user sees a thinking indicator, then the full draft lands at once.
+
+**Tool.** `lib/argus/tools/propose-investigation-draft.ts` — structured-output schema with no `execute()`. Required fields: `timeline[]`, `whys[5]`, `root_cause_summary`, `findings`, `insufficient_input` (escape valve when input is too thin).
+
+**Inputs.** Read-only seed = incident description + type + area + location + occurredAt + existing witnesses (initials only). Editable input = paste textarea (with mic) + add-witness rows (text or voice via `useVoice`). Witnesses added via the tab stay client-side until first Push.
+
+**Push semantics.** Each output card has a per-section Push button:
+- *Timeline* → prepended to `findings` under `## Timeline`. Confirm dialog (Replace / Append / Cancel) when `findings` already has content.
+- *5-Why chain* → `saveWhy` for levels 1–5 in order. Replace-only (no append for a structured chain). Confirm dialog when any level already has an answer.
+- *Root cause summary* → `saveInvestigationText('root_cause_summary')`. Same confirm-and-merge logic.
+- *Findings narrative* → `saveInvestigationText('findings')`. Same confirm-and-merge logic.
+
+Push commits via the existing `saveInvestigationText` / `saveWhy` actions — no new write paths and the `investigation:edit` gate is unchanged. After a successful Push, `acceptArgusSuggestion()` flips the `argus_suggestions.outcome` to `accepted` (no diff) or `edited` (diff payload attached) and writes a `verb='argus.investigator_pushed'` activity event with `actor_kind='human'`. `rejectArgusSuggestion()` flips outcome to `rejected` and writes `argus.investigator_rejected`.
+
+**Audit trail.** Generate writes one `argus_suggestions` row (`surface='investigator'`, `target_kind='investigation'`, `outcome='pending'`) plus one `activity_events` row (`actor_kind='argus'`, `verb='argus.investigator_drafted'`). Each Push or Discard flips the outcome and writes a sibling `actor_kind='human'` activity row. Diff payloads (`{ before, after }`) are attached to the activity row when the user edited the draft before pushing.
+
+**Hallucination defenses.** Three layers:
+1. *Server-side input gate* — pre-flight 400 when zero witnesses AND <50 words combined input.
+2. *System prompt* — hard rule "do not invent details," `insufficient_input` escape valve, redactor strips known names to initials before egress.
+3. *Output gate* — model returns `insufficient_input` non-empty → UI renders the explanation banner and skips the four output cards entirely.
+
+**Schema.** No migration. Reuses `argus_suggestions` (9a) + `activity_events` (9a) + `investigations.{findings, root_cause_summary}` + `rca_whys` (Phase 2) + `witnesses` (Phase 1). Two new activity verbs (`verb` is `text`, no enum change).
+
+**Cost guardrails.** `runArgusGates("investigator")` puts the call in the **heavy** rate-limit bucket (3/min/user). Per-org daily token budget is enforced unchanged. Sonnet 4.6 is ~5× Haiku per token; a 5M-token org daily cap absorbs ~250 Generates.

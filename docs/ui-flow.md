@@ -488,6 +488,7 @@ Each page below uses the same template: **Route · Access · Purpose · Sections
      - **5-Why** — chain of 5 questions; Why-5 has ROOT CAUSE badge; autosave on each row
      - **Evidence** — gallery + uploader (drag-drop to Supabase Storage)
      - **Findings** — rich text area; autosave
+     - **AI Investigator** _(Phase 9c)_ — Sparkles + cyan accent; visible only when `orgs.argus_enabled = true`, caller has `argus:use` + `investigation:edit`, and the investigation is open. Paste + voice/text witness inputs → Sonnet 4.6 (one-shot, forced `tool_choice`) returns a structured `{ timeline, 5-Why, root_cause_summary, findings }` draft. Each card is editable in place; per-card Push commits via the existing `saveInvestigationText` / `saveWhy` actions and writes `argus_suggestions` outcome + `activity_events` audit rows. Confirm-dialog (Replace / Append / Cancel) when Pushing onto a non-empty target field; 5-Why chain is replace-only. Witnesses added in this tab stay client-side until first Push. URL `?tab=ai` falls back to Summary in any of the gating misses.
      - **Timeline** — derived from `activity_events`; reverse-chrono
 - **Modals:**
   - "Close — no CAPA needed" confirm

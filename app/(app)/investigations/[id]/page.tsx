@@ -3,11 +3,13 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, ArrowLeft, ListChecks } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { orgCan } from "@/lib/auth/orgCan";
 import {
   InvestigationStatusBadge,
   DueDateChip,
 } from "@/components/investigations/badges";
 import { DetailTabs, type DetailTabKey, DETAIL_TABS } from "@/components/investigations/detail/detail-tabs";
+import { ArgusInvestigator } from "@/components/argus/argus-investigator";
 import {
   IncidentSummaryCard,
   type IncidentSummaryData,
@@ -75,7 +77,7 @@ export default async function InvestigationDetailPage({
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const { supabase, profile, currentSiteId } = await requireUser();
 
-  const tab: DetailTabKey =
+  let tab: DetailTabKey =
     typeof sp.tab === "string" && (VALID_TABS as readonly string[]).includes(sp.tab)
       ? (sp.tab as DetailTabKey)
       : "summary";
@@ -105,13 +107,29 @@ export default async function InvestigationDetailPage({
   const isClosed = status === "closed";
 
   // 2. Permissions
-  const [canEdit, canReassignLead, canCreateCapa] = currentSiteId
+  const [canEdit, canReassignLead, canCreateCapa, canUseArgus] = currentSiteId
     ? await Promise.all([
         can("investigation:edit", currentSiteId),
         can("investigation:lead", currentSiteId),
         can("capa:create", currentSiteId),
+        orgCan("argus:use"),
       ])
-    : [false, false, false];
+    : [false, false, false, false];
+
+  // Org-level Argus flag — combined with the four conditions below to decide
+  // whether the AI Investigator tab is rendered at all (per Phase 9c plan).
+  const { data: orgRow } = await supabase
+    .from("orgs")
+    .select("argus_enabled")
+    .eq("id", profile.org_id)
+    .maybeSingle();
+  const argusTabEnabled =
+    Boolean(orgRow?.argus_enabled) && canUseArgus && canEdit && !isClosed;
+
+  // Fall back to Summary if the URL says ?tab=ai but the tab is hidden — a
+  // closed investigation, a missing perm, or an org with argus_enabled=false
+  // shouldn't render the AI workspace.
+  if (tab === "ai" && !argusTabEnabled) tab = "summary";
 
   // 3. Site members — needed always (modals use them on every tab).
   const { data: siteMembersRaw } = await supabase
@@ -126,7 +144,9 @@ export default async function InvestigationDetailPage({
       email: m.profile!.email,
     }));
 
-  // 4. Team + witness statements — only needed for the Summary tab.
+  // 4. Team + witness statements — Summary needs both, AI Investigator
+  //    needs witnesses (read-only seed) too. Fetched when either tab is
+  //    active.
   let team: InvestigationTeamMember[] = [];
   let statements: WitnessStatement[] = [];
   if (tab === "summary") {
@@ -149,6 +169,23 @@ export default async function InvestigationDetailPage({
         email: m.profile!.email,
       }));
     statements = witnessRes.data ?? [];
+  } else if (tab === "ai" && argusTabEnabled) {
+    const { data: witnessRes } = await supabase
+      .from("witnesses")
+      .select("id, name, contact, statement")
+      .eq("incident_id", incident.id);
+    statements = witnessRes ?? [];
+  }
+
+  // For the AI tab: the output panel needs to know if the 5-Why chain
+  // already has any rows so it can warn before overwriting on Push.
+  let hasAnyWhys = false;
+  if (tab === "ai" && argusTabEnabled) {
+    const { count } = await supabase
+      .from("rca_whys")
+      .select("level", { count: "exact", head: true })
+      .eq("investigation_id", inv.id);
+    hasAnyWhys = (count ?? 0) > 0;
   }
 
   const removableProfileId = typeof sp.profile === "string" ? sp.profile : null;
@@ -343,7 +380,7 @@ export default async function InvestigationDetailPage({
         />
       )}
 
-      <DetailTabs current={tab} basePath={basePath} />
+      <DetailTabs current={tab} basePath={basePath} argusEnabled={argusTabEnabled} />
 
       {tab === "summary" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
@@ -409,6 +446,29 @@ export default async function InvestigationDetailPage({
       )}
 
       {tab === "timeline" && <ActivityTimeline events={timeline} />}
+
+      {tab === "ai" && argusTabEnabled && (
+        <ArgusInvestigator
+          investigationId={inv.id}
+          seed={{
+            description: incident.description,
+            type: incident.type,
+            area: incident.area,
+            location: incident.location,
+            occurredAt: incident.occurred_at,
+          }}
+          existingWitnesses={statements.map((s) => ({
+            id: s.id,
+            name: s.name,
+            statement: s.statement,
+          }))}
+          existing={{
+            findings: inv.findings ?? "",
+            rootCauseSummary: inv.root_cause_summary ?? "",
+            hasAnyWhys,
+          }}
+        />
+      )}
 
       <DetailModals
         investigationId={inv.id}

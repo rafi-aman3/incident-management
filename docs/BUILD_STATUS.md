@@ -557,6 +557,52 @@ Merged 2026-05-09 (PR #26). Replaces the 7-step demo Site Setup wizard with a 9-
 
 ---
 
+## Phase 9c — Argus AI Investigator (`/investigations/[id]?tab=ai`)
+
+**Status:** shipped 2026-05-10
+**Branch:** `feat/phase-9c-argus-investigator`
+**Plan:** `plans/09c-argus-investigator.md`
+
+**What landed.** New `ai` tab between Findings and Timeline on `/investigations/[id]` (Sparkles + cyan accent). Visible only when `orgs.argus_enabled = true`, caller has `argus:use` + `investigation:edit`, and the investigation is open. URL `?tab=ai` falls back to Summary in any of those misses.
+
+**Generation pipeline.** POST `/api/argus/investigator` runs the heavy gate stack (`runArgusGates("investigator")` — 3/min/user, org daily token budget, key configured), reads the investigation + incident + existing witnesses + injured persons, redacts known names to initials, and makes one Sonnet 4.6 call with `tool_choice: { type: 'tool', name: 'propose_investigation_draft' }` so the model emits exactly one `tool_use` block with a typed `{ timeline, whys, root_cause_summary, findings, insufficient_input }` payload. SSE wire: `progress` (heartbeat) → `draft` (full payload + suggestionId) → `usage` → `done`. Half-formed JSON deltas are not streamed — UI shows a thinking indicator, then the draft lands at once.
+
+**Review-and-edit gate.** Client renders four cards (Timeline / 5-Why / Root cause / Findings); each is editable inline; per-card Push commits via the existing `saveInvestigationText` / `saveWhy` actions (no new write paths, `investigation:edit` gate unchanged). Confirm dialog (Replace / Append / Cancel) when Pushing onto a non-empty target field; 5-Why chain is replace-only. Witnesses added in the input panel stay client-side until first Push.
+
+**Audit.** Generate writes one `argus_suggestions` row (`surface='investigator'`, `target_kind='investigation'`, `outcome='pending'`) plus one `activity_events` row (`actor_kind='argus'`, `verb='argus.investigator_drafted'`). Each Push or Discard flips the outcome and writes a sibling `actor_kind='human'` row (`argus.investigator_pushed` / `argus.investigator_rejected`); diff payloads attached when the user edited the draft before pushing. Two new activity verbs (`verb` is `text`, no enum change).
+
+**Hallucination defenses.** Three layers: (1) server-side input gate — pre-flight 400 when zero witnesses AND <50 words; (2) system prompt forbids invention + redactor strips known names + `insufficient_input` escape valve; (3) output gate — when the model returns `insufficient_input` non-empty, the UI renders an explanation banner and skips the four output cards.
+
+**No schema migration.** Reuses 9a tables (`argus_suggestions`, `activity_events.actor_kind`) + Phase-2 columns (`investigations.findings`, `root_cause_summary`, `rca_whys`) + Phase-1 `witnesses`. No new permission keys — gates on existing `argus:use` (Phase 9a) and `investigation:edit`.
+
+**Files.**
+
+```
+NEW
+├ app/api/argus/investigator/route.ts
+├ app/(app)/investigations/[id]/argus-actions.ts
+├ lib/argus/system-prompts/investigator.md
+├ lib/argus/tools/propose-investigation-draft.ts
+├ components/argus/argus-investigator.tsx
+├ components/argus/argus-investigator-input.tsx
+├ components/argus/argus-investigator-output.tsx
+├ components/argus/argus-investigator-witness.tsx
+└ components/argus/use-argus-investigator-stream.ts
+
+CHANGED
+├ app/(app)/investigations/[id]/page.tsx     (fetch argus_enabled, gate, mount tab)
+├ components/investigations/detail/detail-tabs.tsx (add 'ai' tab + cyan accent + argusEnabled prop)
+├ lib/argus/tools/index.ts                   (export INVESTIGATOR_TOOLS)
+├ docs/SPEC.md                               (§16 9c subsection — runtime reference)
+├ docs/ui-flow.md                            (note new tab on /investigations/[id])
+├ CLAUDE.md                                  (build status one-liner bump)
+└ docs/BUILD_STATUS.md                       (this entry)
+```
+
+`pnpm tsc --noEmit` clean. `pnpm exec next build` green.
+
+---
+
 ## Workflow notes
 
-Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding + Phase 13 Site Setup OSHA + RIDDOR shipped. Next per the deferred roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 9 (Argus AI assistant) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding + Phase 13 Site Setup OSHA + RIDDOR + Phase 9a Argus Foundation + Phase 9b Argus Copilot + Phase 9c Argus Investigator shipped. Next per the roadmap: Phase 9d magic-wands (5×5 risk-matrix · finding→incident escalation · CAPA verification method · OSHA reportability) → Phase 9e global side panel + Dashboard tiles → Phase 7 (global search backend, consumes the 6l shell) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
