@@ -141,6 +141,8 @@ Every authenticated page renders inside `app/(app)/layout.tsx`:
 
 ### 3.2 Topbar
 - **Site switcher** — when user belongs to multiple sites; persists choice in `selected_site` cookie; route refresh on change
+- **Help drawer** — role-based quick links + FAQ
+- **Argus avatar** (Phase 9a) — Sparkles icon in cyan (`#00D4FF`) right of the help drawer; opens the global `<ArgusSidePanel>` (right-aligned shadcn Sheet). Hidden when `orgs.argus_enabled = false` OR the user lacks the `argus:use` permission OR `ANTHROPIC_API_KEY` is unset (in the last case the panel renders an "AI is offline" empty state if forced open, never a 500). 9b–9e populate the panel with page-context-aware features (Copilot in the Report Wizard, Investigator on `/investigations/[id]`, magic-wands at decision points, Dashboard insight tiles).
 - **Notification bell** — count of active regulatory deadlines; opens dropdown with the active list
 - **Avatar menu** — name, role, site, "Profile" (deferred), "Sign out"
 
