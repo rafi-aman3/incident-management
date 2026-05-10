@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
+import { orgCan } from "@/lib/auth/orgCan";
 import { Step1WhatHappened } from "@/components/incidents/wizard/step-1-what-happened";
 import { Step2Details } from "@/components/incidents/wizard/step-2-details";
 import { Step3Review } from "@/components/incidents/wizard/step-3-review";
 import { WizardProgress } from "@/components/incidents/wizard/wizard-progress";
+import { ArgusCopilot } from "@/components/argus/argus-copilot";
 import type { IncidentType } from "@/lib/incidents/types";
 import type { Treatment } from "@/lib/workflow/routing";
 import type { MatrixCoord } from "@/lib/workflow/severity";
@@ -67,8 +69,26 @@ export default async function ReportWizardPage({
         ) : (
           <MissingId />
         ))}
+
+      {/* Argus Copilot — only mounts on Steps 2 + 3 (after the draft incident exists). */}
+      {incidentId && [2, 3].includes(stepNum) && <CopilotMount incidentId={incidentId} />}
     </div>
   );
+}
+
+async function CopilotMount({ incidentId }: { incidentId: string }) {
+  const { profile, supabase } = await requireUser();
+
+  if (profile.argus_copilot_disabled) return null;
+
+  const [orgArgusFlag, userArgusPerm] = await Promise.all([
+    supabase.from("orgs").select("argus_enabled").eq("id", profile.org_id).maybeSingle(),
+    orgCan("argus:use"),
+  ]);
+  const argusEnabled = Boolean(orgArgusFlag.data?.argus_enabled) && userArgusPerm;
+  if (!argusEnabled) return null;
+
+  return <ArgusCopilot incidentId={incidentId} />;
 }
 
 function MissingId() {

@@ -26,6 +26,7 @@ export type ProfileRow = {
   department: string | null;
   seen_welcome: boolean;
   onboarded_at: string | null;
+  argus_copilot_disabled: boolean;
 };
 
 /**
@@ -59,7 +60,7 @@ export async function requireUser() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, org_id, email, full_name, department, seen_welcome, onboarded_at")
+    .select("id, org_id, email, full_name, department, seen_welcome, onboarded_at, argus_copilot_disabled")
     .eq("id", user.id)
     .single<ProfileRow>();
 

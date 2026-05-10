@@ -1797,6 +1797,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          argus_copilot_disabled: boolean
           created_at: string
           department: string | null
           email: string
@@ -1808,6 +1809,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          argus_copilot_disabled?: boolean
           created_at?: string
           department?: string | null
           email: string
@@ -1819,6 +1821,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          argus_copilot_disabled?: boolean
           created_at?: string
           department?: string | null
           email?: string
@@ -3562,6 +3565,7 @@ export type Database = {
         | "capa_escalated"
         | "assigned"
         | "invited"
+        | "stop_work_raised"
       riddor_specified_injury:
         | "fracture"
         | "amputation"
@@ -3840,6 +3844,7 @@ export const Constants = {
         "capa_escalated",
         "assigned",
         "invited",
+        "stop_work_raised",
       ],
       riddor_specified_injury: [
         "fracture",

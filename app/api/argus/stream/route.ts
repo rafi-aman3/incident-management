@@ -1,30 +1,16 @@
 import { NextRequest } from "next/server";
-import { requireUser } from "@/lib/supabase/auth";
-import { orgCan } from "@/lib/auth/orgCan";
-import { isArgusConfigured, getArgusClient, ArgusOfflineError } from "@/lib/argus/client";
+import { runArgusGates } from "@/lib/argus/gates";
 import { MODEL_HAIKU, MODEL_BY_SURFACE, type ArgusSurface } from "@/lib/argus/models";
-import { checkArgusBudget } from "@/lib/argus/budget";
-import { checkRateLimit } from "@/lib/argus/ratelimit";
 import { argusErrorStream, streamArgusResponse } from "@/lib/argus/stream";
 import { logArgusSuggestion } from "@/lib/argus/log";
 
 /**
- * Argus streaming endpoint. POST { surface, prompt } → SSE.
+ * Phase 9a "ping" endpoint — single-turn, no tool-use. POST { surface, prompt } → SSE.
  *
- * Phase 9a establishes the wire format with a single 'ping' surface. 9b-9e
- * extend the surface enum (copilot, investigator, severity, capa_draft, …)
- * and add per-surface system prompts and tool definitions.
- *
- * Gates (in order):
- *   1. requireUser()              — auth
- *   2. orgCan('argus:use')        — feature permission
- *   3. orgs.argus_enabled         — per-org feature flag
- *   4. checkRateLimit             — per-user, per-bucket
- *   5. checkArgusBudget           — per-org, per-day token budget
- *   6. isArgusConfigured          — ANTHROPIC_API_KEY present
- *
- * Each gate returns the same SSE error shape so the client renders a
- * friendly message instead of a 500.
+ * 9b's Copilot lives at `/api/argus/copilot` because it needs an agentic
+ * tool-use loop; this endpoint stays as the simple-stream surface for
+ * future inline classifiers (9d severity / capa_method / etc.) where one
+ * model call → one suggestion is the whole interaction.
  */
 
 type ArgusBody = {
@@ -32,15 +18,7 @@ type ArgusBody = {
   prompt?: string;
 };
 
-const HEAVY_SURFACES = new Set<string>(["investigator", "capa_draft", "reportability"]);
-
 export async function POST(request: NextRequest) {
-  const { user, profile } = await requireUser();
-
-  if (!(await orgCan("argus:use"))) {
-    return argusErrorStream("Argus is not enabled for your role.", 403);
-  }
-
   let body: ArgusBody;
   try {
     body = (await request.json()) as ArgusBody;
@@ -54,55 +32,15 @@ export async function POST(request: NextRequest) {
     return argusErrorStream("Prompt is required.", 400);
   }
 
-  // Per-user rate limit (heavy bucket for deep analyses, inline for the rest).
-  const bucket = HEAVY_SURFACES.has(surface) ? "heavy" : "inline";
-  const rl = checkRateLimit(user.id, bucket);
-  if (!rl.allowed) {
-    return argusErrorStream(
-      `You are sending Argus requests too quickly. Try again in ${Math.ceil(rl.resetMs / 1000)}s.`,
-      429,
-    );
-  }
-
-  // Per-org daily token budget.
-  let budget;
-  try {
-    budget = await checkArgusBudget(profile.org_id);
-  } catch (err) {
-    return argusErrorStream(
-      `Could not verify Argus budget: ${err instanceof Error ? err.message : String(err)}`,
-      500,
-    );
-  }
-  if (budget.blocked) {
-    return argusErrorStream(
-      "Your organization has reached today's Argus token budget. Try again tomorrow.",
-      429,
-    );
-  }
-
-  if (!isArgusConfigured()) {
-    return argusErrorStream("Argus is offline (no API key configured).", 503);
-  }
-
-  let client;
-  try {
-    client = getArgusClient();
-  } catch (err) {
-    if (err instanceof ArgusOfflineError) {
-      return argusErrorStream(err.message, 503);
-    }
-    throw err;
-  }
+  const gate = await runArgusGates(surface);
+  if (!gate.ok) return gate.response;
 
   const model =
     surface === "ping"
       ? MODEL_HAIKU
       : (MODEL_BY_SURFACE[surface as ArgusSurface] ?? MODEL_HAIKU);
 
-  // Phase 9a system prompt is intentionally tiny — proves the pipeline.
-  // 9b-9e replace this per-surface from `lib/argus/system-prompts/*.md`.
-  const messageStream = client.messages.stream({
+  const messageStream = gate.client.messages.stream({
     model,
     max_tokens: 1024,
     system: [
@@ -117,9 +55,9 @@ export async function POST(request: NextRequest) {
 
   return streamArgusResponse(messageStream, async (usage, fullText) => {
     await logArgusSuggestion({
-      orgId: profile.org_id,
+      orgId: gate.orgId,
       siteId: null,
-      userId: user.id,
+      userId: gate.user.id,
       surface,
       model,
       usage: {
