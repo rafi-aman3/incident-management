@@ -2,9 +2,12 @@ import { logObservationTool } from "./log-observation";
 import { attachPhotoTool } from "./attach-photo";
 import { raiseStopWorkTool } from "./raise-stop-work";
 import { updateIncidentFieldTool } from "./update-incident-field";
+import { PROPOSE_INVESTIGATION_DRAFT_TOOL } from "./propose-investigation-draft";
 import type { ArgusToolDefinition } from "./types";
 
 export { logObservationTool, attachPhotoTool, raiseStopWorkTool, updateIncidentFieldTool };
+export { PROPOSE_INVESTIGATION_DRAFT_TOOL } from "./propose-investigation-draft";
+export type { InvestigationDraftPayload } from "./propose-investigation-draft";
 export type { ArgusToolDefinition, ToolContext } from "./types";
 
 // Tool dispatch types as ArgusToolDefinition<unknown> — input has already been
@@ -26,4 +29,19 @@ export function copilotToolsForAnthropic() {
     description: t.description,
     input_schema: t.input_schema,
   }));
+}
+
+/**
+ * Investigator (9c) uses structured-output tools — the model emits exactly
+ * one `tool_use` block matching this schema, the route handler captures its
+ * `input` directly, and there's no server-side `execute()` (no side effects).
+ */
+export function investigatorToolsForAnthropic() {
+  return [
+    {
+      name: PROPOSE_INVESTIGATION_DRAFT_TOOL.name,
+      description: PROPOSE_INVESTIGATION_DRAFT_TOOL.description,
+      input_schema: PROPOSE_INVESTIGATION_DRAFT_TOOL.input_schema,
+    },
+  ];
 }
