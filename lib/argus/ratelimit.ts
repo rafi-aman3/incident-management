@@ -4,19 +4,23 @@
  * becomes per-instance, not per-user — replace with Upstash Redis at that
  * point. For v1 demo, in-memory is correct.
  *
- * Two caps:
- *   - inline (10/min)  — for fast classifier calls (severity, finding triage)
- *   - heavy (3/min)    — for Sonnet-tier deep analyses (Investigator, CAPA draft)
+ * Three caps:
+ *   - inline (10/min) — fast classifier calls (severity, finding triage)
+ *   - heavy  (3/min)  — Sonnet-tier deep analyses (Investigator, CAPA draft)
+ *   - tile  (20/min) — dashboard/index ArgusInsightTile auto-loads. First-paint
+ *                      can fan out 4+ at once, so the bucket is wider than
+ *                      inline. Tile fetches always go through the cache check
+ *                      first — only true cache misses count toward this limit.
  */
 
-type Bucket = "inline" | "heavy";
+type Bucket = "inline" | "heavy" | "tile";
 
 interface Window {
   startMs: number;
   count: number;
 }
 
-const LIMITS: Record<Bucket, number> = { inline: 10, heavy: 3 };
+const LIMITS: Record<Bucket, number> = { inline: 10, heavy: 3, tile: 20 };
 const WINDOW_MS = 60_000;
 
 const buckets = new Map<string, Window>();

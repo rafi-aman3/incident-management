@@ -3,6 +3,9 @@ import { ArrowRight, FileText, FileBarChart, FileCheck, Flag } from "lucide-reac
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { ArgusContextPayload } from "@/components/argus/argus-context";
+import { ArgusInsightTile } from "@/components/argus/argus-insight-tile";
+import { isArgusAvailable } from "@/lib/argus/availability";
+import { getReportsPendingSummaryTilePayload } from "@/lib/argus/tiles/reports-pending-summary";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -13,7 +16,7 @@ export default async function ReportsLandingPage({
   searchParams: SearchParams;
 }) {
   const sp = await searchParams;
-  const { supabase, currentSiteId, memberships } = await requireUser();
+  const { supabase, profile, currentSiteId, memberships } = await requireUser();
 
   const yearParam = typeof sp.year === "string" ? Number(sp.year) : NaN;
   const year = Number.isFinite(yearParam) ? yearParam : new Date().getFullYear();
@@ -87,9 +90,21 @@ export default async function ReportsLandingPage({
     records: [],
   };
 
+  const [argusAvailable, canReportRead, reportsTilePayload] = await Promise.all([
+    isArgusAvailable(profile.org_id),
+    currentSiteId ? can("report:read", currentSiteId) : Promise.resolve(false),
+    canRead ? getReportsPendingSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
+  ]);
+
   return (
     <div className="space-y-6">
       <ArgusContextPayload context={argusContext} />
+      {argusAvailable && canReportRead && currentSiteId && reportsTilePayload && (
+        <ArgusInsightTile
+          tile="reports_pending_summary"
+          payload={{ ...reportsTilePayload, siteId: currentSiteId }}
+        />
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Reports</h1>

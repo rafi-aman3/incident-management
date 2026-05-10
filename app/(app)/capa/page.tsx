@@ -21,6 +21,9 @@ import {
   type CapaCreateMember,
 } from "@/components/capa/capa-create-modal";
 import { ArgusContextPayload } from "@/components/argus/argus-context";
+import { ArgusInsightTile } from "@/components/argus/argus-insight-tile";
+import { isArgusAvailable } from "@/lib/argus/availability";
+import { getCapaIndexSummaryTilePayload } from "@/lib/argus/tiles/capa-index-summary";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -277,9 +280,20 @@ export default async function CapaPage({
     })),
   };
 
+  const [argusAvailable, capaIndexPayload] = await Promise.all([
+    isArgusAvailable(profile.org_id),
+    canRead ? getCapaIndexSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
+  ]);
+
   return (
     <div className="space-y-6">
       <ArgusContextPayload context={argusContext} />
+      {argusAvailable && canRead && currentSiteId && capaIndexPayload && (
+        <ArgusInsightTile
+          tile="capa_index_summary"
+          payload={{ ...capaIndexPayload, siteId: currentSiteId }}
+        />
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">CAPA</h1>

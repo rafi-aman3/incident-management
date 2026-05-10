@@ -9,6 +9,9 @@ import {
   type StartTemplateOption,
 } from "@/components/inspections/start-inspection-dialog";
 import { ArgusContextPayload } from "@/components/argus/argus-context";
+import { ArgusInsightTile } from "@/components/argus/argus-insight-tile";
+import { isArgusAvailable } from "@/lib/argus/availability";
+import { getInspectionsDueSummaryTilePayload } from "@/lib/argus/tiles/inspections-due-summary";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type { InspectionStatus } from "@/lib/templates/types";
 import type { IndustryEnum } from "@/lib/templates/industry-map";
@@ -48,7 +51,7 @@ export default async function InspectionsPage({
   searchParams: SearchParams;
 }) {
   const sp = await searchParams;
-  const { supabase, currentSiteId } = await requireUser();
+  const { supabase, profile, currentSiteId } = await requireUser();
 
   const canRead = currentSiteId ? await can("inspection:read_site", currentSiteId) : false;
   const canStart = currentSiteId ? await can("inspection:start", currentSiteId) : false;
@@ -151,9 +154,20 @@ export default async function InspectionsPage({
     })),
   };
 
+  const [argusAvailable, inspectionsTilePayload] = await Promise.all([
+    isArgusAvailable(profile.org_id),
+    canRead ? getInspectionsDueSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
+  ]);
+
   return (
     <div className="space-y-6">
       <ArgusContextPayload context={argusContext} />
+      {argusAvailable && canRead && currentSiteId && inspectionsTilePayload && (
+        <ArgusInsightTile
+          tile="inspections_due_summary"
+          payload={{ ...inspectionsTilePayload, siteId: currentSiteId }}
+        />
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Inspections</h1>
