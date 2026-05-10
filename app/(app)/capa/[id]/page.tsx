@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { orgCan } from "@/lib/auth/orgCan";
 import { CapaStatusBadge } from "@/components/capa/badges";
 import { DueDateChip } from "@/components/investigations/badges";
 import { CapaDescriptionCard } from "@/components/capa/detail/description-card";
@@ -67,6 +68,18 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
         can("capa:verify", currentSiteId),
       ])
     : [false, false];
+
+  // Argus availability for the verification-method wand. Same triple as
+  // elsewhere — org flag + permission + caller's per-profile opt-out.
+  const orgArgusFlag = await supabase
+    .from("orgs")
+    .select("argus_enabled")
+    .eq("id", profile.org_id)
+    .maybeSingle();
+  const argusEnabled =
+    Boolean(orgArgusFlag.data?.argus_enabled) &&
+    !profile.argus_copilot_disabled &&
+    (await orgCan("argus:use"));
 
   // Verification form rules — viewer must be the assigned verifier (not the
   // owner) AND have capa:verify AND status must be pending_verification.
@@ -209,6 +222,9 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
           {showVerificationForm && (
             <VerificationForm
               capaId={capa.id}
+              siteId={capa.site_id}
+              capaSummary={capa.description ?? capa.title}
+              argusEnabled={argusEnabled}
               ownerName={capa.owner!.full_name ?? capa.owner!.email}
             />
           )}

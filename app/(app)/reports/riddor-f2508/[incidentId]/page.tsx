@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, FileDown, Flag } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { orgCan } from "@/lib/auth/orgCan";
+import { ArgusMagicWand } from "@/components/argus/argus-magic-wand";
 import {
   deriveF2508Fields,
   F2508_FIELD_GROUPS,
@@ -61,6 +63,18 @@ export default async function RiddorF2508Page({
     incident.site_id
   );
   if (!canRead) notFound();
+
+  // Argus availability for the reportability advisory pane.
+  const { profile } = await requireUser();
+  const orgArgusFlag = await supabase
+    .from("orgs")
+    .select("argus_enabled")
+    .eq("id", profile.org_id)
+    .maybeSingle();
+  const argusEnabled =
+    Boolean(orgArgusFlag.data?.argus_enabled) &&
+    !profile.argus_copilot_disabled &&
+    (await orgCan("argus:use"));
 
   const ip = (incident.injured_persons ?? [])[0];
   const extraCount = (incident.injured_persons ?? []).length - 1;
@@ -153,6 +167,16 @@ export default async function RiddorF2508Page({
       </div>
 
       <PdfErrorBanner code={pdfErrorCode} />
+
+      {argusEnabled && (
+        <div className="print:hidden">
+          <ArgusMagicWand
+            surface="reportability"
+            payload={{ incidentId: incident.id, jurisdiction: "GB" }}
+            autoLoad
+          />
+        </div>
+      )}
 
       {!incident.riddor_reportable && (
         <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs">

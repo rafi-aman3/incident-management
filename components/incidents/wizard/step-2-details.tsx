@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RiskMatrix } from "@/components/risk-matrix/risk-matrix";
+import { ArgusMagicWand } from "@/components/argus/argus-magic-wand";
 import { BodyMap, type BodyPart } from "@/components/body-map/body-map";
 import { FileUpload } from "@/components/incidents/wizard/file-upload";
 import { LinkedDocumentsSection } from "@/components/documents/linked-documents-section";
@@ -59,6 +60,10 @@ type Props = {
   orgId: string;
   siteId: string | null;
   type: IncidentType;
+  title: string;
+  description: string;
+  area: string | null;
+  argusEnabled: boolean;
   isSandbox: boolean;
   isUKSite: boolean;
   initial: {
@@ -77,7 +82,19 @@ type Props = {
 };
 
 export function Step2Details(props: Props) {
-  const { incidentId, orgId, siteId, type, isSandbox, isUKSite, initial } = props;
+  const {
+    incidentId,
+    orgId,
+    siteId,
+    type,
+    title,
+    description,
+    area,
+    argusEnabled,
+    isSandbox,
+    isUKSite,
+    initial,
+  } = props;
 
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
     saveStep2,
@@ -129,10 +146,28 @@ export function Step2Details(props: Props) {
 
       {/* Risk matrix — universal */}
       <section className="space-y-2">
-        <h2 className="text-base font-semibold">Risk classification</h2>
-        <p className="text-sm text-muted-foreground">
-          Pick how likely this is to happen and how bad the consequence could be. The system maps it to S1–S5.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Risk classification</h2>
+            <p className="text-sm text-muted-foreground">
+              Pick how likely this is to happen and how bad the consequence could be. The system maps it to S1–S5.
+            </p>
+          </div>
+          {argusEnabled && (description?.trim() || title?.trim()) && (
+            <ArgusMagicWand
+              surface="risk_matrix"
+              payload={{
+                incidentId,
+                description: description || title,
+                type,
+                area: area ?? undefined,
+              }}
+              onAccept={({ likelihood, consequence }) =>
+                setMatrix({ likelihood, consequence })
+              }
+            />
+          )}
+        </div>
         <RiskMatrix
           value={matrix}
           onChange={(v) => setMatrix(v)}

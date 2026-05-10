@@ -4,6 +4,8 @@ import { ArrowLeft, FileDown, ExternalLink } from "lucide-react";
 import { differenceInCalendarDays } from "date-fns";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
+import { orgCan } from "@/lib/auth/orgCan";
+import { ArgusMagicWand } from "@/components/argus/argus-magic-wand";
 import {
   deriveOsha301Fields,
   OSHA_301_FIELD_GROUPS,
@@ -52,6 +54,18 @@ export default async function Osha301Page({
   const canRead = await can("incident:read_site", incident.site_id);
   const canExport = await can("report:export", incident.site_id);
   if (!canRead) notFound();
+
+  // Argus availability for the reportability advisory pane.
+  const { profile } = await requireUser();
+  const orgArgusFlag = await supabase
+    .from("orgs")
+    .select("argus_enabled")
+    .eq("id", profile.org_id)
+    .maybeSingle();
+  const argusEnabled =
+    Boolean(orgArgusFlag.data?.argus_enabled) &&
+    !profile.argus_copilot_disabled &&
+    (await orgCan("argus:use"));
   if (!incident.osha_recordable) {
     return (
       <div className="space-y-4">
@@ -137,6 +151,16 @@ export default async function Osha301Page({
       </div>
 
       <PdfErrorBanner code={pdfErrorCode} />
+
+      {argusEnabled && (
+        <div className="print:hidden">
+          <ArgusMagicWand
+            surface="reportability"
+            payload={{ incidentId: incident.id, jurisdiction: "US" }}
+            autoLoad
+          />
+        </div>
+      )}
 
       <div
         role="status"

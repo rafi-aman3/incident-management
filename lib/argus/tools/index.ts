@@ -3,6 +3,11 @@ import { attachPhotoTool } from "./attach-photo";
 import { raiseStopWorkTool } from "./raise-stop-work";
 import { updateIncidentFieldTool } from "./update-incident-field";
 import { PROPOSE_INVESTIGATION_DRAFT_TOOL } from "./propose-investigation-draft";
+import { SUGGEST_RISK_MATRIX_TOOL } from "./suggest-risk-matrix";
+import { SUGGEST_FINDING_SEVERITY_TOOL } from "./suggest-finding-severity";
+import { SUGGEST_VERIFICATION_METHOD_TOOL } from "./suggest-verification-method";
+import { ASSESS_REPORTABILITY_TOOL } from "./assess-reportability";
+import { DRAFT_CAPA_METADATA_TOOL } from "./draft-capa-metadata";
 import type { ArgusToolDefinition } from "./types";
 import type { ToolDefinition } from "@/lib/argus/llm";
 
@@ -45,3 +50,34 @@ export function copilotTools(): ToolDefinition[] {
  * `generateStructured`.
  */
 export const INVESTIGATOR_TOOL: ToolDefinition = PROPOSE_INVESTIGATION_DRAFT_TOOL;
+
+/**
+ * Wand surfaces (9d). Each is a structured-output tool with no `execute()` —
+ * the wand route handler captures the function-call arguments and returns
+ * them as the suggestion payload. The human Accepts / Edits / Rejects in the
+ * suggestion-card UI.
+ */
+export type WandSurface =
+  | "risk_matrix"
+  | "finding_severity"
+  | "verification_method"
+  | "reportability"
+  | "capa_metadata";
+
+export const WAND_TOOLS: Record<WandSurface, ToolDefinition> = {
+  risk_matrix: SUGGEST_RISK_MATRIX_TOOL,
+  finding_severity: SUGGEST_FINDING_SEVERITY_TOOL,
+  verification_method: SUGGEST_VERIFICATION_METHOD_TOOL,
+  reportability: ASSESS_REPORTABILITY_TOOL,
+  capa_metadata: DRAFT_CAPA_METADATA_TOOL,
+};
+
+export {
+  SUGGEST_RISK_MATRIX_TOOL,
+  SUGGEST_FINDING_SEVERITY_TOOL,
+  SUGGEST_VERIFICATION_METHOD_TOOL,
+  ASSESS_REPORTABILITY_TOOL,
+  DRAFT_CAPA_METADATA_TOOL,
+};
+export type { RiskMatrixSuggestion } from "./suggest-risk-matrix";
+export type { ReportabilityVerdict } from "./assess-reportability";

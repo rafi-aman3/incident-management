@@ -20,6 +20,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { verifyCapa } from "@/app/(app)/capa/[id]/actions";
 import type { ActionResult } from "@/lib/incidents/schemas";
+import { ArgusMagicWand } from "@/components/argus/argus-magic-wand";
 
 type Result =
   | "effective"
@@ -78,9 +79,15 @@ const METHOD_OPTIONS: Array<{ value: string; label: string }> = [
  */
 export function VerificationForm({
   capaId,
+  siteId,
+  capaSummary,
+  argusEnabled,
   ownerName,
 }: {
   capaId: string;
+  siteId: string;
+  capaSummary: string;
+  argusEnabled: boolean;
   /** Used in the partial-effective pre-submit info card. */
   ownerName: string;
 }) {
@@ -89,6 +96,7 @@ export function VerificationForm({
     null
   );
   const [result, setResult] = useState<Result | "">("");
+  const [method, setMethod] = useState<string>("");
 
   useEffect(() => {
     if (state?.ok) {
@@ -123,8 +131,17 @@ export function VerificationForm({
       </p>
 
       <div className="space-y-2">
-        <Label htmlFor="verify-method">Verification method</Label>
-        <Select name="method" required>
+        <div className="flex items-end justify-between gap-3">
+          <Label htmlFor="verify-method">Verification method</Label>
+          {argusEnabled && capaSummary?.trim() && (
+            <ArgusMagicWand
+              surface="verification_method"
+              payload={{ capaId, siteId, capaSummary }}
+              onAccept={({ method: m }) => setMethod(m)}
+            />
+          )}
+        </div>
+        <Select name="method" required value={method} onValueChange={setMethod}>
           <SelectTrigger id="verify-method">
             <SelectValue placeholder="How did you verify?" />
           </SelectTrigger>

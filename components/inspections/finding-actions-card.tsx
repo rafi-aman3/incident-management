@@ -21,20 +21,27 @@ import {
   escalateFindingToIncident,
 } from "@/app/(app)/inspections/findings-actions";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { ArgusMagicWand } from "@/components/argus/argus-magic-wand";
 import type { FindingStatus } from "@/lib/templates/types";
 
 export function FindingActionsCard({
   findingId,
   inspectionId,
+  siteId,
   status,
   canResolve,
   canEscalate,
+  argusEnabled,
+  findingDescription,
 }: {
   findingId: string;
   inspectionId: string;
+  siteId: string;
   status: FindingStatus;
   canResolve: boolean;
   canEscalate: boolean;
+  argusEnabled: boolean;
+  findingDescription: string;
 }) {
   const [pending, startTransition] = useTransition();
   const [notes, setNotes] = useState("");
@@ -174,6 +181,25 @@ export function FindingActionsCard({
           You don&apos;t have permission to resolve or escalate findings on this
           site.
         </p>
+      )}
+      {argusEnabled && canEscalate && findingDescription.trim().length > 0 && (
+        <div className="border-t pt-3">
+          <ArgusMagicWand
+            surface="finding_severity"
+            payload={{
+              findingId,
+              siteId,
+              description: findingDescription,
+            }}
+            buttonLabel="Predict severity if escalated"
+            // Informational on this surface — escalation creates a fresh
+            // draft incident the user classifies. Accept just dismisses
+            // and writes outcome='accepted' to the audit log.
+            onAccept={() => {
+              /* informational only — no field to fill on this surface */
+            }}
+          />
+        </div>
       )}
     </div>
   );

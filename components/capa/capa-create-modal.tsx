@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { createCapa } from "@/app/(app)/capa/actions";
 import type { ActionResult } from "@/lib/incidents/schemas";
+import { ArgusMagicWand } from "@/components/argus/argus-magic-wand";
 
 export type CapaCreateMember = {
   id: string;
@@ -37,6 +38,8 @@ export type CapaCreateContext =
   | {
       kind: "investigation";
       investigationId: string;
+      siteId: string;
+      argusEnabled: boolean;
       defaultOwnerId: string | null;
     };
 
@@ -89,6 +92,10 @@ export function CapaCreateModal({
             investigationId={
               context.kind === "investigation" ? context.investigationId : null
             }
+            siteId={context.kind === "investigation" ? context.siteId : null}
+            argusEnabled={
+              context.kind === "investigation" ? context.argusEnabled : false
+            }
             defaultOwnerId={defaultOwner}
             onSuccess={close}
           />
@@ -101,11 +108,15 @@ export function CapaCreateModal({
 function CapaCreateForm({
   members,
   investigationId,
+  siteId,
+  argusEnabled,
   defaultOwnerId,
   onSuccess,
 }: {
   members: CapaCreateMember[];
   investigationId: string | null;
+  siteId: string | null;
+  argusEnabled: boolean;
   defaultOwnerId: string | null;
   onSuccess: () => void;
 }) {
@@ -117,6 +128,8 @@ function CapaCreateForm({
   const initialOwner = defaultOwnerId ?? members[0]?.id ?? "";
   const [ownerId, setOwnerId] = useState(initialOwner);
   const [verifierId, setVerifierId] = useState<string>("");
+  const [capaType, setCapaType] = useState<"corrective" | "preventive">("corrective");
+  const [title, setTitle] = useState<string>("");
 
   const verifierOptions = useMemo(
     () => members.filter((m) => m.id !== ownerId),
@@ -148,9 +161,26 @@ function CapaCreateForm({
         <input type="hidden" name="investigation_id" value={investigationId} />
       )}
 
+      {argusEnabled && investigationId && siteId && (
+        <ArgusMagicWand
+          surface="capa_metadata"
+          payload={{ investigationId, siteId }}
+          buttonLabel="Draft from investigation"
+          onAccept={({ type, title: t }) => {
+            setCapaType(type as "corrective" | "preventive");
+            setTitle(t);
+          }}
+        />
+      )}
+
       <div className="space-y-2">
         <Label>Type</Label>
-        <RadioGroup name="type" defaultValue="corrective" className="flex gap-4">
+        <RadioGroup
+          name="type"
+          value={capaType}
+          onValueChange={(v) => setCapaType(v as "corrective" | "preventive")}
+          className="flex gap-4"
+        >
           <Label htmlFor="capa-type-corrective" className="flex items-center gap-2">
             <RadioGroupItem id="capa-type-corrective" value="corrective" />
             <span className="text-sm">Corrective <span className="text-[11px] text-muted-foreground">(fix the immediate problem)</span></span>
@@ -164,7 +194,14 @@ function CapaCreateForm({
 
       <div className="space-y-2">
         <Label htmlFor="capa-title">Title</Label>
-        <Input id="capa-title" name="title" required maxLength={200} />
+        <Input
+          id="capa-title"
+          name="title"
+          required
+          maxLength={200}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </div>
 
       <div className="space-y-2">
