@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   Send,
@@ -11,6 +12,7 @@ import {
   CheckCircle2,
   Eye,
   Image as ImageIcon,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,14 +21,19 @@ import { VoiceButton } from "./voice-button";
 import { PhotoCaptureButton } from "./photo-capture-button";
 
 /**
- * Floating Copilot panel mounted on the Report Wizard pages. Bottom-right
- * card; collapsed → 48px FAB, expanded → ~380px-wide chat window.
+ * Inline collapsible "Argus Form Assistant" strip mounted in the Report
+ * Wizard chrome (above the step tabs / WizardProgress). Per
+ * `assets/incident-reporting-2.png`, this is a horizontal cyan strip that
+ * collapses to a one-line header and expands into the chat surface.
+ *
+ * The strip's primary job is **auto-filling the wizard form fields** via
+ * the `update_incident_field` tool. After each turn, if any fill tool fired,
+ * the strip calls `router.refresh()` so the server-rendered wizard re-reads
+ * the draft and the form components remount with new initial values
+ * (the wizard page passes `key={incident.updated_at}` for that purpose).
  *
  * Conversation state is held in component memory only — Phase 9b doesn't
- * persist the chat across page loads (per plan §Out of scope: conversation
- * persistence across sessions). Each panel session is ephemeral; the audit
- * trail lives in `argus_suggestions` rows written by the route handler +
- * tool execute() calls.
+ * persist the chat across page loads. Each panel session is ephemeral.
  */
 
 type ChatMessage = {
@@ -40,10 +47,10 @@ type ToolEvent =
 
 const ACCENT = "var(--argus-accent, #00D4FF)";
 
-export function ArgusCopilot({ incidentId }: { incidentId: string }) {
+export function ArgusFormAssistant({ incidentId }: { incidentId: string }) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  // Tool events keyed by tool_use id, rendered inline with the assistant turn that produced them.
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [streamingText, setStreamingText] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -53,14 +60,13 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
 
   const voice = useVoice();
 
-  // When voice transcribes, push the transcript into the textarea.
+  // Mirror the live transcript into the textarea while recording.
   useEffect(() => {
     if (voice.state === "recording" || voice.state === "transcribing") {
       setDraft(voice.transcript);
     }
   }, [voice.transcript, voice.state]);
 
-  // Auto-scroll the conversation pane on new content.
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -70,7 +76,6 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
     const trimmed = draft.trim();
     if (!trimmed || streaming) return;
 
-    // Surface any pending photos to the model so it knows to call attach_photo.
     const photoLines =
       pendingPhotos.length > 0
         ? `\n(Photos attached this turn: ${pendingPhotos
@@ -88,6 +93,8 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
     setStreaming(true);
     voice.reset();
 
+    let didFillField = false;
+
     try {
       const res = await fetch("/api/argus/copilot", {
         method: "POST",
@@ -95,7 +102,7 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
         body: JSON.stringify({ incidentId, history: newHistory }),
       });
       if (!res.body) {
-        setError("Empty response from Copilot.");
+        setError("Empty response from Argus.");
         return;
       }
 
@@ -130,6 +137,7 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
             setStreamingText(assistantText);
           } else if (evt === "tool_use") {
             const d = data as { name: string; id: string; input: Record<string, unknown> };
+            if (d.name === "update_incident_field") didFillField = true;
             setToolEvents((prev) => [...prev, { kind: "tool_use", ...d }]);
           } else if (evt === "tool_result") {
             const d = data as { id: string; result: string };
@@ -141,13 +149,17 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
         }
       }
 
-      // Persist the assistant text into messages, clear the streaming buffer
-      // so the next turn renders cleanly.
       if (assistantText) {
         setMessages((prev) => [...prev, { role: "assistant", content: assistantText }]);
       }
       setStreamingText("");
-      setPendingPhotos([]); // photos only persist for the turn they were uploaded on
+      setPendingPhotos([]);
+
+      // If any auto-fill happened, re-fetch the wizard page so the form
+      // components remount with the new server-rendered values.
+      if (didFillField) {
+        router.refresh();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -155,51 +167,64 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
     }
   }
 
+  // Collapsed view — single-line cyan header with a chevron.
   if (!expanded) {
     return (
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        aria-label="Open Argus Copilot"
-        className="fixed bottom-4 right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full border bg-background shadow-lg hover:scale-105 active:scale-95 transition"
-        style={{ borderColor: ACCENT }}
+        className="flex w-full items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm transition hover:bg-accent/30"
+        style={{
+          borderColor: "color-mix(in srgb, var(--argus-accent, #00D4FF) 50%, transparent)",
+          backgroundColor: "color-mix(in srgb, var(--argus-accent, #00D4FF) 6%, transparent)",
+        }}
       >
-        <Sparkles className="h-5 w-5" style={{ color: ACCENT }} />
+        <span className="flex items-center gap-2 font-medium">
+          <Sparkles className="h-4 w-4" style={{ color: ACCENT }} />
+          Argus Form Assistant
+          <span className="text-muted-foreground font-normal">— describe what happened, I&apos;ll fill the form.</span>
+        </span>
+        <ChevronDown className="h-4 w-4 text-muted-foreground" />
       </button>
     );
   }
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-30 flex w-[calc(100vw-2rem)] max-w-sm flex-col rounded-lg border bg-background shadow-xl"
-      style={{ borderColor: ACCENT, height: "min(540px, calc(100vh - 8rem))" }}
+      className="rounded-md border bg-background shadow-sm"
+      style={{
+        borderColor: "color-mix(in srgb, var(--argus-accent, #00D4FF) 50%, transparent)",
+      }}
     >
       <header
-        className="flex items-center justify-between gap-2 rounded-t-lg border-b px-3 py-2"
-        style={{ borderColor: ACCENT }}
+        className="flex items-center justify-between gap-2 rounded-t-md border-b px-3 py-2 text-sm"
+        style={{
+          borderColor: "color-mix(in srgb, var(--argus-accent, #00D4FF) 50%, transparent)",
+          backgroundColor: "color-mix(in srgb, var(--argus-accent, #00D4FF) 8%, transparent)",
+        }}
       >
-        <div className="flex items-center gap-2 text-sm font-medium">
+        <span className="flex items-center gap-2 font-medium">
           <Sparkles className="h-4 w-4" style={{ color: ACCENT }} />
-          Argus Copilot
-        </div>
+          Argus Form Assistant — Incident Report
+        </span>
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          aria-label="Minimize Argus"
+          aria-label="Collapse Argus"
           className="rounded p-1 hover:bg-accent"
         >
-          <ChevronDown className="h-4 w-4" />
+          <ChevronUp className="h-4 w-4" />
         </button>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 text-sm">
+      <div ref={scrollRef} className="max-h-64 overflow-y-auto px-3 py-2 text-sm">
         {messages.length === 0 && !streaming && (
           <p className="text-muted-foreground">
-            Tap the mic and describe what you&apos;re seeing — &ldquo;Worker on roof, no harness, replacing tiles.&rdquo; I&apos;ll log the observation, attach your photo, and raise stop-work if you say so.
+            Tap the mic and describe what happened — &ldquo;Worker fell off scaffold this morning, north side of Building 7.&rdquo; I&apos;ll fill Title, Area, Location, and Description for you. Edit any value before submitting.
           </p>
         )}
 
-        <ul className="space-y-3">
+        <ul className="space-y-2">
           {messages.map((m, idx) => (
             <li key={idx} className={m.role === "user" ? "text-right" : ""}>
               <span
@@ -212,7 +237,6 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
             </li>
           ))}
 
-          {/* Tool events — render inline, distinct from chat bubbles */}
           {toolEvents.map((te, idx) => (
             <li key={`te-${idx}`} className="text-xs">
               {te.kind === "tool_use" ? (
@@ -241,7 +265,10 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
       </div>
 
       {pendingPhotos.length > 0 && (
-        <div className="border-t px-3 py-1.5 text-xs" style={{ borderColor: ACCENT }}>
+        <div
+          className="border-t px-3 py-1.5 text-xs"
+          style={{ borderColor: "color-mix(in srgb, var(--argus-accent, #00D4FF) 50%, transparent)" }}
+        >
           <span className="text-muted-foreground">
             {pendingPhotos.length} photo{pendingPhotos.length > 1 ? "s" : ""} ready: {pendingPhotos.map((p) => p.name).join(", ")}
           </span>
@@ -254,7 +281,7 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
           void send();
         }}
         className="flex items-end gap-1.5 border-t p-2"
-        style={{ borderColor: ACCENT }}
+        style={{ borderColor: "color-mix(in srgb, var(--argus-accent, #00D4FF) 50%, transparent)" }}
       >
         <VoiceButton
           state={voice.state}
@@ -269,7 +296,7 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={voice.state === "recording" ? "Listening…" : "Describe what you see…"}
+          placeholder={voice.state === "recording" ? "Listening…" : "Describe what happened…"}
           rows={2}
           disabled={streaming}
           className="resize-none flex-1 text-sm"
@@ -289,6 +316,21 @@ export function ArgusCopilot({ incidentId }: { incidentId: string }) {
 }
 
 function ToolUseChip({ name, input }: { name: string; input: Record<string, unknown> }) {
+  if (name === "update_incident_field") {
+    const field = String(input.field ?? "");
+    const value = String(input.value ?? "");
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 italic text-foreground/80"
+        style={{ backgroundColor: "color-mix(in srgb, var(--argus-accent, #00D4FF) 15%, transparent)" }}
+      >
+        <Pencil className="h-3 w-3" />
+        <span className="font-medium capitalize">{field}</span>
+        <span className="text-muted-foreground"> · {truncate(value, 60)}</span>
+      </span>
+    );
+  }
+
   const Icon =
     name === "log_observation"
       ? Eye
@@ -332,6 +374,7 @@ function labelFor(toolName: string): string {
   if (toolName === "log_observation") return "Observation logged";
   if (toolName === "attach_photo") return "Photo attached";
   if (toolName === "raise_stop_work") return "Stop-work raised";
+  if (toolName === "update_incident_field") return "Field filled";
   return toolName;
 }
 
