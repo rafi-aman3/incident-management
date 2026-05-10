@@ -262,6 +262,11 @@ export default async function CapaPage({
     }
   }
 
+  const [argusAvailable, capaIndexPayload] = await Promise.all([
+    isArgusAvailable(profile.org_id),
+    canRead ? getCapaIndexSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
+  ]);
+
   const argusContext: ArgusPageContext = {
     route: "capa_index",
     routeLabel: "CAPA",
@@ -278,12 +283,9 @@ export default async function CapaPage({
       refCode: r.ref_code,
       title: `${r.type} · ${r.status}${r.is_overdue ? " · overdue" : ""}`,
     })),
+    hasActiveSignal:
+      argusAvailable && counts.overdue + counts.pendingVerification > 0,
   };
-
-  const [argusAvailable, capaIndexPayload] = await Promise.all([
-    isArgusAvailable(profile.org_id),
-    canRead ? getCapaIndexSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
-  ]);
 
   return (
     <div className="space-y-6">

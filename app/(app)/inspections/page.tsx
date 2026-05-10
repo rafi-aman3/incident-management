@@ -136,6 +136,15 @@ export default async function InspectionsPage({
     startOptions = collected;
   }
 
+  const [argusAvailable, inspectionsTilePayload] = await Promise.all([
+    isArgusAvailable(profile.org_id),
+    canRead ? getInspectionsDueSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
+  ]);
+
+  const inspectionsActiveSignal =
+    (inspectionsTilePayload?.aggregates?.in_progress ?? 0) > 0 ||
+    (inspectionsTilePayload?.aggregates?.recent_failed ?? 0) > 0;
+
   const argusContext: ArgusPageContext = {
     route: "inspections_index",
     routeLabel: "Inspections",
@@ -152,12 +161,8 @@ export default async function InspectionsPage({
       refCode: r.ref_code,
       title: `${r.status}${r.is_failed ? " · failed" : ""}`,
     })),
+    hasActiveSignal: argusAvailable && inspectionsActiveSignal,
   };
-
-  const [argusAvailable, inspectionsTilePayload] = await Promise.all([
-    isArgusAvailable(profile.org_id),
-    canRead ? getInspectionsDueSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
-  ]);
 
   return (
     <div className="space-y-6">

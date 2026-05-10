@@ -76,6 +76,12 @@ export default async function ReportsLandingPage({
     riddorCount = riddorRes.count ?? 0;
   }
 
+  const [argusAvailable, canReportRead, reportsTilePayload] = await Promise.all([
+    isArgusAvailable(profile.org_id),
+    currentSiteId ? can("report:read", currentSiteId) : Promise.resolve(false),
+    canRead ? getReportsPendingSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
+  ]);
+
   const argusContext: ArgusPageContext = {
     route: "reports_index",
     routeLabel: `Reports · ${year}`,
@@ -88,13 +94,8 @@ export default async function ReportsLandingPage({
       gb_sites_visible: hasGbSite ? 1 : 0,
     },
     records: [],
+    hasActiveSignal: argusAvailable && osha301PendingCount > 0,
   };
-
-  const [argusAvailable, canReportRead, reportsTilePayload] = await Promise.all([
-    isArgusAvailable(profile.org_id),
-    currentSiteId ? can("report:read", currentSiteId) : Promise.resolve(false),
-    canRead ? getReportsPendingSummaryTilePayload(supabase, currentSiteId) : Promise.resolve(null),
-  ]);
 
   return (
     <div className="space-y-6">

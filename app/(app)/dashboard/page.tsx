@@ -189,6 +189,12 @@ export default async function DashboardPage() {
   const firstName =
     profile.full_name?.split(" ")[0] ?? profile.email.split("@")[0] ?? "there";
 
+  const dashboardActiveSignal =
+    (overdueInvPayload?.aggregates?.count ?? 0) > 0 ||
+    (stopWorkPayload?.aggregates?.count ?? 0) > 0 ||
+    (reportabilityPayload?.aggregates?.count ?? 0) > 0 ||
+    (capaOverduePayload?.aggregates?.count ?? 0) > 0;
+
   const argusContext: ArgusPageContext = {
     route: "dashboard",
     routeLabel: "Dashboard",
@@ -206,6 +212,7 @@ export default async function DashboardPage() {
       refCode: inc.ref_code,
       title: inc.severity ? `${inc.severity} ${inc.type}` : inc.type,
     })),
+    hasActiveSignal: argusAvailable && dashboardActiveSignal,
   };
 
   return (

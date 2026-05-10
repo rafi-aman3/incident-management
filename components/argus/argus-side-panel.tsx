@@ -130,11 +130,26 @@ export function ArgusSidePanel() {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Ask Argus"
-          title="Ask Argus"
+          aria-label={
+            pageContext.hasActiveSignal
+              ? "Ask Argus — attention needed"
+              : "Ask Argus"
+          }
+          title={
+            pageContext.hasActiveSignal
+              ? "Ask Argus — attention needed"
+              : "Ask Argus"
+          }
           className="relative"
         >
           <Sparkles className="h-4 w-4" style={{ color: "var(--argus-accent, #00D4FF)" }} />
+          {pageContext.hasActiveSignal && (
+            <span
+              aria-hidden
+              className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full ring-2 ring-background"
+              style={{ backgroundColor: "var(--argus-accent, #00D4FF)" }}
+            />
+          )}
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-full sm:max-w-md flex flex-col">

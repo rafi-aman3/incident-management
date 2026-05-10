@@ -659,6 +659,99 @@ Shipped 2026-05-10 on `feat/phase-9d-argus-magic-wands`. Bundles two changes in 
 
 ---
 
+## Phase 9e — Argus Global Panel page-context + Insight Tiles
+
+Shipped 2026-05-10 on `feat/phase-9e-argus-panel-and-tiles`. Closes Phase 9. Two halves landed as separate commits and squashed on merge: the side-panel page-context plumbing and the seven Insight Tiles. Plus a small topbar polish + dot indicator + docs.
+
+### Page-context plumbing (commit 1)
+
+- `lib/argus/page-context.ts` — `ArgusPageContext` shape (`route` ∈ 9 keys, `routeLabel`, `siteId`, optional `siteLabel`, redacted `records[]`, numeric `aggregates`, `hasActiveSignal?`); per-route static `ARGUS_PANEL_SUGGESTIONS` map; safe `DEFAULT_ARGUS_CONTEXT` for un-instrumented routes.
+- `components/argus/argus-context.tsx` — client `<ArgusContextProvider>` + `<ArgusContextPayload>` + `useArgusPageContext()`. Race-safe last-mount-wins ownership: a stable `useId()` per payload, the provider clears state only when the unmounting payload is still the active owner, so navigation never clobbers the new page's registration.
+- `(app)/layout.tsx` — wraps `<SidebarShell>` + topbar + children in the provider once.
+- 8 page mounts: `/dashboard`, `/incidents/[id]`, `/investigations/[id]`, `/capa/[id]`, `/inspections/[id]`, `/capa`, `/inspections`, `/reports`. Each builds a redacted payload (record titles use `severity + type` instead of free-text headlines so names never leave the server).
+- `<ArgusSidePanel>` — reads context, renders a header chip (`Dashboard · UCB Houston`), surfaces 3 per-route suggestion chips that auto-fill + auto-submit, posts `surface: 'panel_chat'` with the page context payload.
+- `/api/argus/stream` — accepts the new `panel_chat` surface, sanitises the page context (whitelisted route + record-kind enums, length caps on every string), runs the redactor server-side as defence-in-depth, builds the system prompt from `lib/argus/system-prompts/panel.md` plus a `# Page context` block. Logs `target_kind`/`target_id` keyed to the page's primary record on detail pages, `'page'` on index pages.
+- `lib/argus/log.ts` — `LogSuggestionInput.targetKind` widened to include `'inspection' | 'report' | 'page'` (the Postgres `text` column already accepts any string; this widens the TS surface).
+
+### Insight Tiles (commit 2)
+
+- `lib/argus/tiles/index.ts` — foundation: `TileKey` union, `TILE_CONFIG` (per-tile surface, TTL, default href + label, RBAC permission), `TILE_KEYS`, deterministic `tileCacheKey(tile, freshnessKey)` that hashes to a UUIDv5-shaped string suitable for `argus_suggestions.target_id`.
+- 7 aggregators (`lib/argus/tiles/*.ts`) — each takes the user's RLS-bound supabase + current site id and returns `{ aggregates, recordRefs, freshnessKey } | null`. The `freshnessKey` doubles as the cache invalidator: `today | count | max(updated_at)` for daily clocks, `count | max(stop_work_raised_at)` for high-stakes stop-work, `today | count | dominant_type | max(updated_at)` for the CAPA cluster. `null` short-circuits the page render when there's no current site.
+- 7 system prompts (`lib/argus/system-prompts/tile-*.md`) — one per signal, ≤ 25 lines, encoding the rubric + anti-hallucination rule + when to use `nothing_to_flag`. Reportability stays a v1 proxy ("S1/S2 flagged not osha_recordable") with confidence capped at 0.75 since we don't yet pull from the Reportability wand's audit rows.
+- `lib/argus/tools/tile-insight.ts` — one shared structured-output tool returning `{ summary (≤280), rationale (≤600), confidence (0..1), nothing_to_flag?, recommended_action_label? }`.
+- `app/api/argus/tile/route.ts` — Zod-validated POST `{ tile, payload }`; gates → cache lookup on `argus_suggestions(surface, target_kind='page', target_id=cacheKey, created_at >= now() - TTL[tile])` → `getLLM().generateStructured` on smart tier with `thinking: 'off'` → output validation → audit row + activity event → JSON envelope (`{ ok, suggestionId, output, modelUsed, cached }`). Gate-failure SSE bodies are translated to JSON inline.
+- `lib/argus/availability.ts` — `isArgusAvailable(orgId)` server helper. Combines `orgs.argus_enabled` + `orgCan('argus:use')` so the page render gates on it.
+- `lib/argus/ratelimit.ts` — new `tile` bucket (20/min/user). `runArgusGates(surface)` auto-routes any `tile_*` surface here; the inferred bucket means no caller change.
+- `lib/argus/models.ts` — 7 `tile_*` keys added to `ArgusSurface` + `TIER_BY_SURFACE` (all smart, thinking off).
+- UI: `components/argus/argus-insight-tile.tsx` (skeleton / resolved / empty / error states; cyan accent; `[Re-assess]` button with the link label model-suggestable but href server-controlled) + `components/argus/use-argus-insight-tile.ts` (SWR-style fetch keyed on `freshnessKey`; manual `refresh` for the link).
+- 4 dashboard tiles (overdue investigations · stop-work active · reportability uncertain · CAPA overdue) in a 2×2 grid below KPIs, each gated by its read permission. 1 tile each on `/capa` (cluster summary), `/inspections` (in-progress + recent failed), `/reports` (OSHA-301 7-day deadline + YTD pulse).
+
+### Topbar polish (commit 3)
+
+- `components/app-shell/topbar.tsx` — Argus Sparkles button moves to the right of `<NotificationBell>` (it now sits between the bell and the user menu).
+- Sparkles trigger paints a small cyan dot indicator when `pageContext.hasActiveSignal === true`. The four tile-rendering pages set the flag from their aggregator outputs (dashboard ORs the four tile counts; `/capa` ORs `overdue + pending_verification`; `/inspections` ORs in-progress + recent_failed; `/reports` checks OSHA-301 pending).
+- `aria-label` and `title` flip to "Ask Argus — attention needed" when the dot is on.
+
+### Schema / RBAC
+
+Zero migration. Eight new strings on `argus_suggestions.surface` (`panel_chat` + 7 `tile_*`); the column is `text`, no enum. New activity verb `argus.tile_generated` (column also `text`). Zero new RBAC keys — tiles reuse `investigation:lead`, `capa:complete`, `inspection:read_site`, `report:read`, `incident:read_site`. The single feature gate stays `argus:use`.
+
+### File deltas
+
+```
+NEW
+├ lib/argus/page-context.ts                          (types + suggestion map + DEFAULT)
+├ lib/argus/availability.ts                          (isArgusAvailable())
+├ lib/argus/tiles/index.ts                           (TILE_CONFIG, TILE_KEYS, tileCacheKey)
+├ lib/argus/tiles/overdue-investigations.ts
+├ lib/argus/tiles/stop-work-active.ts
+├ lib/argus/tiles/reportability-uncertain.ts
+├ lib/argus/tiles/capa-overdue.ts
+├ lib/argus/tiles/capa-index-summary.ts
+├ lib/argus/tiles/inspections-due-summary.ts
+├ lib/argus/tiles/reports-pending-summary.ts
+├ lib/argus/tools/tile-insight.ts                    (shared structured-output tool)
+├ lib/argus/system-prompts/panel.md                  (panel_chat base prompt)
+├ lib/argus/system-prompts/tile-overdue-investigations.md
+├ lib/argus/system-prompts/tile-stop-work-active.md
+├ lib/argus/system-prompts/tile-reportability-uncertain.md
+├ lib/argus/system-prompts/tile-capa-overdue.md
+├ lib/argus/system-prompts/tile-capa-index-summary.md
+├ lib/argus/system-prompts/tile-inspections-due-summary.md
+├ lib/argus/system-prompts/tile-reports-pending-summary.md
+├ app/api/argus/tile/route.ts
+├ components/argus/argus-context.tsx                 (provider + payload + hook)
+├ components/argus/argus-insight-tile.tsx
+└ components/argus/use-argus-insight-tile.ts
+
+CHANGED
+├ app/(app)/layout.tsx                               (wrap in ArgusContextProvider)
+├ app/(app)/dashboard/page.tsx                       (4 tiles + payload + hasActiveSignal)
+├ app/(app)/incidents/[id]/page.tsx                  (payload mount)
+├ app/(app)/investigations/[id]/page.tsx             (payload mount)
+├ app/(app)/capa/[id]/page.tsx                       (payload mount)
+├ app/(app)/inspections/[id]/page.tsx                (payload mount)
+├ app/(app)/capa/page.tsx                            (1 tile + payload + hasActiveSignal)
+├ app/(app)/inspections/page.tsx                     (1 tile + payload + hasActiveSignal)
+├ app/(app)/reports/page.tsx                         (1 tile + payload + hasActiveSignal)
+├ app/api/argus/stream/route.ts                      (panel_chat surface + page-context system block)
+├ components/app-shell/topbar.tsx                    (Argus → right of bell)
+├ components/argus/argus-side-panel.tsx              (chip + chips + dot indicator)
+├ lib/argus/gates.ts                                 (tile bucket auto-routing)
+├ lib/argus/log.ts                                   (targetKind: + 'inspection' | 'report' | 'page')
+├ lib/argus/models.ts                                (7 tile_* + panel_chat surfaces)
+├ lib/argus/ratelimit.ts                             (new 'tile' bucket — 20/min/user)
+├ docs/SPEC.md                                       (§16 9e subsection)
+├ CLAUDE.md                                          (build status one-liner bump)
+└ docs/BUILD_STATUS.md                               (this entry)
+```
+
+### Pre-merge
+
+`pnpm build` clean across all changes. Live model smoke gated on `GEMINI_API_KEY` in `.env.local`; pre-merge walkthrough — open `/dashboard`, watch four skeletons resolve into Insight Tiles within 6s; reload within TTL → cache hits in <100ms (verify via DevTools → Network); open the side panel from `/incidents/<id>` → header chip reads `Incident IR-NNN · <site>`; suggestion chips submit + stream a grounded answer; tile-flag dot lights when any of the four dashboard tiles has a non-zero count.
+
+---
+
 ## Workflow notes
 
-Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding + Phase 13 Site Setup OSHA + RIDDOR + Phase 9a Argus Foundation + Phase 9b Argus Copilot + Phase 9c Argus Investigator + Phase 9d Argus Magic Wands (Gemini pivot) shipped. Next per the roadmap: Phase 9e global side panel + Dashboard tiles → Phase 7 (global search backend, consumes the 6l shell) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
+Phase 6 polish + Phase 8 Settings + Phase 12 Auth & Onboarding + Phase 13 Site Setup OSHA + RIDDOR + Phase 9a Argus Foundation + Phase 9b Argus Copilot + Phase 9c Argus Investigator + Phase 9d Argus Magic Wands (Gemini pivot) + Phase 9e Argus Global Panel + Insight Tiles shipped. Phase 9 closed. Next per the roadmap: Phase 7 (global search backend, consumes the 6l shell) → Phase 10 (Safety Bulletin + wizard 3→4 step restructure). Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.

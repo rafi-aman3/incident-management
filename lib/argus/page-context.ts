@@ -48,6 +48,13 @@ export interface ArgusPageContext {
   records?: ArgusContextRecord[];
   /** Small numeric aggregates the model can reference. No PII. */
   aggregates?: Record<string, number>;
+  /**
+   * True when this page renders Insight Tiles whose aggregator returned a
+   * non-zero count worth flagging. The Sparkles trigger paints a cyan dot
+   * when this is set so users notice attention is needed without opening
+   * the side panel.
+   */
+  hasActiveSignal?: boolean;
 }
 
 /**
