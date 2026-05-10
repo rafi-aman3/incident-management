@@ -683,7 +683,7 @@ Shipped 2026-05-10 on `feat/phase-9e-argus-panel-and-tiles`. Closes Phase 9. Two
 - `lib/argus/availability.ts` — `isArgusAvailable(orgId)` server helper. Combines `orgs.argus_enabled` + `orgCan('argus:use')` so the page render gates on it.
 - `lib/argus/ratelimit.ts` — new `tile` bucket (20/min/user). `runArgusGates(surface)` auto-routes any `tile_*` surface here; the inferred bucket means no caller change.
 - `lib/argus/models.ts` — 7 `tile_*` keys added to `ArgusSurface` + `TIER_BY_SURFACE` (all smart, thinking off).
-- UI: `components/argus/argus-insight-tile.tsx` (skeleton / resolved / empty / error states; cyan accent; `[Re-assess]` button with the link label model-suggestable but href server-controlled) + `components/argus/use-argus-insight-tile.ts` (SWR-style fetch keyed on `freshnessKey`; manual `refresh` for the link).
+- UI: `components/argus/argus-insight-tile.tsx` (idle / loading / resolved / empty / error states; cyan accent; explicit **"Analyse with Argus"** button on idle — tiles never auto-fire model calls on mount; once analysed, `[Re-assess]` button forces a fresh call; recommended-action label is model-suggestable but the href stays server-controlled) + `components/argus/use-argus-insight-tile.ts` (exposes `analyze` + `refresh`; no auto-`useEffect`).
 - 4 dashboard tiles (overdue investigations · stop-work active · reportability uncertain · CAPA overdue) in a 2×2 grid below KPIs, each gated by its read permission. 1 tile each on `/capa` (cluster summary), `/inspections` (in-progress + recent failed), `/reports` (OSHA-301 7-day deadline + YTD pulse).
 
 ### Topbar polish (commit 3)
@@ -748,7 +748,7 @@ CHANGED
 
 ### Pre-merge
 
-`pnpm build` clean across all changes. Live model smoke gated on `GEMINI_API_KEY` in `.env.local`; pre-merge walkthrough — open `/dashboard`, watch four skeletons resolve into Insight Tiles within 6s; reload within TTL → cache hits in <100ms (verify via DevTools → Network); open the side panel from `/incidents/<id>` → header chip reads `Incident IR-NNN · <site>`; suggestion chips submit + stream a grounded answer; tile-flag dot lights when any of the four dashboard tiles has a non-zero count.
+`pnpm build` clean across all changes. Live model smoke gated on `GEMINI_API_KEY` in `.env.local`; pre-merge walkthrough — open `/dashboard`, confirm the four Insight Tile cards render in their idle state with an **"Analyse with Argus"** button (no automatic model calls); click Analyse on each → card resolves within 6s, `argus_suggestions` row written; click `[Re-assess]` → fresh call with `force-<ts>` suffix in the freshness key. Open the side panel from `/incidents/<id>` → header chip reads `Incident IR-NNN · <site>`; suggestion chips submit + stream a grounded answer; tile-flag dot lights when any of the four dashboard tiles has a non-zero aggregator count (the dot is set server-side from the aggregator output, no model call required).
 
 ---
 

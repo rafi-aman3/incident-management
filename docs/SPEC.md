@@ -611,7 +611,7 @@ Push commits via the existing `saveInvestigationText` / `saveWhy` actions — no
 
 A `pageContext.hasActiveSignal` flag — set by tile-rendering pages when any aggregator signals attention — paints a small cyan dot on the Sparkles trigger. No multi-turn yet (single user turn → single Argus turn per panel open); tracked in 9.1.
 
-**Surface 2 — Insight Tiles.** Seven `<ArgusInsightTile>` mounts share one route handler at `/api/argus/tile` and one structured-output tool (`tile_insight`). Each tile auto-loads on first paint. Output envelope is identical across tiles so the component never branches:
+**Surface 2 — Insight Tiles.** Seven `<ArgusInsightTile>` mounts share one route handler at `/api/argus/tile` and one structured-output tool (`tile_insight`). **Tiles never auto-fire** — each card opens in an idle state with an "Analyse with Argus" button; the user clicks to spend any tokens. The Sparkles trigger's `hasActiveSignal` dot is still set server-side from the aggregator output (no model call), so users can tell where attention is needed before clicking. Output envelope is identical across tiles so the component never branches:
 
 ```ts
 { summary, rationale, confidence, nothing_to_flag?, recommended_action_label? }
@@ -629,7 +629,7 @@ A `pageContext.hasActiveSignal` flag — set by tile-rendering pages when any ag
 
 Smart-tier with `thinking: 'off'` — Pro produces tighter prose for the same cost as Flash here, and the latency overhead from thinking would be visible on first-paint.
 
-**Cache strategy.** Each aggregator computes a `freshnessKey` that flips the moment the underlying data changes (e.g. `count + max(updated_at)`, or `count + max(stop_work_raised_at)` for the high-stakes stop-work tile). The route handler hashes `tile + freshnessKey` to a deterministic UUIDv5 and looks up `argus_suggestions WHERE surface='tile_<key>' AND target_kind='page' AND target_id=<hash> AND created_at >= now() - TTL`. Cache hits skip the model entirely; cache misses write a fresh row (`outcome='pending'`, `payload.kind='tile'`). The deterministic UUID means multiple users on the same org can share a single model call per (tile, freshness) snapshot.
+**Cache strategy.** Each aggregator computes a `freshnessKey` that flips the moment the underlying data changes (e.g. `count + max(updated_at)`, or `count + max(stop_work_raised_at)` for the high-stakes stop-work tile). The route handler hashes `tile + freshnessKey` to a deterministic UUIDv5 and looks up `argus_suggestions WHERE surface='tile_<key>' AND target_kind='page' AND target_id=<hash> AND created_at >= now() - TTL`. Cache hits skip the model entirely; cache misses write a fresh row (`outcome='pending'`, `payload.kind='tile'`). The deterministic UUID means multiple users on the same org can share a single model call per (tile, freshness) snapshot — useful even with the explicit-Analyse default, because the second viewer to click on the same signal hits the cache for free.
 
 **Wire format.** Non-streaming JSON envelope, mirroring 9d's wand route:
 

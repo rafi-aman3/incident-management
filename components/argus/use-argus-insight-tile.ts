@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type {
   TileAggregatorPayload,
   TileInsightOutput,
@@ -9,12 +9,14 @@ import type {
 
 /**
  * Phase 9e — fetch hook for `<ArgusInsightTile>`. POST to /api/argus/tile,
- * track loading / resolved / error / empty states, expose a manual
- * `refresh` for the [Re-assess] link.
+ * track idle / loading / resolved / error states, expose `analyze` (the
+ * user's "Analyse" click) and `refresh` (the cache-busting [Re-assess]).
  *
- * SWR-style: when the prop `payload.freshnessKey` changes, we re-fetch.
- * Otherwise the hook fires once per mount and trusts the server-side cache
- * to serve repeat requests cheaply.
+ * Tiles never auto-fire — the user is always the one who triggers an LLM
+ * call. Avoids surprise spend on dashboard / index loads and keeps the AI
+ * surface explicitly opt-in. The server still caches hits across users via
+ * `argus_suggestions(target_id=cacheKey)`, so a click on a known signal is
+ * effectively free for the second user.
  */
 
 interface UseArgusInsightTileArgs {
@@ -30,6 +32,7 @@ export interface UseArgusInsightTileResult {
   modelUsed: string | null;
   cached: boolean;
   error: string | null;
+  analyze: () => void;
   refresh: () => void;
 }
 
@@ -93,12 +96,10 @@ export function useArgusInsightTile({
         setStatus("error");
       }
     },
-    // payload identity changes on each render in practice; the freshnessKey
-    // dedupe inside fetchTile keeps us from calling twice for the same data.
     [tile, payload.freshnessKey, payload.siteId, payload.aggregates, payload.recordRefs],
   );
 
-  useEffect(() => {
+  const analyze = useCallback(() => {
     void fetchTile(false);
   }, [fetchTile]);
 
@@ -106,5 +107,5 @@ export function useArgusInsightTile({
     void fetchTile(true);
   }, [fetchTile]);
 
-  return { status, output, modelUsed, cached, error, refresh };
+  return { status, output, modelUsed, cached, error, analyze, refresh };
 }

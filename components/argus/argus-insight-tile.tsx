@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, ArrowRight, RotateCcw } from "lucide-react";
+import { Sparkles, ArrowRight, RotateCcw, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useArgusInsightTile } from "./use-argus-insight-tile";
 import {
@@ -11,10 +11,16 @@ import {
 } from "@/lib/argus/tiles";
 
 /**
- * Phase 9e — read-only Argus Insight Tile. One reusable card with four
- * states: skeleton, resolved, empty (`nothing_to_flag`), error. Same visual
- * language as 9d's wand suggestion-card so users learn one Argus shape:
- * cyan accent border, Sparkles glyph, "Argus insight" eyebrow.
+ * Phase 9e — read-only Argus Insight Tile. One reusable card with five
+ * states: idle (waiting for user click), loading, resolved, empty
+ * (`nothing_to_flag`), error. Same visual language as 9d's wand
+ * suggestion-card so users learn one Argus shape: cyan accent border,
+ * Sparkles glyph, "Argus insight" eyebrow.
+ *
+ * Tiles do NOT auto-analyse on mount. The user clicks "Analyse with Argus"
+ * to spend any tokens. Server-side `argus_suggestions` cache still means a
+ * second user on the same signal hits the cache instantly. This makes AI
+ * spend explicit and surprise-free.
  *
  * The recommended-action label is model-influenced but the destination URL
  * stays server-controlled (TILE_CONFIG[tile].defaultHref or a per-mount
@@ -28,6 +34,9 @@ interface ArgusInsightTileProps {
   href?: string;
   /** Optional default label — model can override via recommended_action_label. */
   hrefLabel?: string;
+  /** Short pre-analyse label so the idle card hints at the signal.
+   *  Falls back to TILE_CONFIG[tile].defaultHrefLabel. */
+  idleHint?: string;
 }
 
 export function ArgusInsightTile({
@@ -35,23 +44,24 @@ export function ArgusInsightTile({
   payload,
   href,
   hrefLabel,
+  idleHint,
 }: ArgusInsightTileProps) {
   const config = TILE_CONFIG[tile];
-  const { status, output, cached, error, refresh } = useArgusInsightTile({
+  const { status, output, cached, error, analyze, refresh } = useArgusInsightTile({
     tile,
     payload,
   });
 
   const targetHref = href ?? config.defaultHref;
   const label = output?.recommended_action_label ?? hrefLabel ?? config.defaultHrefLabel;
+  const idleLabel = idleHint ?? config.defaultHrefLabel;
 
-  if (status === "loading" || status === "idle") {
+  if (status === "idle") {
     return (
       <article
         className="rounded-md border border-l-4 bg-card p-4"
         style={{ borderLeftColor: "var(--argus-accent, #00D4FF)" }}
-        aria-busy="true"
-        aria-label="Argus insight loading"
+        aria-label="Argus insight — analyse on demand"
       >
         <div className="mb-2 flex items-center gap-1.5">
           <Sparkles
@@ -60,6 +70,40 @@ export function ArgusInsightTile({
           />
           <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Argus insight
+          </span>
+        </div>
+        <p className="text-sm leading-snug text-muted-foreground">{idleLabel}</p>
+        <button
+          type="button"
+          onClick={analyze}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
+          style={{ borderColor: "var(--argus-accent, #00D4FF)" }}
+        >
+          <Sparkles
+            className="h-3.5 w-3.5"
+            style={{ color: "var(--argus-accent, #00D4FF)" }}
+          />
+          Analyse with Argus
+        </button>
+      </article>
+    );
+  }
+
+  if (status === "loading") {
+    return (
+      <article
+        className="rounded-md border border-l-4 bg-card p-4"
+        style={{ borderLeftColor: "var(--argus-accent, #00D4FF)" }}
+        aria-busy="true"
+        aria-label="Argus insight analysing"
+      >
+        <div className="mb-2 flex items-center gap-1.5">
+          <Loader2
+            className="h-3.5 w-3.5 animate-spin"
+            style={{ color: "var(--argus-accent, #00D4FF)" }}
+          />
+          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Argus analysing…
           </span>
         </div>
         <Skeleton className="mb-2 h-4 w-4/5" />
