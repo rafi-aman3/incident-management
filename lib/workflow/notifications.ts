@@ -24,7 +24,8 @@ export type NotificationKind =
   | "riddor_disease"
   | "capa_overdue"
   | "capa_escalated"
-  | "assigned";
+  | "assigned"
+  | "stop_work_raised";
 
 /**
  * Site jurisdiction. Driven by sites.country in v1; setup_progress.regulator

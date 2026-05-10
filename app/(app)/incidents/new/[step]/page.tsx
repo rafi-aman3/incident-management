@@ -2,10 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
+import { orgCan } from "@/lib/auth/orgCan";
 import { Step1WhatHappened } from "@/components/incidents/wizard/step-1-what-happened";
 import { Step2Details } from "@/components/incidents/wizard/step-2-details";
 import { Step3Review } from "@/components/incidents/wizard/step-3-review";
 import { WizardProgress } from "@/components/incidents/wizard/wizard-progress";
+import { ArgusFormAssistant } from "@/components/argus/argus-form-assistant";
+import { ensureBlankDraft } from "./actions";
 import type { IncidentType } from "@/lib/incidents/types";
 import type { Treatment } from "@/lib/workflow/routing";
 import type { MatrixCoord } from "@/lib/workflow/severity";
@@ -26,11 +29,19 @@ export default async function ReportWizardPage({
   const stepNum = Number.parseInt(step, 10);
   if (![1, 2, 3].includes(stepNum)) notFound();
 
-  const incidentId = typeof sp.id === "string" ? sp.id : null;
+  let incidentId = typeof sp.id === "string" ? sp.id : null;
   const initialSandbox = sp.sandbox === "true";
 
+  // Phase 9b: Step 1 always has an incident row (created on first load) so
+  // the Argus Form Assistant can target an incidentId. Steps 2 + 3 require
+  // the user to come from Step 1's submit (which redirected with ?id=).
+  if (stepNum === 1 && !incidentId) {
+    const draftId = await ensureBlankDraft();
+    redirect(`/incidents/new/1?id=${draftId}${initialSandbox ? "&sandbox=true" : ""}`);
+  }
+
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 py-8">
+    <div className="space-y-4">
       <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 ring-1 ring-foreground/5">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">
           <Link href="/incidents" className="hover:underline">
@@ -53,9 +64,16 @@ export default async function ReportWizardPage({
           </div>
         </div>
       </div>
+      {/* Argus Form Assistant — inline collapsible strip above the step tabs.
+          Mounts on every step (Step 1 has a pre-created blank draft; 2+3
+          have the draft from Step 1 submit). Per the assets/ mock, this
+          lives BETWEEN the page header and the step progress. */}
+      {incidentId && <FormAssistantMount incidentId={incidentId} />}
+
       <WizardProgress current={stepNum as 1 | 2 | 3} />
 
-      {stepNum === 1 && <Step1WhatHappened initialSandbox={initialSandbox} />}
+      {stepNum === 1 &&
+        (incidentId ? <Step1Server incidentId={incidentId} initialSandbox={initialSandbox} /> : <MissingId />)}
       {stepNum === 2 && (incidentId ? <Step2Server incidentId={incidentId} /> : <MissingId />)}
       {stepNum === 3 &&
         (incidentId ? (
@@ -69,6 +87,61 @@ export default async function ReportWizardPage({
         ))}
     </div>
   );
+}
+
+async function Step1Server({
+  incidentId,
+  initialSandbox,
+}: {
+  incidentId: string;
+  initialSandbox: boolean;
+}) {
+  const { supabase, user } = await requireUser();
+
+  const { data: incident } = await supabase
+    .from("incidents")
+    .select("id, type, title, description, occurred_at, area, location, is_sandbox, reporter_id, status, updated_at")
+    .eq("id", incidentId)
+    .single();
+
+  if (!incident) notFound();
+  if (incident.reporter_id !== user.id) notFound();
+  if (incident.status !== "draft") redirect(`/incidents/${incidentId}`);
+
+  return (
+    // key={updated_at} forces a remount when Argus auto-fill writes back —
+    // Step1WhatHappened uses useState seeded from `initial`, which would
+    // otherwise ignore prop changes after the first mount.
+    <Step1WhatHappened
+      key={incident.updated_at ?? incident.id}
+      incidentId={incidentId}
+      initialSandbox={initialSandbox}
+      initial={{
+        type: (incident.type as IncidentType) ?? null,
+        title: incident.title ?? "",
+        description: incident.description ?? "",
+        occurred_at: incident.occurred_at ?? null,
+        area: incident.area ?? "",
+        location: incident.location ?? "",
+        is_sandbox: incident.is_sandbox,
+      }}
+    />
+  );
+}
+
+async function FormAssistantMount({ incidentId }: { incidentId: string }) {
+  const { profile, supabase } = await requireUser();
+
+  if (profile.argus_copilot_disabled) return null;
+
+  const [orgArgusFlag, userArgusPerm] = await Promise.all([
+    supabase.from("orgs").select("argus_enabled").eq("id", profile.org_id).maybeSingle(),
+    orgCan("argus:use"),
+  ]);
+  const argusEnabled = Boolean(orgArgusFlag.data?.argus_enabled) && userArgusPerm;
+  if (!argusEnabled) return null;
+
+  return <ArgusFormAssistant incidentId={incidentId} />;
 }
 
 function MissingId() {
@@ -86,7 +159,7 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
   const { data: incident } = await supabase
     .from("incidents")
     .select(
-      `id, type, status, is_sandbox, reporter_id, site_id, ppe_worn, substance,
+      `id, type, status, is_sandbox, reporter_id, site_id, updated_at, ppe_worn, substance,
        quantity_value, quantity_unit, equipment, dangerous_occurrence_kind,
        equipment_asset_id,
        sites:site_id(country),
@@ -111,7 +184,11 @@ async function Step2Server({ incidentId }: { incidentId: string }) {
   ]);
 
   return (
+    // key={updated_at} forces a remount when Argus auto-fill writes back —
+    // Step2Details uses useState(initial), which would otherwise ignore prop
+    // changes after the first mount.
     <Step2Details
+      key={incident.updated_at ?? incident.id}
       incidentId={incidentId}
       orgId={profile.org_id}
       siteId={incident.site_id}
@@ -151,7 +228,7 @@ async function Step3Server({
   const { data: incident } = await supabase
     .from("incidents")
     .select(
-      "id, type, title, occurred_at, area, location, description, is_sandbox, reporter_id, status"
+      "id, type, title, occurred_at, area, location, description, is_sandbox, reporter_id, status, updated_at"
     )
     .eq("id", incidentId)
     .single();
@@ -188,7 +265,10 @@ async function Step3Server({
   }
 
   return (
+    // key={updated_at} forces a remount when Argus auto-fill writes back —
+    // Step3Review uses useState(initial) for its editable fields.
     <Step3Review
+      key={incident.updated_at ?? incident.id}
       incidentId={incidentId}
       type={incident.type as IncidentType}
       title={incident.title}

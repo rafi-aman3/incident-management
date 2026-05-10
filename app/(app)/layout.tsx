@@ -5,6 +5,7 @@ import { SidebarShell } from "@/components/app-shell/sidebar-shell";
 import { SIDEBAR_PINNED_COOKIE } from "@/components/app-shell/sidebar-cookie";
 import { Topbar } from "@/components/app-shell/topbar";
 import { RegulatoryBanner } from "@/components/app-shell/regulatory-banner";
+import { StopWorkBanner, type ActiveStopWork } from "@/components/app-shell/stop-work-banner";
 import { NAV_ITEMS, ROLE_BADGE } from "@/components/app-shell/nav-config";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/supabase/auth";
@@ -118,6 +119,26 @@ async function AppShell({ children }: { children: ReactNode }) {
   ]);
   const argusEnabled = Boolean(orgArgusFlag.data?.argus_enabled) && userArgusPerm;
 
+  // Active stop-works across the user's accessible sites. RLS already filters
+  // incidents by site access; the .is(null) filter excludes acknowledged ones.
+  const { data: stopWorkRows } = await supabase
+    .from("incidents")
+    .select("id, ref_code, title, stop_work_reason, stop_work_raised_at, stop_work_raised_by, site_id, sites:site_id(name)")
+    .eq("stop_work", true)
+    .is("stop_work_acknowledged_at", null)
+    .order("stop_work_raised_at", { ascending: false })
+    .limit(10);
+  const activeStopWorks: ActiveStopWork[] = (stopWorkRows ?? []).map((r) => ({
+    id: r.id,
+    ref_code: r.ref_code,
+    title: r.title,
+    reason: r.stop_work_reason,
+    raised_at: r.stop_work_raised_at,
+    raised_by: r.stop_work_raised_by,
+    site_id: r.site_id,
+    site_name: r.sites?.name ?? null,
+  }));
+
   return (
     <SidebarShell
       defaultPinned={sidebarPinned}
@@ -138,7 +159,12 @@ async function AppShell({ children }: { children: ReactNode }) {
           argusEnabled={argusEnabled}
         />
       }
-      banner={<RegulatoryBanner deadlines={notifications} />}
+      banner={
+        <>
+          <RegulatoryBanner deadlines={notifications} />
+          <StopWorkBanner active={activeStopWorks} />
+        </>
+      }
     >
       {children}
     </SidebarShell>
