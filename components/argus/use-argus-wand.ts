@@ -54,6 +54,31 @@ export type WandRequest =
         description?: string;
         proposedMetadata?: Record<string, unknown>;
       };
+    }
+  | {
+      surface: "step_hazards";
+      payload: {
+        siteId: string;
+        jsaId: string;
+        jobTitle: string;
+        jobDescription?: string;
+        area?: string;
+        stepDescription: string;
+      };
+    }
+  | {
+      surface: "step_controls";
+      payload: {
+        siteId: string;
+        jsaId: string;
+        jobTitle: string;
+        area?: string;
+        stepDescription: string;
+        hazardDescription: string;
+        hazardCategory: string;
+        likelihood: string;
+        consequence: string;
+      };
     };
 
 export interface WandResult<T = unknown> {

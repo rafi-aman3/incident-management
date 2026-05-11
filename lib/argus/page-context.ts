@@ -25,6 +25,10 @@ export type ArgusRouteKey =
   | "hazard_detail"
   | "hazard_candidates_index"
   | "hazard_candidate_detail"
+  | "jsa_index"
+  | "jsa_detail"
+  | "jsa_edit"
+  | "jsa_perform"
   | "unknown";
 
 export type ArgusRecordKind =
@@ -139,6 +143,26 @@ export const ARGUS_PANEL_SUGGESTIONS: Record<ArgusRouteKey, string[]> = {
     "Help me write controls for this candidate.",
     "Is this a duplicate of an existing hazard?",
     "What category should I use?",
+  ],
+  jsa_index: [
+    "Which JSAs are due for re-review?",
+    "Highlight high-risk JSAs (S1/S2 step hazards).",
+    "What JSAs were flagged by recent incidents?",
+  ],
+  jsa_detail: [
+    "Are the controls listed appropriate for the hazards?",
+    "What's missing from this analysis?",
+    "Suggest review cadence for this kind of work.",
+  ],
+  jsa_edit: [
+    "Suggest hazards I might be missing.",
+    "What controls fit each level for this step?",
+    "Are these hazards scored consistently?",
+  ],
+  jsa_perform: [
+    "Highlight the most safety-critical step.",
+    "What PPE is non-negotiable for this job?",
+    "Are there hazards I should double-check?",
   ],
   unknown: [],
 };
