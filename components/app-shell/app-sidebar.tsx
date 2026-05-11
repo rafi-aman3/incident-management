@@ -76,22 +76,32 @@ export function AppSidebar({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => {
-                const Icon = item.icon;
-                const active =
-                  pathname === item.href ||
-                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
-                      <Link href={item.href}>
-                        <Icon />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+              {(() => {
+                // Pick the single most-specific matching item so prefix overlaps
+                // (e.g. /incidents/new/1 vs /incidents) don't light up both rows.
+                const activeHref = items
+                  .filter(
+                    (i) =>
+                      i.href !== "/dashboard" &&
+                      (pathname === i.href || pathname.startsWith(`${i.href}/`)),
+                  )
+                  .sort((a, b) => b.href.length - a.href.length)[0]?.href
+                  ?? (pathname === "/dashboard" ? "/dashboard" : null);
+                return items.map((item) => {
+                  const Icon = item.icon;
+                  const active = item.href === activeHref;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                        <Link href={item.href}>
+                          <Icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                });
+              })()}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
