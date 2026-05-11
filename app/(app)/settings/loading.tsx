@@ -1,21 +1,29 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
+/**
+ * Top-level Settings loading skeleton. Fires while the layout's permission
+ * resolution and the initial tab's data both stream in.
+ *
+ * Per-tab skeletons live in `<tab>/loading.tsx` and override this one as soon
+ * as the layout settles — each matches the actual content of that tab so
+ * the layout never jumps when the data arrives.
+ */
 export default function SettingsLoading() {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
-      <div className="space-y-2">
+      <header className="space-y-2">
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-4 w-96" />
-      </div>
+      </header>
 
       <div className="flex flex-col gap-6 lg:flex-row">
-        {/* Sidebar rail */}
+        {/* Desktop sidebar rail */}
         <aside className="hidden lg:block lg:w-56 lg:shrink-0">
           <div className="space-y-5">
-            {Array.from({ length: 4 }).map((_, g) => (
+            {[3, 1, 2, 3].map((rows, g) => (
               <div key={g} className="space-y-1.5 px-3">
                 <Skeleton className="h-3 w-20" />
-                {Array.from({ length: 2 + (g % 2) }).map((_, t) => (
+                {Array.from({ length: rows }).map((_, t) => (
                   <Skeleton key={t} className="h-7 w-full" />
                 ))}
               </div>
@@ -23,25 +31,20 @@ export default function SettingsLoading() {
           </div>
         </aside>
 
-        {/* Mobile select */}
+        {/* Mobile select trigger */}
         <div className="mb-4 lg:hidden">
           <Skeleton className="h-9 w-full" />
         </div>
 
-        {/* Content area */}
-        <section className="flex-1 min-w-0 space-y-4">
+        {/* Generic content placeholder — replaced by per-tab loading.tsx
+            as soon as the layout finishes resolving permissions. */}
+        <section className="flex-1 min-w-0">
           <div className="space-y-4 rounded-lg border bg-card p-5">
-            <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-3 w-72" />
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="space-y-1.5">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-9 w-full" />
-              </div>
-            ))}
-            <div className="flex justify-end">
-              <Skeleton className="h-9 w-28" />
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-3 w-72" />
             </div>
+            <Skeleton className="h-32 w-full" />
           </div>
         </section>
       </div>
