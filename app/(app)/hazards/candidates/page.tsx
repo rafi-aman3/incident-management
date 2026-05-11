@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { CandidateQueue, type CandidateRow } from "@/components/hazards/candidate-queue";
 import { SdsImportModal, type SdsModalSite } from "@/components/sds/sds-import-modal";
-import { Button } from "@/components/ui/button";
 
 const SOURCE_LABEL: Record<string, string> = {
   worker_report: "Worker report",

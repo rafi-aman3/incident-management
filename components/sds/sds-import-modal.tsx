@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Download, Beaker } from "lucide-react";
@@ -39,16 +39,14 @@ export function SdsImportModal({
   defaultOpen?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(defaultOpen ?? false);
+  // defaultOpen is read once on mount via initial state — re-mount the
+  // component (via key change in the parent) to re-honor a later truthy
+  // value. Avoids the setState-in-effect lint complaint.
+  const [open, setOpen] = useState(Boolean(defaultOpen));
   const [pending, startTransition] = useTransition();
   const [siteId, setSiteId] = useState<string>(defaultSiteId ?? sites[0]?.id ?? "");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-
-  // Honor ?action=import-sds deep link by syncing open prop one-way on mount.
-  useEffect(() => {
-    if (defaultOpen) setOpen(true);
-  }, [defaultOpen]);
 
   function toggle(id: string) {
     setSelected((prev) => {
