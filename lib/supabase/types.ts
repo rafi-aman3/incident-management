@@ -2615,6 +2615,8 @@ export type Database = {
           is_demo: boolean
           logo_url: string | null
           name: string
+          onboarding_dismissed: string[]
+          onboarding_use_cases: string[]
           slug: string
           updated_at: string
         }
@@ -2627,6 +2629,8 @@ export type Database = {
           is_demo?: boolean
           logo_url?: string | null
           name: string
+          onboarding_dismissed?: string[]
+          onboarding_use_cases?: string[]
           slug: string
           updated_at?: string
         }
@@ -2639,6 +2643,8 @@ export type Database = {
           is_demo?: boolean
           logo_url?: string | null
           name?: string
+          onboarding_dismissed?: string[]
+          onboarding_use_cases?: string[]
           slug?: string
           updated_at?: string
         }
