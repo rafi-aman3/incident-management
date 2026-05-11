@@ -376,7 +376,7 @@ export type Database = {
           incident_id: string | null
           investigation_id: string | null
           org_id: string
-          owner_id: string
+          owner_id: string | null
           progress_pct: number
           re_verify_at: string | null
           ref_code: string | null
@@ -407,7 +407,7 @@ export type Database = {
           incident_id?: string | null
           investigation_id?: string | null
           org_id: string
-          owner_id: string
+          owner_id?: string | null
           progress_pct?: number
           re_verify_at?: string | null
           ref_code?: string | null
@@ -438,7 +438,7 @@ export type Database = {
           incident_id?: string | null
           investigation_id?: string | null
           org_id?: string
-          owner_id?: string
+          owner_id?: string | null
           progress_pct?: number
           re_verify_at?: string | null
           ref_code?: string | null
@@ -862,7 +862,7 @@ export type Database = {
       hazard_risk_assessments: {
         Row: {
           assessed_at: string
-          assessor_id: string
+          assessor_id: string | null
           consequence: string
           consulted_worker_ids: string[]
           created_at: string
@@ -880,7 +880,7 @@ export type Database = {
         }
         Insert: {
           assessed_at?: string
-          assessor_id: string
+          assessor_id?: string | null
           consequence: string
           consulted_worker_ids?: string[]
           created_at?: string
@@ -898,7 +898,7 @@ export type Database = {
         }
         Update: {
           assessed_at?: string
-          assessor_id?: string
+          assessor_id?: string | null
           consequence?: string
           consulted_worker_ids?: string[]
           created_at?: string
@@ -1215,7 +1215,7 @@ export type Database = {
           hazard_id: string
           id: string
           identified_at: string
-          identified_by: string
+          identified_by: string | null
           incident_id: string
           link_type: string
           notes: string | null
@@ -1227,7 +1227,7 @@ export type Database = {
           hazard_id: string
           id?: string
           identified_at?: string
-          identified_by: string
+          identified_by?: string | null
           incident_id: string
           link_type: string
           notes?: string | null
@@ -1239,7 +1239,7 @@ export type Database = {
           hazard_id?: string
           id?: string
           identified_at?: string
-          identified_by?: string
+          identified_by?: string | null
           incident_id?: string
           link_type?: string
           notes?: string | null
@@ -2132,7 +2132,7 @@ export type Database = {
           created_at: string
           id: string
           identified_at: string
-          identified_by: string
+          identified_by: string | null
           incident_id: string
           jsa_id: string
           link_type: string
@@ -2143,7 +2143,7 @@ export type Database = {
           created_at?: string
           id?: string
           identified_at?: string
-          identified_by: string
+          identified_by?: string | null
           incident_id: string
           jsa_id: string
           link_type: string
@@ -2154,7 +2154,7 @@ export type Database = {
           created_at?: string
           id?: string
           identified_at?: string
-          identified_by?: string
+          identified_by?: string | null
           incident_id?: string
           jsa_id?: string
           link_type?: string
@@ -2200,7 +2200,7 @@ export type Database = {
           notes: string | null
           signed_at: string
           signed_for_session: string | null
-          worker_id: string
+          worker_id: string | null
         }
         Insert: {
           created_at?: string
@@ -2209,7 +2209,7 @@ export type Database = {
           notes?: string | null
           signed_at?: string
           signed_for_session?: string | null
-          worker_id: string
+          worker_id?: string | null
         }
         Update: {
           created_at?: string
@@ -2218,7 +2218,7 @@ export type Database = {
           notes?: string | null
           signed_at?: string
           signed_for_session?: string | null
-          worker_id?: string
+          worker_id?: string | null
         }
         Relationships: [
           {
@@ -2380,7 +2380,7 @@ export type Database = {
           approved_by: string | null
           area: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           deleted_at: string | null
           estimated_duration_minutes: number | null
           expires_at: string | null
@@ -2403,7 +2403,7 @@ export type Database = {
           approved_by?: string | null
           area?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           deleted_at?: string | null
           estimated_duration_minutes?: number | null
           expires_at?: string | null
@@ -2426,7 +2426,7 @@ export type Database = {
           approved_by?: string | null
           area?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           deleted_at?: string | null
           estimated_duration_minutes?: number | null
           expires_at?: string | null
@@ -2613,6 +2613,7 @@ export type Database = {
           id: string
           industry: Database["public"]["Enums"]["industry_type"] | null
           is_demo: boolean
+          logo_url: string | null
           name: string
           slug: string
           updated_at: string
@@ -2624,6 +2625,7 @@ export type Database = {
           id?: string
           industry?: Database["public"]["Enums"]["industry_type"] | null
           is_demo?: boolean
+          logo_url?: string | null
           name: string
           slug: string
           updated_at?: string
@@ -2635,6 +2637,7 @@ export type Database = {
           id?: string
           industry?: Database["public"]["Enums"]["industry_type"] | null
           is_demo?: boolean
+          logo_url?: string | null
           name?: string
           slug?: string
           updated_at?: string
@@ -2659,6 +2662,7 @@ export type Database = {
       profiles: {
         Row: {
           argus_copilot_disabled: boolean
+          argus_panel_default: boolean
           created_at: string
           department: string | null
           email: string
@@ -2667,10 +2671,12 @@ export type Database = {
           onboarded_at: string | null
           org_id: string
           seen_welcome: boolean
+          sidebar_hidden_items: string[]
           updated_at: string
         }
         Insert: {
           argus_copilot_disabled?: boolean
+          argus_panel_default?: boolean
           created_at?: string
           department?: string | null
           email: string
@@ -2679,10 +2685,12 @@ export type Database = {
           onboarded_at?: string | null
           org_id: string
           seen_welcome?: boolean
+          sidebar_hidden_items?: string[]
           updated_at?: string
         }
         Update: {
           argus_copilot_disabled?: boolean
+          argus_panel_default?: boolean
           created_at?: string
           department?: string | null
           email?: string
@@ -2691,6 +2699,7 @@ export type Database = {
           onboarded_at?: string | null
           org_id?: string
           seen_welcome?: boolean
+          sidebar_hidden_items?: string[]
           updated_at?: string
         }
         Relationships: [
@@ -2917,7 +2926,7 @@ export type Database = {
           incident_id: string
           new_severity: Database["public"]["Enums"]["severity"]
           original_severity: Database["public"]["Enums"]["severity"]
-          overridden_by: string
+          overridden_by: string | null
           reason: string
         }
         Insert: {
@@ -2926,7 +2935,7 @@ export type Database = {
           incident_id: string
           new_severity: Database["public"]["Enums"]["severity"]
           original_severity: Database["public"]["Enums"]["severity"]
-          overridden_by: string
+          overridden_by?: string | null
           reason: string
         }
         Update: {
@@ -2935,7 +2944,7 @@ export type Database = {
           incident_id?: string
           new_severity?: Database["public"]["Enums"]["severity"]
           original_severity?: Database["public"]["Enums"]["severity"]
-          overridden_by?: string
+          overridden_by?: string | null
           reason?: string
         }
         Relationships: [
@@ -3625,6 +3634,32 @@ export type Database = {
           },
         ]
       }
+      user_notification_silences: {
+        Row: {
+          created_at: string
+          notification_kind: Database["public"]["Enums"]["notification_kind"]
+          profile_id: string
+        }
+        Insert: {
+          created_at?: string
+          notification_kind: Database["public"]["Enums"]["notification_kind"]
+          profile_id: string
+        }
+        Update: {
+          created_at?: string
+          notification_kind?: Database["public"]["Enums"]["notification_kind"]
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notification_silences_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       witnesses: {
         Row: {
           contact: string | null
@@ -4254,6 +4289,10 @@ export type Database = {
         Args: { p_inspection_id: string }
         Returns: undefined
       }
+      count_org_configure_holders: {
+        Args: { p_org_id: string }
+        Returns: number
+      }
       create_invitation_v1: {
         Args: {
           p_email: string
@@ -4337,6 +4376,7 @@ export type Database = {
         Args: { p_prefix: string; p_seq: string }
         Returns: string
       }
+      org_delete_summary: { Args: { p_org_id: string }; Returns: Json }
       org_id_of_event: {
         Args: { e: Database["public"]["Tables"]["activity_events"]["Row"] }
         Returns: string

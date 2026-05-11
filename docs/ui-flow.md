@@ -38,7 +38,16 @@ This is the **page-by-page contract**: every route, what it shows, what the user
 /reports/riddor-f2508/[incidentId]      EHS Manager+ · UK F2508 form
 /admin/site-setup                       Site Admin · 7-step wizard (see docs/onboarding.md §5)
 /admin/site-setup/[step]                Site Admin · Wizard steps 1–7
-/settings                               All users · Account preferences (profile, password, theme, sign out)
+/settings                               All users · Redirects to /settings/profile
+/settings/profile                       All users · Display name + department + (read-only) email
+/settings/appearance                    All users · Light / Dark / System theme
+/settings/sidebar                       All users · Hide nav items you don't use (RBAC-only access gate)
+/settings/organization                  Site Admin (org:configure) · Name + industry + logo
+/settings/argus                         All users · Side-panel auto-open toggle + org status (read-only)
+/settings/notifications                 All users · Per-kind silence (life-safety locked on)
+/settings/security                      All users · Change password + sign-out-everywhere + same-device sign-out
+/settings/cookies                       All users · Transparency table + clear non-essential local data
+/settings/delete-account                All users · Typed-email gate; sole-admin path offers delete-org-too
 /admin/* (stub)                         Site Admin · Users, roles (deferred to P3+)
 ```
 

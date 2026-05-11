@@ -18,6 +18,7 @@ export function Topbar({
   currentSiteName,
   roleKey,
   argusEnabled,
+  argusPanelDefault = false,
 }: {
   sites: SwitcherSite[];
   currentSiteId: string | null;
@@ -29,6 +30,7 @@ export function Topbar({
   currentSiteName: string | null;
   roleKey: RoleKey;
   argusEnabled: boolean;
+  argusPanelDefault?: boolean;
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -51,7 +53,7 @@ export function Topbar({
         </div>
         <HelpDrawer roleKey={roleKey} />
         <NotificationBell notifications={notifications} />
-        {argusEnabled && <ArgusSidePanel />}
+        {argusEnabled && <ArgusSidePanel initialOpen={argusPanelDefault} />}
         <UserMenu
           fullName={fullName}
           email={email}

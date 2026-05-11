@@ -35,7 +35,7 @@ export function CapaModals({
   members,
 }: {
   capaId: string;
-  ownerId: string;
+  ownerId: string | null;
   members: CapaSiteMember[];
 }) {
   const router = useRouter();
@@ -68,7 +68,7 @@ function ReassignVerifierModal({
   open: boolean;
   onClose: () => void;
   capaId: string;
-  ownerId: string;
+  ownerId: string | null;
   members: CapaSiteMember[];
 }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(

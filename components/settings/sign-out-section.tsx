@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { signOut } from "@/app/(auth)/login/actions";
 
 /**
- * Same-device sign out. No AlertDialog confirm — sign-out on this device is
- * reversible by signing back in. Sign-out-everywhere lives in the Security
- * card with its own confirm.
+ * Same-device sign-out, rendered alongside Security. Phase 17 folds this in
+ * from the old standalone SignOutCard. No AlertDialog confirm — signing back
+ * in is one click away.
  */
-export function SignOutCard() {
+export function SignOutSection() {
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -20,7 +20,10 @@ export function SignOutCard() {
     >
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 id="settings-signout-heading" className="text-base font-semibold">
+          <h2
+            id="settings-signout-heading"
+            className="text-base font-semibold"
+          >
             Sign out
           </h2>
           <p className="text-xs text-muted-foreground">

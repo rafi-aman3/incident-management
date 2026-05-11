@@ -76,6 +76,7 @@ export const PERMISSIONS = [
   "jsa:approve",
   "jsa:signoff",
   "jsa:promote_step_hazard",
+  "org:configure",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
