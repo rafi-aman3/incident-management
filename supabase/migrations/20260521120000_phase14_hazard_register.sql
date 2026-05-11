@@ -265,18 +265,20 @@ create index incident_hazard_links_hazard_idx on incident_hazard_links (hazard_i
 create or replace function generate_hazard_ref_code(p_site_id uuid) returns text
   language plpgsql security definer set search_path = public as $$
 declare
+  v_site_name text;
   v_site_code text;
   v_year      int := extract(year from now())::int;
   v_seq       int;
   v_prefix    text;
 begin
-  select coalesce(short_code, upper(substring(name from 1 for 3))) into v_site_code
-    from sites where id = p_site_id;
-  if v_site_code is null then
+  -- Derive a 3-letter site prefix from the site's name (alphanumeric only,
+  -- uppercased). The sites table has no dedicated short_code column.
+  select name into v_site_name from sites where id = p_site_id;
+  v_site_code := upper(substring(regexp_replace(coalesce(v_site_name, ''), '[^A-Za-z0-9]', '', 'g') from 1 for 3));
+  if v_site_code is null or v_site_code = '' then
     v_site_code := 'XXX';
   end if;
-  v_site_code := upper(v_site_code);
-  v_prefix    := 'HAZ-' || v_site_code || '-' || v_year::text || '-';
+  v_prefix := 'HAZ-' || v_site_code || '-' || v_year::text || '-';
   select coalesce(max((regexp_match(ref_code, '-(\d+)$'))[1]::int), 0) + 1
     into v_seq
     from hazards
