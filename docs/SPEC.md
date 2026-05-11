@@ -39,6 +39,23 @@ Three workflow modules + one continuous reporting output layer.
 | **Module 3: CAPA** | Correct & prevent | Optional after investigation. **Owner cannot close their own CAPA** |
 | **Reports** (output layer) | Regulatory compliance | Continuously generated; not a workflow step |
 
+### Surface modules (at-a-glance)
+
+| Module | Scope | What it does |
+|---|---|---|
+| **Incidents** | per-site | Report → classify (5×5 risk matrix) → route (Track A/B/C) → investigate (5-Why + evidence) → CAPA (with independent verification) → regulatory reports (OSHA 300/300A/301, RIDDOR F2508) |
+| **Templates** | org-scoped, industry-typed | System presets per industry → cloned to org-level → optional per-site assignment. Versioned; in-flight inspections snapshot the template version. |
+| **Inspections** | per-site | Run a template; scheduled (daily/weekly/monthly/custom) or one-off; failed items become findings; manual escalation to incident |
+| **Resources / Assets** | per-site (org roll-up view) | Operational asset registry: location, condition, last-inspected, PM dates, SDS link |
+| **Resources / Documents** | org-scoped | File uploads (PDF/DOC) polymorphically linkable to incident / inspection / CAPA / asset / site |
+| **Planner** | unified | Read-only calendar of past + upcoming events across all modules |
+
+### Tenancy
+
+- An **organisation** owns everything. A user belongs to exactly one org.
+- An org has multiple **sites**. Sites form a tree via `parent_site_id` (self-FK, nullable).
+- Hierarchy is **user-centric** for inheritance: data (templates, assets, incidents, …) attaches to the specific site it was created on; access propagates down the tree only when `site_members.include_children = true`.
+
 ### Three independent close events
 - **Incident closed** — capture + classification complete, incident is routed
 - **Investigation closed** — RCA finalized; may or may not trigger CAPA
