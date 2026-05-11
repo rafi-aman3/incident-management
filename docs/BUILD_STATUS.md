@@ -850,7 +850,7 @@ Shipped 2026-05-12 on `docs/split-claude-md` (PR #43, commit `289ed3d`). Doc-onl
 
 ## Phase 17 — Settings Redesign
 
-Shipped 2026-05-12 (PR #TBD). First runtime PR after the Phase 17 plan landed in PR #42 — kickoff Q&A locked all 8 plan questions plus one scope expansion (delete-org escape hatch for sole-admins). Re-architects `/settings` from a single-column 4-card account-preferences surface (Phase 8 / PR #24) into a left-sidebar IA with **4 groups / 9 nested-route tabs**. Closes the Phase 8 SPEC §15 deferral on per-user notification silencing.
+Shipped 2026-05-12 (PR #44). First runtime PR after the Phase 17 plan landed in PR #42 — kickoff Q&A locked all 8 plan questions plus one scope expansion (delete-org escape hatch for sole-admins). Re-architects `/settings` from a single-column 4-card account-preferences surface (Phase 8 / PR #24) into a left-sidebar IA with **4 groups / 9 nested-route tabs**. Closes the Phase 8 SPEC §15 deferral on per-user notification silencing.
 
 **Migration `20260524120000_phase17_settings_redesign.sql`** lands:
 - `orgs.logo_url text` — nullable Storage path
