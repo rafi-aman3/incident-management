@@ -43,6 +43,7 @@ import {
   type ActivityEvent,
 } from "@/components/investigations/detail/activity-timeline";
 import { CapaCreateModal } from "@/components/capa/capa-create-modal";
+import { BulletinCta } from "@/components/investigations/bulletin-cta";
 import { ArgusContextPayload } from "@/components/argus/argus-context";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type { InvestigationStatus } from "@/lib/investigations/types";
@@ -109,14 +110,34 @@ export default async function InvestigationDetailPage({
   const isClosed = status === "closed";
 
   // 2. Permissions
-  const [canEdit, canReassignLead, canCreateCapa, canUseArgus] = currentSiteId
+  const [canEdit, canReassignLead, canCreateCapa, canUseArgus, canCreateBulletin] = currentSiteId
     ? await Promise.all([
         can("investigation:edit", currentSiteId),
         can("investigation:lead", currentSiteId),
         can("capa:create", currentSiteId),
         orgCan("argus:use"),
+        can("bulletin:create", currentSiteId),
       ])
-    : [false, false, false, false];
+    : [false, false, false, false, false];
+
+  // Bulletin CTA gate — render on closed Track-A investigations to viewers
+  // who can author. Look up any existing non-archived bulletin sourced from
+  // this investigation; if one exists, swap CTA for a "drafted" link card.
+  let existingBulletin: { id: string; title: string } | null = null;
+  if (isClosed && incident.track === "A" && canCreateBulletin) {
+    const { data: existing } = await supabase
+      .from("safety_bulletins")
+      .select("id, title")
+      .eq("source_investigation_id", inv.id)
+      .neq("status", "archived")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      existingBulletin = { id: existing.id as string, title: existing.title as string };
+    }
+  }
+  const showBulletinCta = isClosed && incident.track === "A" && canCreateBulletin;
 
   // Org-level Argus flag — combined with the four conditions below to decide
   // whether the AI Investigator tab is rendered at all (per Phase 9c plan).
@@ -415,6 +436,13 @@ export default async function InvestigationDetailPage({
       {tab === "summary" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
           <div className="min-w-0 space-y-4">
+            {showBulletinCta && (
+              existingBulletin ? (
+                <BulletinCta existing={existingBulletin} />
+              ) : (
+                <BulletinCta investigationId={inv.id} />
+              )
+            )}
             <IncidentSummaryCard incident={summaryData} />
             <WitnessStatementsSection
               statements={statements}

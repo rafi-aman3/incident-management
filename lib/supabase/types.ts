@@ -1958,6 +1958,97 @@ export type Database = {
           },
         ]
       }
+      safety_bulletins: {
+        Row: {
+          archived_at: string | null
+          body: string
+          created_at: string
+          created_by: string | null
+          id: string
+          org_id: string
+          published_at: string | null
+          source_incident_id: string | null
+          source_investigation_id: string | null
+          status: Database["public"]["Enums"]["safety_bulletin_status"]
+          summary: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          org_id: string
+          published_at?: string | null
+          source_incident_id?: string | null
+          source_investigation_id?: string | null
+          status?: Database["public"]["Enums"]["safety_bulletin_status"]
+          summary?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          org_id?: string
+          published_at?: string | null
+          source_incident_id?: string | null
+          source_investigation_id?: string | null
+          status?: Database["public"]["Enums"]["safety_bulletin_status"]
+          summary?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_bulletins_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_bulletins_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_bulletins_source_incident_id_fkey"
+            columns: ["source_incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_bulletins_source_incident_id_fkey"
+            columns: ["source_incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_bulletins_source_investigation_id_fkey"
+            columns: ["source_investigation_id"]
+            isOneToOne: false
+            referencedRelation: "investigations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_bulletins_source_investigation_id_fkey"
+            columns: ["source_investigation_id"]
+            isOneToOne: false
+            referencedRelation: "investigations_active"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       severity_overrides: {
         Row: {
           created_at: string
@@ -3575,6 +3666,7 @@ export type Database = {
         | "scalping"
         | "loss_of_consciousness"
         | "enclosed_space_injury"
+      safety_bulletin_status: "draft" | "published" | "archived"
       severity: "S1" | "S2" | "S3" | "S4" | "S5"
       template_schedule_kind:
         | "daily"
@@ -3856,6 +3948,7 @@ export const Constants = {
         "loss_of_consciousness",
         "enclosed_space_injury",
       ],
+      safety_bulletin_status: ["draft", "published", "archived"],
       severity: ["S1", "S2", "S3", "S4", "S5"],
       template_schedule_kind: [
         "daily",

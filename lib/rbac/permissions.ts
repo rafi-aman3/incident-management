@@ -63,6 +63,8 @@ export const PERMISSIONS = [
   "document_link:create",
   "document_link:remove",
   "planner:read",
+  "bulletin:create",
+  "bulletin:publish",
   "argus:use",
 ] as const;
 

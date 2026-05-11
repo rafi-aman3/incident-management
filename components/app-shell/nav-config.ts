@@ -9,6 +9,7 @@ import {
   ClipboardSignature,
   Files,
   ListChecks,
+  Megaphone,
   ShieldCheck,
   FileBarChart,
   Settings2,
@@ -54,6 +55,7 @@ export const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { href: "/resources/documents", label: "Documents",  icon: Files,         permission: "document:read_org" },
   { href: "/planner",         label: "Planner",         icon: CalendarDays,       permission: "planner:read" },
   { href: "/reports",         label: "Reports",         icon: FileBarChart,       permission: "incident:read_site" },
+  { href: "/bulletins",       label: "Bulletins",       icon: Megaphone },
   { href: "/admin",           label: "Admin",           icon: Settings2,          permission: "site:configure" },
 ];
 
