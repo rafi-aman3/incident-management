@@ -22,6 +22,7 @@ import { getOverdueInvestigationsTilePayload } from "@/lib/argus/tiles/overdue-i
 import { getStopWorkActiveTilePayload } from "@/lib/argus/tiles/stop-work-active";
 import { getReportabilityUncertainTilePayload } from "@/lib/argus/tiles/reportability-uncertain";
 import { getCapaOverdueTilePayload } from "@/lib/argus/tiles/capa-overdue";
+import { LatestBulletinsCard } from "@/components/dashboard/latest-bulletins-card";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 
 export default async function DashboardPage() {
@@ -357,6 +358,8 @@ export default async function DashboardPage() {
             )}
           </section>
         )}
+
+        <LatestBulletinsCard />
 
         {!canReadSite && canReportIncident && (
           <section className="rounded-md border border-dashed p-8 text-center">
