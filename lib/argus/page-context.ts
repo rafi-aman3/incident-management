@@ -21,6 +21,10 @@ export type ArgusRouteKey =
   | "capa_index"
   | "inspections_index"
   | "reports_index"
+  | "hazards_index"
+  | "hazard_detail"
+  | "hazard_candidates_index"
+  | "hazard_candidate_detail"
   | "unknown";
 
 export type ArgusRecordKind =
@@ -28,7 +32,9 @@ export type ArgusRecordKind =
   | "investigation"
   | "capa"
   | "inspection"
-  | "report";
+  | "report"
+  | "hazard"
+  | "hazard_candidate";
 
 export interface ArgusContextRecord {
   kind: ArgusRecordKind;
@@ -113,6 +119,26 @@ export const ARGUS_PANEL_SUGGESTIONS: Record<ArgusRouteKey, string[]> = {
     "Which incidents still need a regulatory report?",
     "Is anything close to a recordability boundary?",
     "Summarise this year's recordable trend.",
+  ],
+  hazards_index: [
+    "Which hazards have only PPE controls?",
+    "Highlight hazards overdue for review.",
+    "What S1/S2 hazards should I prioritise?",
+  ],
+  hazard_detail: [
+    "Suggest engineering controls for this hazard.",
+    "Has this hazard been linked to any incidents?",
+    "When is the next review due?",
+  ],
+  hazard_candidates_index: [
+    "Which candidates look like duplicates of existing hazards?",
+    "Prioritise the SDS-imported candidates by risk.",
+    "What's the most urgent candidate to convert?",
+  ],
+  hazard_candidate_detail: [
+    "Help me write controls for this candidate.",
+    "Is this a duplicate of an existing hazard?",
+    "What category should I use?",
   ],
   unknown: [],
 };

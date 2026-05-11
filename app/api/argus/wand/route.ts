@@ -65,6 +65,18 @@ type WandBody =
         investigationId: string;
         siteId: string;
       };
+    }
+  | {
+      surface: "hazard_controls";
+      payload: {
+        siteId: string;
+        candidateId?: string;
+        hazardId?: string;
+        title: string;
+        category: string;
+        description?: string;
+        proposedMetadata?: Record<string, unknown>;
+      };
     };
 
 const REPORTABILITY_CACHE_HOURS = 24;
@@ -111,12 +123,30 @@ const capaMetadataOutputSchema = z.object({
   insufficient_input: z.string().optional(),
 });
 
+const hazardControlsOutputSchema = z.object({
+  controls: z
+    .array(
+      z.object({
+        level: z.enum(["elimination", "substitution", "engineering", "administrative", "ppe"]),
+        description: z.string().min(10).max(300),
+        rationale: z.string().min(10).max(200),
+      }),
+    )
+    .min(2)
+    .max(6),
+  ppe_only_warning: z.boolean().optional(),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+  insufficient_input: z.string().optional(),
+});
+
 const SCHEMAS_BY_SURFACE: Record<WandSurface, z.ZodType<unknown>> = {
   risk_matrix: matrixOutputSchema,
   finding_severity: matrixOutputSchema,
   verification_method: verificationOutputSchema,
   reportability: reportabilityOutputSchema,
   capa_metadata: capaMetadataOutputSchema,
+  hazard_controls: hazardControlsOutputSchema,
 };
 
 const SYSTEM_PROMPT_BY_SURFACE: Record<WandSurface, string> = {
@@ -125,6 +155,7 @@ const SYSTEM_PROMPT_BY_SURFACE: Record<WandSurface, string> = {
   verification_method: "wand-verification-method.md",
   reportability: "wand-reportability.md",
   capa_metadata: "wand-capa-metadata.md",
+  hazard_controls: "wand-hazard-controls.md",
 };
 
 const promptCache = new Map<string, string>();
@@ -174,6 +205,8 @@ export async function POST(request: NextRequest) {
       return await handleReportability(gate, body.payload);
     case "capa_metadata":
       return await handleCapaMetadata(gate, body.payload);
+    case "hazard_controls":
+      return await handleHazardControls(gate, body.payload);
     default: {
       const _: never = body;
       void _;
@@ -436,6 +469,87 @@ async function handleCapaMetadata(
     targetId: inv.id,
     siteId: payload.siteId,
     activityInvestigationId: inv.id,
+  });
+}
+
+// ---------- Wand 6 — hazard_controls (Phase 14) ----------
+
+async function handleHazardControls(
+  gate: Gate,
+  payload: Extract<WandBody, { surface: "hazard_controls" }>["payload"],
+) {
+  if (!(await can("hazard:report", payload.siteId))) {
+    return jsonError(
+      "You do not have permission to suggest controls on this site.",
+      403,
+    );
+  }
+
+  // Target the candidate row when available; fall back to hazard or site.
+  const targetKind: "incident" | "investigation" | "capa" | "finding" = "finding";
+  // Note: argus_suggestions.target_kind is a free-form text in the v1 schema —
+  // 'finding' is the closest existing taxonomy member. The Phase 14 wand
+  // doesn't need a new target_kind row to be useful.
+  const targetId = payload.candidateId ?? payload.hazardId ?? payload.siteId;
+
+  // Strip free-text user input through the PII redactor before egress.
+  const safeTitle = redactText(payload.title, []);
+  const safeDescription = payload.description
+    ? redactText(payload.description, [])
+    : "(no description)";
+
+  let metadataBlock = "";
+  const md = payload.proposedMetadata;
+  if (md && typeof md === "object") {
+    const sdsId = typeof md.sds_id === "string" ? md.sds_id : null;
+    const cas = typeof md.cas_number === "string" ? md.cas_number : null;
+    const productName = typeof md.product_name === "string" ? md.product_name : null;
+    const hStatement = typeof md.h_statement === "string" ? md.h_statement : null;
+    const signal = typeof md.signal_word === "string" ? md.signal_word : null;
+    const pictograms = Array.isArray(md.pictograms) ? md.pictograms.filter((p) => typeof p === "string") : [];
+    const suggestedFromSds = Array.isArray(md.suggested_controls) ? md.suggested_controls : [];
+
+    if (productName || sdsId || hStatement) {
+      const lines: string[] = ["# SDS source"];
+      if (productName) lines.push(`Product: ${productName}`);
+      if (cas) lines.push(`CAS: ${cas}`);
+      if (sdsId) lines.push(`SDS ID: ${sdsId}`);
+      if (signal) lines.push(`Signal word: ${signal}`);
+      if (pictograms.length > 0) lines.push(`Pictograms: ${pictograms.join(", ")}`);
+      if (hStatement) lines.push(`H-statement: ${hStatement}`);
+      if (suggestedFromSds.length > 0) {
+        lines.push("");
+        lines.push("Baseline suggestions from SDS catalog (use as starting point but consider hierarchy):");
+        for (const sc of suggestedFromSds) {
+          if (sc && typeof sc === "object" && "level" in sc && "description" in sc) {
+            const c = sc as { level: string; description: string };
+            lines.push(`- [${c.level}] ${c.description}`);
+          }
+        }
+      }
+      metadataBlock = "\n\n" + lines.join("\n");
+    }
+  }
+
+  const userBlock =
+    [
+      "# Hazard",
+      `Category: ${payload.category}`,
+      `Title: ${safeTitle}`,
+      "",
+      "# Description",
+      safeDescription,
+    ].join("\n") + metadataBlock;
+
+  return await callWand({
+    gate,
+    surface: "hazard_controls",
+    tier: "smart",
+    thinking: "auto",
+    userBlock,
+    targetKind,
+    targetId,
+    siteId: payload.siteId,
   });
 }
 

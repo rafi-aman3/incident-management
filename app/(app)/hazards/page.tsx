@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { HazardKpiTiles } from "@/components/hazards/kpi-tiles";
 import { HazardList, type HazardListRow } from "@/components/hazards/hazard-list";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type { RiskLevel } from "@/lib/risk/types";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -113,8 +115,25 @@ export default async function HazardsPage({ searchParams }: { searchParams: Sear
   // Overdue reviews and ppe_only filters: client-side too (demo-grade)
   // For 'overdue' and 'ppe_only', the more expensive path would also work — skip in v1.
 
+  const argusContext: ArgusPageContext = {
+    route: "hazards_index",
+    routeLabel: "Hazards",
+    siteId: currentSiteId,
+    aggregates: {
+      identified: kpiIdentified.count ?? 0,
+      high_risk: kpiHighRisk.count ?? 0,
+      overdue_reviews: kpiOverdue.count ?? 0,
+      ppe_only: ppeOnlyCount,
+    },
+    hasActiveSignal:
+      (kpiHighRisk.count ?? 0) > 0 ||
+      (kpiOverdue.count ?? 0) > 0 ||
+      ppeOnlyCount > 0,
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Hazards</h1>

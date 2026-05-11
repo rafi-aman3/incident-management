@@ -18,6 +18,8 @@ import {
   ControlsSection,
   type ControlRow,
 } from "@/components/hazards/controls-section";
+import { ArgusContextPayload } from "@/components/argus/argus-context";
+import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type { ControlLevel, RiskLevel } from "@/lib/risk/types";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -94,8 +96,27 @@ export default async function HazardDetailPage({
   const canManage = site ? await can("hazard:manage", site.id) : false;
   const basePath = `/hazards/${id}`;
 
+  const argusContext: ArgusPageContext = {
+    route: "hazard_detail",
+    routeLabel: hazard.ref_code ? `Hazard ${hazard.ref_code}` : "Hazard",
+    siteId: site?.id ?? null,
+    siteLabel: site?.name ?? null,
+    records: [
+      {
+        kind: "hazard" as const,
+        id: hazard.id,
+        refCode: hazard.ref_code,
+        title: hazard.title,
+      },
+    ],
+    aggregates: {
+      has_current_assessment: currentAssessment ? 1 : 0,
+    },
+  };
+
   return (
     <div className="space-y-6">
+      <ArgusContextPayload context={argusContext} />
       <Link
         href="/hazards"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

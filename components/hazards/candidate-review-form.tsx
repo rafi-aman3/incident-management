@@ -30,6 +30,7 @@ import {
 } from "@/lib/risk/types";
 import { RiskBadge, ControlLevelBadge } from "./risk-badges";
 import { Plus, Trash2 } from "lucide-react";
+import { ArgusHazardControlsWand } from "./argus-hazard-controls-wand";
 
 const CATEGORY_LABEL: Record<string, string> = {
   physical: "Physical",
@@ -290,6 +291,17 @@ export function CandidateReviewForm({
                 <Plus className="mr-1 h-3 w-3" /> Add control
               </Button>
             </div>
+            {siteId && (
+              <ArgusHazardControlsWand
+                siteId={siteId}
+                candidateId={candidate.id}
+                title={title}
+                category={category}
+                description={description}
+                proposedMetadata={candidate.proposed_metadata}
+                onAccept={(suggested) => setControls(suggested)}
+              />
+            )}
             {controls.length === 0 ? (
               <p className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
                 Add at least one control to reduce inherent risk to residual.
