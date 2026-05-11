@@ -53,6 +53,7 @@ export type Database = {
           incident_id: string | null
           inspection_id: string | null
           investigation_id: string | null
+          jsa_id: string | null
           payload: Json
           template_id: string | null
           verb: string
@@ -70,6 +71,7 @@ export type Database = {
           incident_id?: string | null
           inspection_id?: string | null
           investigation_id?: string | null
+          jsa_id?: string | null
           payload?: Json
           template_id?: string | null
           verb: string
@@ -87,6 +89,7 @@ export type Database = {
           incident_id?: string | null
           inspection_id?: string | null
           investigation_id?: string | null
+          jsa_id?: string | null
           payload?: Json
           template_id?: string | null
           verb?: string
@@ -841,6 +844,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "hazard_controls_origin_jsa_fk"
+            columns: ["origin_jsa_id"]
+            isOneToOne: false
+            referencedRelation: "jsas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "hazard_controls_responsible_party_id_fkey"
             columns: ["responsible_party_id"]
             isOneToOne: false
@@ -1071,6 +1081,13 @@ export type Database = {
             columns: ["source_incident_id"]
             isOneToOne: false
             referencedRelation: "incidents_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazards_source_jsa_fk"
+            columns: ["source_jsa_id"]
+            isOneToOne: false
+            referencedRelation: "jsas"
             referencedColumns: ["id"]
           },
           {
@@ -2103,6 +2120,354 @@ export type Database = {
           },
           {
             foreignKeyName: "invitations_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jsa_incident_links: {
+        Row: {
+          created_at: string
+          id: string
+          identified_at: string
+          identified_by: string
+          incident_id: string
+          jsa_id: string
+          link_type: string
+          notes: string | null
+          triggered_review: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          identified_at?: string
+          identified_by: string
+          incident_id: string
+          jsa_id: string
+          link_type: string
+          notes?: string | null
+          triggered_review?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          identified_at?: string
+          identified_by?: string
+          incident_id?: string
+          jsa_id?: string
+          link_type?: string
+          notes?: string | null
+          triggered_review?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jsa_incident_links_identified_by_fkey"
+            columns: ["identified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsa_incident_links_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsa_incident_links_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsa_incident_links_jsa_id_fkey"
+            columns: ["jsa_id"]
+            isOneToOne: false
+            referencedRelation: "jsas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jsa_signoffs: {
+        Row: {
+          created_at: string
+          id: string
+          jsa_id: string
+          notes: string | null
+          signed_at: string
+          signed_for_session: string | null
+          worker_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jsa_id: string
+          notes?: string | null
+          signed_at?: string
+          signed_for_session?: string | null
+          worker_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jsa_id?: string
+          notes?: string | null
+          signed_at?: string
+          signed_for_session?: string | null
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jsa_signoffs_jsa_id_fkey"
+            columns: ["jsa_id"]
+            isOneToOne: false
+            referencedRelation: "jsas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsa_signoffs_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jsa_step_controls: {
+        Row: {
+          control_description: string
+          control_level: string
+          created_at: string
+          id: string
+          jsa_step_hazard_id: string
+        }
+        Insert: {
+          control_description: string
+          control_level: string
+          created_at?: string
+          id?: string
+          jsa_step_hazard_id: string
+        }
+        Update: {
+          control_description?: string
+          control_level?: string
+          created_at?: string
+          id?: string
+          jsa_step_hazard_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jsa_step_controls_jsa_step_hazard_id_fkey"
+            columns: ["jsa_step_hazard_id"]
+            isOneToOne: false
+            referencedRelation: "jsa_step_hazards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jsa_step_hazards: {
+        Row: {
+          consequence: string
+          created_at: string
+          hazard_candidate_id: string | null
+          hazard_category: string
+          hazard_description: string
+          id: string
+          inherent_risk_score: Database["public"]["Enums"]["severity"]
+          jsa_step_id: string
+          likelihood: string
+          promoted_to_register: boolean
+          registered_hazard_id: string | null
+          residual_risk_score: Database["public"]["Enums"]["severity"]
+          updated_at: string
+        }
+        Insert: {
+          consequence: string
+          created_at?: string
+          hazard_candidate_id?: string | null
+          hazard_category: string
+          hazard_description: string
+          id?: string
+          inherent_risk_score: Database["public"]["Enums"]["severity"]
+          jsa_step_id: string
+          likelihood: string
+          promoted_to_register?: boolean
+          registered_hazard_id?: string | null
+          residual_risk_score: Database["public"]["Enums"]["severity"]
+          updated_at?: string
+        }
+        Update: {
+          consequence?: string
+          created_at?: string
+          hazard_candidate_id?: string | null
+          hazard_category?: string
+          hazard_description?: string
+          id?: string
+          inherent_risk_score?: Database["public"]["Enums"]["severity"]
+          jsa_step_id?: string
+          likelihood?: string
+          promoted_to_register?: boolean
+          registered_hazard_id?: string | null
+          residual_risk_score?: Database["public"]["Enums"]["severity"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jsa_step_hazards_hazard_candidate_id_fkey"
+            columns: ["hazard_candidate_id"]
+            isOneToOne: false
+            referencedRelation: "hazard_candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsa_step_hazards_jsa_step_id_fkey"
+            columns: ["jsa_step_id"]
+            isOneToOne: false
+            referencedRelation: "jsa_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsa_step_hazards_registered_hazard_id_fkey"
+            columns: ["registered_hazard_id"]
+            isOneToOne: false
+            referencedRelation: "hazards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jsa_steps: {
+        Row: {
+          created_at: string
+          id: string
+          jsa_id: string
+          sequence: number
+          step_description: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jsa_id: string
+          sequence: number
+          step_description: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jsa_id?: string
+          sequence?: number
+          step_description?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jsa_steps_jsa_id_fkey"
+            columns: ["jsa_id"]
+            isOneToOne: false
+            referencedRelation: "jsas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jsas: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          area: string | null
+          created_at: string
+          created_by: string
+          deleted_at: string | null
+          estimated_duration_minutes: number | null
+          expires_at: string | null
+          frequency: string | null
+          id: string
+          job_description: string | null
+          org_id: string
+          performed_by_roles: string[]
+          performed_by_workgroups: string[]
+          permits_required: string[]
+          ppe_required: string[]
+          ref_code: string | null
+          site_id: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          area?: string | null
+          created_at?: string
+          created_by: string
+          deleted_at?: string | null
+          estimated_duration_minutes?: number | null
+          expires_at?: string | null
+          frequency?: string | null
+          id?: string
+          job_description?: string | null
+          org_id: string
+          performed_by_roles?: string[]
+          performed_by_workgroups?: string[]
+          permits_required?: string[]
+          ppe_required?: string[]
+          ref_code?: string | null
+          site_id: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          area?: string | null
+          created_at?: string
+          created_by?: string
+          deleted_at?: string | null
+          estimated_duration_minutes?: number | null
+          expires_at?: string | null
+          frequency?: string | null
+          id?: string
+          job_description?: string | null
+          org_id?: string
+          performed_by_roles?: string[]
+          performed_by_workgroups?: string[]
+          permits_required?: string[]
+          ppe_required?: string[]
+          ref_code?: string | null
+          site_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jsas_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsas_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsas_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jsas_site_id_fkey"
             columns: ["site_id"]
             isOneToOne: false
             referencedRelation: "sites"
@@ -3926,7 +4291,9 @@ export type Database = {
         Args: { p_finding_id: string }
         Returns: string
       }
+      expire_overdue_jsas: { Args: never; Returns: number }
       generate_hazard_ref_code: { Args: { p_site_id: string }; Returns: string }
+      generate_jsa_ref_code: { Args: { p_site_id: string }; Returns: string }
       has_org_permission: { Args: { p_permission: string }; Returns: boolean }
       has_permission: {
         Args: { p_permission: string; p_site_id: string }
@@ -4096,6 +4463,8 @@ export type Database = {
         | "site"
         | "inspection"
         | "finding"
+        | "jsa_step"
+        | "jsa_step_hazard"
       document_type:
         | "sds"
         | "sop"
@@ -4155,6 +4524,7 @@ export type Database = {
         | "invited"
         | "stop_work_raised"
         | "hazard_incident_linked"
+        | "jsa_review_required"
       riddor_specified_injury:
         | "fracture"
         | "amputation"
@@ -4370,6 +4740,8 @@ export const Constants = {
         "site",
         "inspection",
         "finding",
+        "jsa_step",
+        "jsa_step_hazard",
       ],
       document_type: [
         "sds",
@@ -4436,6 +4808,7 @@ export const Constants = {
         "invited",
         "stop_work_raised",
         "hazard_incident_linked",
+        "jsa_review_required",
       ],
       riddor_specified_injury: [
         "fracture",

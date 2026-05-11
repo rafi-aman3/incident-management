@@ -52,6 +52,11 @@ import {
   type HazardOption,
   type ExistingLink,
 } from "@/components/hazards/incident-hazard-link-section";
+import {
+  IncidentJsaLinkSection,
+  type JsaOption,
+  type ExistingJsaLink,
+} from "@/components/jsa/incident-jsa-link-section";
 import { createClient } from "@/lib/supabase/server";
 
 type Params = Promise<{ id: string }>;
@@ -619,6 +624,41 @@ async function FindingsTabPane({
   const hazardOptions: HazardOption[] = (hazardsData ?? []).filter((h) => !existingHazardIds.has(h.id));
   const existingLinks: ExistingLink[] = linksData ?? [];
 
+  // JSA link options + existing links. Permission gate is investigation:lead.
+  const canLinkJsa = canEdit && (await can("investigation:lead", siteId));
+  type JsaOptionRow = {
+    id: string;
+    ref_code: string | null;
+    title: string;
+    status: "draft" | "under_review" | "approved" | "expired" | "archived";
+  };
+  type JsaLinkRow = {
+    id: string;
+    link_type: "causal" | "contributing" | "exposed_but_not_causal";
+    triggered_review: boolean;
+    notes: string | null;
+    jsa: { id: string; ref_code: string | null; title: string } | null;
+  };
+  const [{ data: jsaData }, { data: jsaLinksData }] = await Promise.all([
+    supabase
+      .from("jsas")
+      .select("id, ref_code, title, status")
+      .is("deleted_at", null)
+      .not("status", "in", "(archived)")
+      .order("updated_at", { ascending: false })
+      .limit(100)
+      .returns<JsaOptionRow[]>(),
+    supabase
+      .from("jsa_incident_links")
+      .select("id, link_type, triggered_review, notes, jsa:jsa_id(id, ref_code, title)")
+      .eq("incident_id", incidentId)
+      .order("identified_at", { ascending: false })
+      .returns<JsaLinkRow[]>(),
+  ]);
+  const existingJsaIds = new Set((jsaLinksData ?? []).map((l) => l.jsa?.id).filter(Boolean));
+  const jsaOptions: JsaOption[] = (jsaData ?? []).filter((j) => !existingJsaIds.has(j.id));
+  const existingJsaLinks: ExistingJsaLink[] = jsaLinksData ?? [];
+
   return (
     <div className="space-y-4">
       <IncidentHazardLinkSection
@@ -626,6 +666,12 @@ async function FindingsTabPane({
         hazardOptions={hazardOptions}
         existingLinks={existingLinks}
         canLink={canLink}
+      />
+      <IncidentJsaLinkSection
+        incidentId={incidentId}
+        jsaOptions={jsaOptions}
+        existingLinks={existingJsaLinks}
+        canLink={canLinkJsa}
       />
       <FindingsEditor
         investigationId={investigationId}

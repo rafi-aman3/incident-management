@@ -77,6 +77,31 @@ type WandBody =
         description?: string;
         proposedMetadata?: Record<string, unknown>;
       };
+    }
+  | {
+      surface: "step_hazards";
+      payload: {
+        siteId: string;
+        jsaId: string;
+        jobTitle: string;
+        jobDescription?: string;
+        area?: string;
+        stepDescription: string;
+      };
+    }
+  | {
+      surface: "step_controls";
+      payload: {
+        siteId: string;
+        jsaId: string;
+        jobTitle: string;
+        area?: string;
+        stepDescription: string;
+        hazardDescription: string;
+        hazardCategory: string;
+        likelihood: string;
+        consequence: string;
+      };
     };
 
 const REPORTABILITY_CACHE_HOURS = 24;
@@ -140,6 +165,56 @@ const hazardControlsOutputSchema = z.object({
   insufficient_input: z.string().optional(),
 });
 
+const stepHazardsOutputSchema = z.object({
+  hazards: z
+    .array(
+      z.object({
+        hazard_description: z.string().min(8).max(240),
+        hazard_category: z.enum([
+          "physical",
+          "chemical",
+          "biological",
+          "psychosocial",
+          "mechanical",
+          "electrical",
+          "ergonomic",
+          "environmental",
+        ]),
+        likelihood: z.enum(["rare", "unlikely", "possible", "likely", "almost_certain"]),
+        consequence: z.enum(["insignificant", "minor", "moderate", "major", "catastrophic"]),
+        rationale: z.string().min(10).max(240),
+      }),
+    )
+    .min(2)
+    .max(6),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+  insufficient_input: z.string().optional(),
+});
+
+const stepControlsOutputSchema = z.object({
+  controls: z
+    .array(
+      z.object({
+        control_level: z.enum([
+          "elimination",
+          "substitution",
+          "engineering",
+          "administrative",
+          "ppe",
+        ]),
+        control_description: z.string().min(10).max(300),
+        rationale: z.string().min(10).max(200),
+      }),
+    )
+    .min(2)
+    .max(6),
+  ppe_only_warning: z.boolean().optional(),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+  insufficient_input: z.string().optional(),
+});
+
 const SCHEMAS_BY_SURFACE: Record<WandSurface, z.ZodType<unknown>> = {
   risk_matrix: matrixOutputSchema,
   finding_severity: matrixOutputSchema,
@@ -147,6 +222,8 @@ const SCHEMAS_BY_SURFACE: Record<WandSurface, z.ZodType<unknown>> = {
   reportability: reportabilityOutputSchema,
   capa_metadata: capaMetadataOutputSchema,
   hazard_controls: hazardControlsOutputSchema,
+  step_hazards: stepHazardsOutputSchema,
+  step_controls: stepControlsOutputSchema,
 };
 
 const SYSTEM_PROMPT_BY_SURFACE: Record<WandSurface, string> = {
@@ -156,6 +233,8 @@ const SYSTEM_PROMPT_BY_SURFACE: Record<WandSurface, string> = {
   reportability: "wand-reportability.md",
   capa_metadata: "wand-capa-metadata.md",
   hazard_controls: "wand-hazard-controls.md",
+  step_hazards: "wand-step-hazards.md",
+  step_controls: "wand-step-controls.md",
 };
 
 const promptCache = new Map<string, string>();
@@ -207,6 +286,10 @@ export async function POST(request: NextRequest) {
       return await handleCapaMetadata(gate, body.payload);
     case "hazard_controls":
       return await handleHazardControls(gate, body.payload);
+    case "step_hazards":
+      return await handleStepHazards(gate, body.payload);
+    case "step_controls":
+      return await handleStepControls(gate, body.payload);
     default: {
       const _: never = body;
       void _;
@@ -549,6 +632,89 @@ async function handleHazardControls(
     userBlock,
     targetKind,
     targetId,
+    siteId: payload.siteId,
+  });
+}
+
+// ---------- Wand 7 — step_hazards (Phase 15) ----------
+
+async function handleStepHazards(
+  gate: Gate,
+  payload: Extract<WandBody, { surface: "step_hazards" }>["payload"],
+) {
+  if (!(await can("jsa:draft", payload.siteId))) {
+    return jsonError("You do not have permission to draft JSAs on this site.", 403);
+  }
+  // PII redaction defence-in-depth: free-text step descriptions can leak names.
+  const safeStep = redactText(payload.stepDescription, []);
+  const safeJobTitle = redactText(payload.jobTitle, []);
+  const safeJobDescription = payload.jobDescription
+    ? redactText(payload.jobDescription, [])
+    : null;
+
+  const userBlock = [
+    "# Job",
+    `Title: ${safeJobTitle}`,
+    payload.area ? `Area: ${payload.area}` : null,
+    safeJobDescription ? `\nDescription: ${safeJobDescription}` : null,
+    "",
+    "# Step",
+    safeStep,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return await callWand({
+    gate,
+    surface: "step_hazards",
+    tier: "smart",
+    thinking: "auto",
+    userBlock,
+    targetKind: "finding",
+    targetId: payload.jsaId,
+    siteId: payload.siteId,
+  });
+}
+
+// ---------- Wand 8 — step_controls (Phase 15) ----------
+
+async function handleStepControls(
+  gate: Gate,
+  payload: Extract<WandBody, { surface: "step_controls" }>["payload"],
+) {
+  if (!(await can("jsa:draft", payload.siteId))) {
+    return jsonError("You do not have permission to draft JSAs on this site.", 403);
+  }
+  const safeStep = redactText(payload.stepDescription, []);
+  const safeJobTitle = redactText(payload.jobTitle, []);
+  const safeHazard = redactText(payload.hazardDescription, []);
+
+  const userBlock = [
+    "# Job",
+    `Title: ${safeJobTitle}`,
+    payload.area ? `Area: ${payload.area}` : null,
+    "",
+    "# Step",
+    safeStep,
+    "",
+    "# Hazard",
+    `Category: ${payload.hazardCategory}`,
+    `Likelihood: ${payload.likelihood}`,
+    `Consequence: ${payload.consequence}`,
+    "",
+    `Description: ${safeHazard}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return await callWand({
+    gate,
+    surface: "step_controls",
+    tier: "smart",
+    thinking: "auto",
+    userBlock,
+    targetKind: "finding",
+    targetId: payload.jsaId,
     siteId: payload.siteId,
   });
 }

@@ -9,6 +9,8 @@ import { SUGGEST_VERIFICATION_METHOD_TOOL } from "./suggest-verification-method"
 import { ASSESS_REPORTABILITY_TOOL } from "./assess-reportability";
 import { DRAFT_CAPA_METADATA_TOOL } from "./draft-capa-metadata";
 import { SUGGEST_HAZARD_CONTROLS_TOOL } from "./suggest-hazard-controls";
+import { SUGGEST_STEP_HAZARDS_TOOL } from "./suggest-step-hazards";
+import { SUGGEST_STEP_CONTROLS_TOOL } from "./suggest-step-controls";
 import type { ArgusToolDefinition } from "./types";
 import type { ToolDefinition } from "@/lib/argus/llm";
 
@@ -64,7 +66,9 @@ export type WandSurface =
   | "verification_method"
   | "reportability"
   | "capa_metadata"
-  | "hazard_controls";
+  | "hazard_controls"
+  | "step_hazards"
+  | "step_controls";
 
 export const WAND_TOOLS: Record<WandSurface, ToolDefinition> = {
   risk_matrix: SUGGEST_RISK_MATRIX_TOOL,
@@ -73,6 +77,8 @@ export const WAND_TOOLS: Record<WandSurface, ToolDefinition> = {
   reportability: ASSESS_REPORTABILITY_TOOL,
   capa_metadata: DRAFT_CAPA_METADATA_TOOL,
   hazard_controls: SUGGEST_HAZARD_CONTROLS_TOOL,
+  step_hazards: SUGGEST_STEP_HAZARDS_TOOL,
+  step_controls: SUGGEST_STEP_CONTROLS_TOOL,
 };
 
 export {
@@ -82,6 +88,8 @@ export {
   ASSESS_REPORTABILITY_TOOL,
   DRAFT_CAPA_METADATA_TOOL,
   SUGGEST_HAZARD_CONTROLS_TOOL,
+  SUGGEST_STEP_HAZARDS_TOOL,
+  SUGGEST_STEP_CONTROLS_TOOL,
 };
 export type { RiskMatrixSuggestion } from "./suggest-risk-matrix";
 export type { ReportabilityVerdict } from "./assess-reportability";

@@ -71,6 +71,11 @@ export const PERMISSIONS = [
   "hazard:manage",
   "hazard:close",
   "hazard_candidate:review",
+  "jsa:read_site",
+  "jsa:draft",
+  "jsa:approve",
+  "jsa:signoff",
+  "jsa:promote_step_hazard",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];

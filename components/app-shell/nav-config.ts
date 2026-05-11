@@ -8,6 +8,7 @@ import {
   ClipboardList,
   ClipboardSignature,
   Files,
+  HardHat,
   ListChecks,
   Megaphone,
   ShieldCheck,
@@ -50,6 +51,7 @@ export const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { href: "/templates",       label: "Templates",       icon: ClipboardCheck,     permission: "template:read_org" },
   { href: "/inspections",     label: "Inspections",     icon: ClipboardSignature, permission: "inspection:read_site" },
   { href: "/hazards",         label: "Hazards",         icon: TriangleAlert,      permission: "hazard:read_site" },
+  { href: "/jsa",             label: "JSA",             icon: HardHat,            permission: "jsa:read_site" },
   // Resources — assets is per-site read; documents is org-scoped read.
   // The sidebar filter uses can(currentSiteId), which works for both
   // because the perms are granted to the user's role at every site.

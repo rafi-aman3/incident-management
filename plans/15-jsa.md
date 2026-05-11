@@ -1,6 +1,6 @@
 # Phase 15 — Job Safety Analysis (§JSA)
 
-**Status:** drafted 2026-05-11 — informed by `docs/superpowers/specs/2026-05-11-v2-phases-14-16-research.md`
+**Status:** shipped 2026-05-12 (PR pending) — informed by `docs/superpowers/specs/2026-05-11-v2-phases-14-16-research.md`. Scope landed as written EXCEPT the two Argus wands (`suggest_step_hazards` + `suggest_step_controls`) were pulled forward from v2.1 into this PR per kickoff Q&A direction (2026-05-12). Stricter "I've reviewed these" checkbox gate on Accept added to both wands.
 **Goal:** Ship the v2 Job Safety Analysis module per SPEC §JSA: a 4-step authoring wizard, approver-≠-creator approval workflow, drag-reorderable steps, per-step hazards + controls scored on the shared 5×5 matrix, worker per-shift sign-off ledger, and selective step-hazard promotion to the §HZ Hazard Register. Adds two cross-module hooks not in the original spec but surfaced by research: incident → JSA backlink + event-triggered re-review.
 **Branch:** `feat/phase-15-jsa` (off `main`, branched from `main` after Phase 14 merges)
 **PR target:** `main`
