@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   User,
   Palette,
@@ -15,6 +15,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Tab = {
   href: string;
@@ -88,7 +97,16 @@ export function SettingsSidebar({
   availability: SettingsTabAvailability;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const groups = buildGroups(availability);
+  const currentHref =
+    groups
+      .flatMap((g) => g.tabs)
+      .find(
+        (t) =>
+          t.permitted !== false &&
+          (pathname === t.href || pathname?.startsWith(t.href + "/")),
+      )?.href ?? "/settings/profile";
 
   return (
     <>
@@ -132,34 +150,49 @@ export function SettingsSidebar({
         </nav>
       </aside>
 
-      {/* Mobile/tablet: top-of-content native select. Per the inline-collapsibles-
-          in-Sheet rule, we avoid a second drawer here. */}
+      {/* Mobile/tablet: shadcn Select rather than a native <select> so the
+          rendered trigger inherits design-system spacing/borders, the dropdown
+          renders in a Radix popover (so it's actually visible on dark mode),
+          and we get keyboard nav + grouped labels for free. */}
       <div className="mb-4 lg:hidden">
-        <label htmlFor="settings-section" className="sr-only">
-          Settings section
-        </label>
-        <select
-          id="settings-section"
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-          value={pathname ?? "/settings/profile"}
-          onChange={(e) => {
-            window.location.href = e.target.value;
-          }}
+        <Select
+          value={currentHref}
+          onValueChange={(href) => router.push(href)}
         >
-          {groups.map((g) => {
-            const visible = g.tabs.filter((t) => t.permitted !== false);
-            if (visible.length === 0) return null;
-            return (
-              <optgroup key={g.heading} label={g.heading}>
-                {visible.map((t) => (
-                  <option key={t.href} value={t.href}>
-                    {t.label}
-                  </option>
-                ))}
-              </optgroup>
-            );
-          })}
-        </select>
+          <SelectTrigger
+            aria-label="Settings section"
+            className="w-full"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {groups.map((g, gi) => {
+              const visible = g.tabs.filter((t) => t.permitted !== false);
+              if (visible.length === 0) return null;
+              return (
+                <SelectGroup key={g.heading}>
+                  {gi > 0 && (
+                    <div className="my-1 h-px bg-border" aria-hidden />
+                  )}
+                  <SelectLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {g.heading}
+                  </SelectLabel>
+                  {visible.map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <SelectItem key={t.href} value={t.href}>
+                        <span className="flex items-center gap-2">
+                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                          {t.label}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectGroup>
+              );
+            })}
+          </SelectContent>
+        </Select>
       </div>
     </>
   );
