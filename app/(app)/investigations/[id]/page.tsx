@@ -47,6 +47,12 @@ import { BulletinCta } from "@/components/investigations/bulletin-cta";
 import { ArgusContextPayload } from "@/components/argus/argus-context";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 import type { InvestigationStatus } from "@/lib/investigations/types";
+import {
+  IncidentHazardLinkSection,
+  type HazardOption,
+  type ExistingLink,
+} from "@/components/hazards/incident-hazard-link-section";
+import { createClient } from "@/lib/supabase/server";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -496,9 +502,12 @@ export default async function InvestigationDetailPage({
       )}
 
       {tab === "findings" && (
-        <FindingsEditor
+        <FindingsTabPane
           investigationId={inv.id}
-          initial={inv.findings ?? ""}
+          incidentId={incident.id}
+          siteId={inv.site_id}
+          findings={inv.findings ?? ""}
+          canEdit={canEdit}
           readOnly={!canEdit || isClosed}
         />
       )}
@@ -550,6 +559,79 @@ export default async function InvestigationDetailPage({
           }}
         />
       )}
+    </div>
+  );
+}
+
+async function FindingsTabPane({
+  investigationId,
+  incidentId,
+  siteId,
+  findings,
+  canEdit,
+  readOnly,
+}: {
+  investigationId: string;
+  incidentId: string;
+  siteId: string;
+  findings: string;
+  canEdit: boolean;
+  readOnly: boolean;
+}) {
+  const supabase = await createClient();
+  const canLink = canEdit && (await can("hazard:manage", siteId));
+
+  // Pull open hazards in the org as link options + existing links
+  type OptionRow = {
+    id: string;
+    ref_code: string | null;
+    title: string;
+    hazard_category: string;
+    status: string;
+  };
+  type LinkRow = {
+    id: string;
+    link_type: string;
+    was_in_register_at_time: boolean;
+    triggered_reassessment: boolean;
+    notes: string | null;
+    hazard: { id: string; ref_code: string | null; title: string } | null;
+  };
+
+  const [{ data: hazardsData }, { data: linksData }] = await Promise.all([
+    supabase
+      .from("hazards")
+      .select("id, ref_code, title, hazard_category, status")
+      .is("deleted_at", null)
+      .not("status", "in", "(closed,superseded)")
+      .order("identified_at", { ascending: false })
+      .limit(100)
+      .returns<OptionRow[]>(),
+    supabase
+      .from("incident_hazard_links")
+      .select("id, link_type, was_in_register_at_time, triggered_reassessment, notes, hazard:hazard_id(id, ref_code, title)")
+      .eq("incident_id", incidentId)
+      .order("identified_at", { ascending: false })
+      .returns<LinkRow[]>(),
+  ]);
+
+  const existingHazardIds = new Set((linksData ?? []).map((l) => l.hazard?.id).filter(Boolean));
+  const hazardOptions: HazardOption[] = (hazardsData ?? []).filter((h) => !existingHazardIds.has(h.id));
+  const existingLinks: ExistingLink[] = linksData ?? [];
+
+  return (
+    <div className="space-y-4">
+      <IncidentHazardLinkSection
+        incidentId={incidentId}
+        hazardOptions={hazardOptions}
+        existingLinks={existingLinks}
+        canLink={canLink}
+      />
+      <FindingsEditor
+        investigationId={investigationId}
+        initial={findings}
+        readOnly={readOnly}
+      />
     </div>
   );
 }

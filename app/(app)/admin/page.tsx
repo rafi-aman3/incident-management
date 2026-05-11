@@ -8,6 +8,7 @@ import {
   Database,
   Sparkles,
   Mail,
+  Plug,
 } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
@@ -174,6 +175,24 @@ export default async function AdminPage() {
               <p className="font-medium">Site setup wizard</p>
               <p className="text-sm text-muted-foreground">
                 7-step wizard for first-time site configuration.
+              </p>
+            </div>
+          </div>
+          <ArrowRight
+            className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+            aria-hidden
+          />
+        </Link>
+        <Link
+          href="/admin/integrations"
+          className="group flex items-center justify-between rounded-lg border bg-card p-4 hover:border-primary/40 hover:bg-accent/40"
+        >
+          <div className="flex items-start gap-3">
+            <Plug className="mt-0.5 h-5 w-5 text-primary" aria-hidden />
+            <div>
+              <p className="font-medium">Integrations</p>
+              <p className="text-sm text-muted-foreground">
+                External systems — SDS Manager catalog import, future training and HSE exports.
               </p>
             </div>
           </div>

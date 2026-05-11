@@ -654,6 +654,434 @@ export type Database = {
           },
         ]
       }
+      hazard_candidates: {
+        Row: {
+          area: string | null
+          conversion_hazard_id: string | null
+          created_at: string
+          dismiss_reason: string | null
+          id: string
+          merged_into_hazard_id: string | null
+          org_id: string
+          proposed_by: string | null
+          proposed_category: string
+          proposed_description: string | null
+          proposed_metadata: Json
+          proposed_title: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          site_id: string | null
+          source_reference_id: string | null
+          source_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          area?: string | null
+          conversion_hazard_id?: string | null
+          created_at?: string
+          dismiss_reason?: string | null
+          id?: string
+          merged_into_hazard_id?: string | null
+          org_id: string
+          proposed_by?: string | null
+          proposed_category: string
+          proposed_description?: string | null
+          proposed_metadata?: Json
+          proposed_title: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          site_id?: string | null
+          source_reference_id?: string | null
+          source_type: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          area?: string | null
+          conversion_hazard_id?: string | null
+          created_at?: string
+          dismiss_reason?: string | null
+          id?: string
+          merged_into_hazard_id?: string | null
+          org_id?: string
+          proposed_by?: string | null
+          proposed_category?: string
+          proposed_description?: string | null
+          proposed_metadata?: Json
+          proposed_title?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          site_id?: string | null
+          source_reference_id?: string | null
+          source_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hazard_candidates_conversion_hazard_id_fkey"
+            columns: ["conversion_hazard_id"]
+            isOneToOne: false
+            referencedRelation: "hazards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_candidates_merged_into_hazard_id_fkey"
+            columns: ["merged_into_hazard_id"]
+            isOneToOne: false
+            referencedRelation: "hazards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_candidates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_candidates_proposed_by_fkey"
+            columns: ["proposed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_candidates_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_candidates_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hazard_controls: {
+        Row: {
+          control_description: string
+          control_level: string
+          created_at: string
+          deleted_at: string | null
+          effectiveness: string
+          hazard_id: string
+          id: string
+          implemented_at: string | null
+          last_verified_at: string | null
+          next_control_review_at: string | null
+          next_verification_at: string | null
+          origin: string
+          origin_capa_id: string | null
+          origin_jsa_id: string | null
+          responsible_party_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          control_description: string
+          control_level: string
+          created_at?: string
+          deleted_at?: string | null
+          effectiveness?: string
+          hazard_id: string
+          id?: string
+          implemented_at?: string | null
+          last_verified_at?: string | null
+          next_control_review_at?: string | null
+          next_verification_at?: string | null
+          origin?: string
+          origin_capa_id?: string | null
+          origin_jsa_id?: string | null
+          responsible_party_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          control_description?: string
+          control_level?: string
+          created_at?: string
+          deleted_at?: string | null
+          effectiveness?: string
+          hazard_id?: string
+          id?: string
+          implemented_at?: string | null
+          last_verified_at?: string | null
+          next_control_review_at?: string | null
+          next_verification_at?: string | null
+          origin?: string
+          origin_capa_id?: string | null
+          origin_jsa_id?: string | null
+          responsible_party_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hazard_controls_hazard_id_fkey"
+            columns: ["hazard_id"]
+            isOneToOne: false
+            referencedRelation: "hazards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_controls_origin_capa_id_fkey"
+            columns: ["origin_capa_id"]
+            isOneToOne: false
+            referencedRelation: "capas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_controls_origin_capa_id_fkey"
+            columns: ["origin_capa_id"]
+            isOneToOne: false
+            referencedRelation: "capas_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_controls_responsible_party_id_fkey"
+            columns: ["responsible_party_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hazard_risk_assessments: {
+        Row: {
+          assessed_at: string
+          assessor_id: string
+          consequence: string
+          consulted_worker_ids: string[]
+          created_at: string
+          deleted_at: string | null
+          hazard_id: string
+          id: string
+          inherent_risk_score: Database["public"]["Enums"]["severity"]
+          likelihood: string
+          next_review_at: string | null
+          rationale: string | null
+          residual_risk_score: Database["public"]["Enums"]["severity"]
+          superseded_at: string | null
+          trigger_type: string
+          triggered_by_incident_id: string | null
+        }
+        Insert: {
+          assessed_at?: string
+          assessor_id: string
+          consequence: string
+          consulted_worker_ids?: string[]
+          created_at?: string
+          deleted_at?: string | null
+          hazard_id: string
+          id?: string
+          inherent_risk_score: Database["public"]["Enums"]["severity"]
+          likelihood: string
+          next_review_at?: string | null
+          rationale?: string | null
+          residual_risk_score: Database["public"]["Enums"]["severity"]
+          superseded_at?: string | null
+          trigger_type: string
+          triggered_by_incident_id?: string | null
+        }
+        Update: {
+          assessed_at?: string
+          assessor_id?: string
+          consequence?: string
+          consulted_worker_ids?: string[]
+          created_at?: string
+          deleted_at?: string | null
+          hazard_id?: string
+          id?: string
+          inherent_risk_score?: Database["public"]["Enums"]["severity"]
+          likelihood?: string
+          next_review_at?: string | null
+          rationale?: string | null
+          residual_risk_score?: Database["public"]["Enums"]["severity"]
+          superseded_at?: string | null
+          trigger_type?: string
+          triggered_by_incident_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hazard_risk_assessments_assessor_id_fkey"
+            columns: ["assessor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_risk_assessments_hazard_id_fkey"
+            columns: ["hazard_id"]
+            isOneToOne: false
+            referencedRelation: "hazards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_risk_assessments_triggered_by_incident_id_fkey"
+            columns: ["triggered_by_incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazard_risk_assessments_triggered_by_incident_id_fkey"
+            columns: ["triggered_by_incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents_active"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hazards: {
+        Row: {
+          affects_others: string[]
+          affects_workers: string[]
+          area: string | null
+          closed_at: string | null
+          closed_reason: string | null
+          created_at: string
+          current_risk_assessment_id: string | null
+          deleted_at: string | null
+          description: string | null
+          hazard_category: string
+          hazard_source: string
+          id: string
+          identification_method: string | null
+          identified_at: string
+          identified_by: string | null
+          org_id: string
+          ref_code: string | null
+          site_id: string
+          source_candidate_id: string | null
+          source_incident_id: string | null
+          source_jsa_id: string | null
+          source_sds_id: string | null
+          source_sds_section: string | null
+          status: string
+          superseded_by_hazard_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          affects_others?: string[]
+          affects_workers?: string[]
+          area?: string | null
+          closed_at?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          current_risk_assessment_id?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          hazard_category: string
+          hazard_source: string
+          id?: string
+          identification_method?: string | null
+          identified_at?: string
+          identified_by?: string | null
+          org_id: string
+          ref_code?: string | null
+          site_id: string
+          source_candidate_id?: string | null
+          source_incident_id?: string | null
+          source_jsa_id?: string | null
+          source_sds_id?: string | null
+          source_sds_section?: string | null
+          status?: string
+          superseded_by_hazard_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          affects_others?: string[]
+          affects_workers?: string[]
+          area?: string | null
+          closed_at?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          current_risk_assessment_id?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          hazard_category?: string
+          hazard_source?: string
+          id?: string
+          identification_method?: string | null
+          identified_at?: string
+          identified_by?: string | null
+          org_id?: string
+          ref_code?: string | null
+          site_id?: string
+          source_candidate_id?: string | null
+          source_incident_id?: string | null
+          source_jsa_id?: string | null
+          source_sds_id?: string | null
+          source_sds_section?: string | null
+          status?: string
+          superseded_by_hazard_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hazards_current_ra_fk"
+            columns: ["current_risk_assessment_id"]
+            isOneToOne: false
+            referencedRelation: "hazard_risk_assessments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazards_identified_by_fkey"
+            columns: ["identified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazards_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazards_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazards_source_candidate_fk"
+            columns: ["source_candidate_id"]
+            isOneToOne: false
+            referencedRelation: "hazard_candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazards_source_incident_id_fkey"
+            columns: ["source_incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazards_source_incident_id_fkey"
+            columns: ["source_incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents_active"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hazards_superseded_by_hazard_id_fkey"
+            columns: ["superseded_by_hazard_id"]
+            isOneToOne: false
+            referencedRelation: "hazards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hse_notification_records: {
         Row: {
           created_at: string
@@ -760,6 +1188,74 @@ export type Database = {
             columns: ["uploaded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      incident_hazard_links: {
+        Row: {
+          created_at: string
+          hazard_id: string
+          id: string
+          identified_at: string
+          identified_by: string
+          incident_id: string
+          link_type: string
+          notes: string | null
+          triggered_reassessment: boolean
+          was_in_register_at_time: boolean
+        }
+        Insert: {
+          created_at?: string
+          hazard_id: string
+          id?: string
+          identified_at?: string
+          identified_by: string
+          incident_id: string
+          link_type: string
+          notes?: string | null
+          triggered_reassessment?: boolean
+          was_in_register_at_time: boolean
+        }
+        Update: {
+          created_at?: string
+          hazard_id?: string
+          id?: string
+          identified_at?: string
+          identified_by?: string
+          incident_id?: string
+          link_type?: string
+          notes?: string | null
+          triggered_reassessment?: boolean
+          was_in_register_at_time?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incident_hazard_links_hazard_id_fkey"
+            columns: ["hazard_id"]
+            isOneToOne: false
+            referencedRelation: "hazards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incident_hazard_links_identified_by_fkey"
+            columns: ["identified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incident_hazard_links_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incident_hazard_links_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents_active"
             referencedColumns: ["id"]
           },
         ]
@@ -3430,6 +3926,7 @@ export type Database = {
         Args: { p_finding_id: string }
         Returns: string
       }
+      generate_hazard_ref_code: { Args: { p_site_id: string }; Returns: string }
       has_org_permission: { Args: { p_permission: string }; Returns: boolean }
       has_permission: {
         Args: { p_permission: string; p_site_id: string }
@@ -3657,6 +4154,7 @@ export type Database = {
         | "assigned"
         | "invited"
         | "stop_work_raised"
+        | "hazard_incident_linked"
       riddor_specified_injury:
         | "fracture"
         | "amputation"
@@ -3937,6 +4435,7 @@ export const Constants = {
         "assigned",
         "invited",
         "stop_work_raised",
+        "hazard_incident_linked",
       ],
       riddor_specified_injury: [
         "fracture",

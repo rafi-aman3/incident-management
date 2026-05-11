@@ -510,6 +510,7 @@ Plus: incident detail (`/incidents/[id]`), CAPA detail (`/capa/[id]`), per-repor
 
 | 2026-05-11 | **§SDS-INTEGRATION adopted — SDS Manager stub (v2 spec; build deferred, depends on §HZ)** | The SDS Manager is a separate sub-company application with no API credentials yet. Rather than wait for the real integration, spec a **demo-grade stub** that lights up the integration story end-to-end: Admin → Integrations card with configurable external link (`NEXT_PUBLIC_SDS_MANAGER_URL`), plus an "Import from SDS Manager" button on `/hazards/candidates` that opens a modal listing 6 hardcoded chemicals (Toluene · Sulfuric Acid · Hydraulic Oil · Isopropanol · Acetone · Sodium Hydroxide). Multi-select → batch creates N `hazard_candidates` rows per SDS (one per GHS H-statement) with `source_type='sds_import'` and `proposed_metadata` carrying the SDS reference + suggested controls for the EHS Manager to apply on conversion. Hardcoded catalog lives at `lib/sds/dummy-catalog.ts` — swap-in for a real API call when credentials arrive, candidate creation flow stays identical. No `sds_records` or `sds_chemical_uses` tables in v1 — candidate queue does double duty; lifecycle (revisions, usage tracking) deferred to a v2.5 / real-API phase. Surface lives at `/admin/integrations` (not `/settings`) — integrations are org-scoped, not user account preferences (Phase 8 `/settings` is personal). **Depends on §HZ shipping first** — `hazard_candidates` is the target write surface. **Build status: spec only — implementation queued after §HZ in the v2 surface scoping pass.** |
 | 2026-05-11 | **§JSA Job Safety Analysis adopted as a standalone module (v2 spec; build deferred)** | Pre-job structured analysis per OSHA 3071 / HSE INDG163. Job → ordered steps → per-step hazards (sharing §HZ's 5×5 matrix via `lib/risk/matrix.ts`) → per-hazard controls → approver sign-off → worker pre-job sign-off. 5 new tables (`jsas`, `jsa_steps`, `jsa_step_hazards`, `jsa_step_controls`, `jsa_signoffs`). JSA is **both a methodology and a document**: produces hazards proactively + workers acknowledge before performing the job. **Step-hazards promote to §HZ selectively** — EHS Manager picks which ones earn a permanent register entry via the `hazard_candidates` queue with `source_type='jsa'` + back-pointer `jsa_step_hazards.registered_hazard_id`. **Approver ≠ creator** (separation of duties, same invariant pattern as CAPA owner ≠ verifier). Default 12-month expiry; expired JSAs require re-approval before reuse. Worker `jsa_signoffs` unique per `(jsa_id, worker_id, signed_for_session)` so the same worker re-signs per shift session, not once-forever. 4-step wizard (Identity → Steps → Hazards & Controls → Review & Approve), `@dnd-kit` for step reorder, status lifecycle `draft → under_review → approved → expired → archived`. PPE + permits stored as `text[]`; `performed_by_roles` / `performed_by_workgroups` also `text[]` — formal workgroups table deferred to v2 (premature abstraction). **Depends on §HZ shipping first** — both `hazard_candidates(id)` and `hazards(id)` are referenced by `jsa_step_hazards.{hazard_candidate_id,registered_hazard_id}`. **Build status: spec only — implementation queued after §HZ in the v2 surface scoping pass.** |
+| 2026-05-11 | **Phase 14 — Hazard Register built (§HZ)** | Migration `20260521120000_phase14_hazard_register.sql` ships 5 new tables (`hazards`, `hazard_risk_assessments`, `hazard_controls`, `hazard_candidates`, `incident_hazard_links`) + 5 new permission keys (`hazard:read_site`, `hazard:report`, `hazard:manage`, `hazard:close`, `hazard_candidate:review`) + `seed_default_roles()` patched so future orgs inherit the grants + RLS via the existing `user_can_access_site` + `has_permission` helpers. Three SPEC deltas folded in: (1) `hazard_controls.next_control_review_at` cadence column so the "Overdue reviews" KPI tile reads both assessment-review and control-review schedules; (2) new `notification_kind = 'hazard_incident_linked'` enum value so the workflow notification engine can fire on `incident_hazard_links` insert; (3) **SPEC §HZ.3 matrix orientation corrected** from the v2-spec draft (S5=worst) to match the shipped incident severity engine (S1=worst, S5=best). The drafted §HZ matrix's inversion would have flipped every incident severity classification on the wizard — caught at kickoff Q&A. `hazard_risk_assessments.{inherent,residual}_risk_score` use the existing `severity` enum rather than a parallel scale. `lib/risk/matrix.ts` is the now-canonical lookup shared with `lib/workflow/severity.ts` via `lib/risk/coords.ts`. §HZ.8 KPI criterion follows: high-risk = `('S1','S2')`. |
 | 2026-05-11 | **§HZ Hazard Register adopted as a standalone module (v2 spec; build deferred)** | ISO 45001 §6.1.2 demands a live, contextualized inventory of workplace hazards distinct from the incident record. Adopts the spec in §HZ below: one `hazards` table (live register) + `hazard_risk_assessments` (history-preserving, periodic + event-driven) + `hazard_controls` (5-level hierarchy: elimination / substitution / engineering / administrative / PPE) + `hazard_candidates` (review queue funnel from 6 identification methods: worker report · inspection · incident review · MOC · JSA promotion · SDS import) + `incident_hazard_links` (closes the feedback loop). Six-state lifecycle (`identified` → `under_assessment` → `controlled` → `monitoring` → `closed`, plus `superseded` for merges). **Shared 5×5 risk matrix extracted to `lib/risk/matrix.ts`** so both incident severity (existing) and hazard risk assessment (new) consume the same lookup; `computeResidual()` returns the post-control level via reduction factors keyed off the highest-tier control applied (elimination = -4 levels, substitution = -3, engineering = -2, administrative/PPE = -1). SDS Manager integration stubbed in v1 — candidate rows can be created with `source_type='sds_import'` but no live SDS API; v2 wires the real lookup. Hazard categories (8) + sources (12) are `text + CHECK` constraints rather than enums to keep future expansion as a one-line migration. Routes scoped to `/hazards/*` + `/hazards/candidates/*`. KPI tiles: identified count, S4/S5 high-risk count, overdue reviews, **PPE-only-control count (auditor warning signal)**. **Build status: spec only — implementation queued for the v2 surface scoping pass.** |
 | 2026-05-09 | **Phase 13 — Site Setup OSHA + RIDDOR alignment** | Reshapes the wizard from 7 steps to 9 with self-explanatory slugs (`/admin/site-setup/<slug>` instead of `/<n>`). Adds 22 new columns on `sites` covering structured address (street_1/2 + city + state_or_region + postal_code), lat/long (`numeric(9,6)` paired-or-null with range CHECK; PostGIS deferred until spatial queries land), jurisdiction (`osha_jurisdiction` federal vs state_plan + `state_plan_code`; `gb_jurisdiction` HSE vs local-authority), identifiers (US: `ein`, `sic_code`, `ita_establishment_id`; GB: `crn`, `uk_sic_2007`, `hse_establishment_number` promoted from JSONB), workforce (`peak_employees_year`, `avg_employees_year`, `partially_exempt_override`), hazards (`applicable_standards text[]` ⊆ {1910/1926/1915/1917/1918/1928}, `psm_applicable`, `hazard_tags text[]` ⊆ 10-tag catalog), lifecycle (`site_type`, `operational_status`, `opened_on`, `closed_on`), and people (`site_ehs_lead_id` FK to profiles, `riddor_responsible_person_{name,role}`). New child table `site_emergency_contacts` (name + role + phone + email + sort_order) for per-site contacts. Two computed-read SQL functions (`is_ita_required(naics, peak_employees)`, `is_partially_exempt(naics, peak_employees)`) curated from 29 CFR 1904.2 + 1904.41 Appendix A — derive recordkeeping flags at read time so the wizard's badges stay live without storage drift. Tag/standard/state-plan catalogs live as TS constants under `lib/site-setup/` (text[] over lookup tables — premature abstraction otherwise). **Also** fixes a Phase-0-era RLS bug: `notification_recipients` shipped with a SELECT-only policy, so site setup Step 6 (now Step 8 — recipients) silently 401'd on Save. Adds INSERT/UPDATE/DELETE policies gated on `site:configure`, mirroring 11a's site-edit perms. URL slugs add `slug` field to `SETUP_STEPS` catalog; `nextIncompleteStep()` returns slug strings; numeric URL backward-compat dropped (admin-only chrome, no external links, redirector at `/admin/site-setup` handles stale tabs). Existing `address text` column stays as legacy denormalized string for one phase; migration runs `update sites set street_1 = address` for backfill — no regex parsing (US/GB formats vary too much; admin re-splits on next walkthrough). All recommendations in `plans/13-site-setup-osha-riddor.md` locked as decisions per kickoff Q&A. |
 
@@ -656,7 +657,7 @@ POST /api/argus/tile
 
 ## §HZ Hazard Register
 
-> **Build status (2026-05-11):** Specification adopted; implementation queued for the v2 surface scoping pass. The data shapes, route layout, and shared-matrix refactor below are locked decisions; the migration + UI land in a future phase. Cross-reference §15 decisions log (2026-05-11 row).
+> **Build status (2026-05-11):** Schema + RLS + permissions + shared-matrix refactor shipped in Phase 14. UI + Argus integration ship in the same PR. Cross-reference §15 decisions log (2026-05-11 rows: spec adoption + Phase 14 build).
 
 ### HZ.1 Purpose
 
@@ -786,6 +787,7 @@ create table public.hazard_controls (
   implemented_at timestamptz,
   last_verified_at timestamptz,
   next_verification_at date,
+  next_control_review_at date,                  -- cadence delta from Phase 14
 
   origin text not null default 'from_initial_assessment' check (origin in (
     'pre_existing','from_initial_assessment','from_capa',
@@ -860,45 +862,49 @@ create index on public.incident_hazard_links (hazard_id);
 
 ### HZ.3 Shared risk matrix
 
-Extract the 5×5 matrix to `lib/risk/matrix.ts`. Called from both incident severity (existing) and hazard risk assessment (new):
+Extracted to `lib/risk/matrix.ts` (Phase 14). Shared with the incident severity engine via `lib/workflow/severity.ts`, which now delegates through `lib/risk/coords.ts` for the integer-coordinate API the Phase-1 wizard still uses.
+
+**Orientation:** `S1 = Critical (worst residual risk)` … `S5 = Insignificant (best)`, matching the shipped incident severity scale. The earlier §HZ.3 draft inverted this (S5=worst); the inversion was caught at Phase 14 kickoff (2026-05-11) and corrected to keep a single canonical S-number convention across both surfaces. See §15 decisions log row for that date.
 
 ```typescript
-// lib/risk/matrix.ts
-export type Likelihood = 'rare'|'unlikely'|'possible'|'likely'|'almost_certain'
+// lib/risk/matrix.ts (excerpt — full file in repo)
+export type Likelihood  = 'rare'|'unlikely'|'possible'|'likely'|'almost_certain'
 export type Consequence = 'insignificant'|'minor'|'moderate'|'major'|'catastrophic'
-export type RiskLevel = 'S1'|'S2'|'S3'|'S4'|'S5'
+export type RiskLevel   = 'S1'|'S2'|'S3'|'S4'|'S5'
 
 export const MATRIX: Record<Likelihood, Record<Consequence, RiskLevel>> = {
-  rare:           { insignificant:'S1', minor:'S1', moderate:'S2', major:'S2', catastrophic:'S3' },
-  unlikely:       { insignificant:'S1', minor:'S2', moderate:'S2', major:'S3', catastrophic:'S4' },
-  possible:       { insignificant:'S2', minor:'S2', moderate:'S3', major:'S4', catastrophic:'S4' },
-  likely:         { insignificant:'S2', minor:'S3', moderate:'S4', major:'S4', catastrophic:'S5' },
-  almost_certain: { insignificant:'S3', minor:'S3', moderate:'S4', major:'S5', catastrophic:'S5' },
+  rare:           { insignificant:'S4', minor:'S4', moderate:'S3', major:'S3', catastrophic:'S2' },
+  unlikely:       { insignificant:'S4', minor:'S4', moderate:'S3', major:'S2', catastrophic:'S2' },
+  possible:       { insignificant:'S4', minor:'S3', moderate:'S2', major:'S2', catastrophic:'S1' },
+  likely:         { insignificant:'S4', minor:'S3', moderate:'S2', major:'S1', catastrophic:'S1' },
+  almost_certain: { insignificant:'S3', minor:'S2', moderate:'S1', major:'S1', catastrophic:'S1' },
 }
 
 export function computeRisk(l: Likelihood, c: Consequence): RiskLevel {
   return MATRIX[l][c]
 }
 
-// Compute residual after controls. Reduction factor by highest control level applied.
+// Residual after controls. Reduction factor = highest control level applied.
 const REDUCTION: Record<string, number> = {
-  elimination:    4,  // drops 4 levels (capped at S1)
+  elimination:    4,
   substitution:   3,
   engineering:    2,
   administrative: 1,
   ppe:            1,
 }
 
+// In this orientation, "reducing risk" moves the S-number UP toward S5 (best),
+// capped at 5. Cohort: elimination on S1 → S5; PPE-only on S3 → S4.
 export function computeResidual(inherent: RiskLevel, controlLevels: string[]): RiskLevel {
   if (controlLevels.length === 0) return inherent
   const best = Math.max(...controlLevels.map(l => REDUCTION[l] ?? 0))
   const inherentNum = parseInt(inherent.slice(1))
-  const residualNum = Math.max(1, inherentNum - best)
+  const residualNum = Math.min(5, inherentNum + best)
   return `S${residualNum}` as RiskLevel
 }
 ```
 
-> **Refactor note.** The current severity engine (`lib/workflow/severity.ts` + Step-2 risk-matrix UI from Phase 1) inlines its own 5×5 lookup. The build phase that implements §HZ must move that lookup to `lib/risk/matrix.ts` and re-point the incident severity engine + the existing `<RiskMatrix>` component at it. No behavior change for incidents; single source of truth shared with the new hazard surfaces.
+> **Note.** `hazard_risk_assessments.inherent_risk_score` and `residual_risk_score` use the existing `severity` Postgres enum (`S1..S5`), reusing the type already in `lib/supabase/types.ts` rather than a parallel hazard scale.
 
 ### HZ.4 Routes
 
@@ -954,10 +960,10 @@ Permission keys (proposed, finalized at build time): `hazard:read_site`, `hazard
 
 Four tiles:
 
-- **Hazards identified** — count of `status != 'closed'`
-- **High-risk hazards** — count where `residual_risk_score in ('S4','S5')`
-- **Overdue reviews** — count where `next_review_at < today`
-- **PPE-only controls** — count of hazards whose only control_level is `'ppe'` — auditor warning signal (ISO 45001 hierarchy violation indicator)
+- **Hazards identified** — count of `status not in ('closed','superseded')` (excludes soft-deleted)
+- **High-risk hazards** — count where `residual_risk_score in ('S1','S2')` (S1=Critical, S2=Major per the shared scale)
+- **Overdue reviews** — count where `next_review_at < today` OR `next_control_review_at < today` (union across both cadences per Phase 14 delta)
+- **PPE-only controls** — count of hazards whose only applied control_level is `'ppe'` — auditor warning signal (ISO 45001 hierarchy violation indicator), rendered with the amber warning color
 
 ### HZ.9 Acceptance
 
@@ -970,7 +976,10 @@ A hazard can be reported via `/hazards/new`. A candidate created from any source
 | 2026-05-11 | **Hazard Register is a distinct module from incidents** | ISO 45001 §6.1.2 demands a live inventory of hazards independent of whether they have caused incidents. Hazards predate incidents (proactive identification) and persist after them (residual + monitoring). Coupling them would force every hazard through the incident workflow. |
 | 2026-05-11 | **Single `hazard_candidates` queue funnels six identification methods** | One human-review gate keeps quality high without forcing every method (SDS import, worker report, etc.) to invent its own review UI. Candidates are the *system-generated proposal*; conversion is the *competent-person decision*. Lets us add new identification sources later by appending to the `source_type` CHECK. |
 | 2026-05-11 | **Risk matrix extracted to `lib/risk/matrix.ts` — shared with incident severity engine** | Two surfaces (incident Step-2 and hazard risk assessment) consume the same 5×5 lookup. Inlining it twice invites drift. The refactor is mechanical (no behavior change for incidents); the new hazard module is the forcing function. `computeResidual()` is hazard-specific (incidents don't apply controls before classification) but lives in the same file for cohesion. |
-| 2026-05-11 | **Controls follow the ISO 45001 hierarchy with deterministic residual** | Five levels (elimination · substitution · engineering · administrative · PPE) with reduction factors (4/3/2/1/1). Residual = max-reduction-from-applied-controls, capped at S1. Makes the residual derivable rather than EHS-typed → eliminates a guessable subjective field. Trade-off: doesn't model interaction effects (two engineering controls aren't better than one); demo-grade fidelity is fine for v1. |
+| 2026-05-11 | **Controls follow the ISO 45001 hierarchy with deterministic residual** | Five levels (elimination · substitution · engineering · administrative · PPE) with reduction factors (4/3/2/1/1). Residual = inherent + max-reduction-from-applied-controls, capped at S5 (safest). Makes the residual derivable rather than EHS-typed → eliminates a guessable subjective field. Trade-off: doesn't model interaction effects (two engineering controls aren't better than one); demo-grade fidelity is fine for v1. |
+| 2026-05-11 | **§HZ.3 matrix orientation locked to incident scale (S1=worst, S5=best) at Phase 14 kickoff** | The original v2-spec draft of §HZ.3 inverted the scale (rare+insignificant → S1, almost_certain+catastrophic → S5). Routing the incident wizard through this would have flipped severity / Track A-B-C routing / regulatory triggers / colors for every cell. Resolved by re-keying the §HZ.3 matrix to match incidents (`rare × insignificant → S4`, `almost_certain × catastrophic → S1`), capping `computeResidual()` at S5, and updating the §HZ.8 high-risk KPI criterion to `('S1','S2')`. Single shared canonical scale; SPEC §HZ.3 rewritten in-place. |
+| 2026-05-11 | **`hazard_controls.next_control_review_at` cadence column added** | Phase 14 SPEC delta. §HZ KPI "Overdue reviews" tile reads both `hazard_risk_assessments.next_review_at` AND `hazard_controls.next_control_review_at`; controls have a verification cadence distinct from assessment review. One nullable date column, no new table. |
+| 2026-05-11 | **`notification_kind = 'hazard_incident_linked'` added** | Phase 14 SPEC delta. Risk-owner auto-notification fires when `incident_hazard_links` insert succeeds with `link_type='causal'` — alerts the hazard's `identified_by` + the most recent assessment's `assessor_id`. Reuses the existing `lib/workflow/notifications.ts` engine and `notifications` / `notification_recipients` tables; just one new enum value. |
 | 2026-05-11 | **`status` includes `superseded` for hazard mergers/replacements** | A safer redesign that retires a hazard (e.g. eliminate vs. control) is auditable as `status='superseded'` + `superseded_by_hazard_id`. Distinct from `closed` (no longer a hazard) and from soft-delete (`deleted_at`). |
 | 2026-05-11 | **`hazard_categories` (8) and `hazard_sources` (12) are `text + CHECK`, not enums** | Adding a category is a one-line migration vs an `ALTER TYPE ... ADD VALUE` that locks the table on enum rewrite. The set is stable enough that an enum would be tidier; the deciding factor is that v2 may introduce industry-specific categories (e.g. radiation for healthcare/lab), and we want that to be a 30-second migration. |
 | 2026-05-11 | **`incident_hazard_links` closes the feedback loop separately from `source_incident_id`** | `hazards.source_incident_id` records the *single incident that birthed this hazard* (during investigation review). `incident_hazard_links` is the many-to-many of *every incident that exposed this hazard*, with `link_type` (causal / contributing / exposed_but_not_causal) + `was_in_register_at_time` for compliance trend analysis. Two separate columns, distinct semantics. |

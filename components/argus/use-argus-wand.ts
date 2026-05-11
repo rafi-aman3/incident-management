@@ -42,6 +42,18 @@ export type WandRequest =
   | {
       surface: "capa_metadata";
       payload: { investigationId: string; siteId: string };
+    }
+  | {
+      surface: "hazard_controls";
+      payload: {
+        siteId: string;
+        candidateId?: string;
+        hazardId?: string;
+        title: string;
+        category: string;
+        description?: string;
+        proposedMetadata?: Record<string, unknown>;
+      };
     };
 
 export interface WandResult<T = unknown> {
