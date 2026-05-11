@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { setSidebarPinned } from "./sidebar-actions";
+import type { SwitcherSite } from "./site-switcher";
 
 const HOVER_ENTER_MS = 150;
 
@@ -14,6 +15,9 @@ export function SidebarShell({
   allowedHrefs,
   userLabel,
   roleLabel,
+  sites,
+  currentSiteId,
+  canCreateSite,
   topbar,
   banner,
   children,
@@ -22,6 +26,9 @@ export function SidebarShell({
   allowedHrefs: ReadonlyArray<string>;
   userLabel: string;
   roleLabel: string;
+  sites: SwitcherSite[];
+  currentSiteId: string | null;
+  canCreateSite: boolean;
   topbar: ReactNode;
   banner: ReactNode;
   children: ReactNode;
@@ -95,6 +102,9 @@ export function SidebarShell({
         onPinToggle={togglePin}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        sites={sites}
+        currentSiteId={currentSiteId}
+        canCreateSite={canCreateSite}
       />
       <SidebarInset>
         {topbar}
