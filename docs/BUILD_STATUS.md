@@ -834,6 +834,20 @@ Plan merged 2026-05-12 on `docs/phase-17-settings-redesign-plan` (PR #42, commit
 
 ---
 
+## CLAUDE.md split — doc reorganization
+
+Shipped 2026-05-12 on `docs/split-claude-md` (PR #43, commit `289ed3d`). Doc-only refactor — no code, no migrations, no behavior change. `CLAUDE.md` had grown to 98 lines but one line (the inline "Build status:" paragraph) was ~26 KB of phase-by-phase log accreted since PR #30. Split moves that log + duplicated sections out:
+
+- **CLAUDE.md** slimmed 98→61 lines: dropped `## Modules` table, `## Tenancy`, `## RBAC`, `## Verification`, Conventions domain-fact bullets (industry types · pathways · seed structure · type-specific incident data · file storage), and the inline build log. Kept (load-bearing for every conversation): Hard rules, Tech stack, Conflict resolution, "Read these in order" pointer list, Path aliases. Build-status line reduced to a 1-line pointer with a note that **future PRs append to BUILD_STATUS.md, never back into CLAUDE.md**.
+- **docs/SPEC.md** §2 gained a "Surface modules" 6-row table + "Tenancy" subsection (both moved from CLAUDE.md).
+- **docs/local-dev.md** (new, 41 lines): boot commands, Supabase env vars, `pnpm db:push` / `db:types` / `db:check` workflow, migration timestamp naming, v1 domain facts.
+- **docs/BUILD_STATUS.md** appended 10 missing phase entries (Phase 7, 10, Topbar fix, §HZ/§JSA/§SDS spec adoptions, V2 plans, Phase 14+16, Phase 15, Phase 17 plan) — these were trapped in the CLAUDE.md inline log and never made it across.
+- **docs/superpowers/specs/2026-05-12-claude-md-split-design.md** records the brainstorming that drove the refactor.
+
+**New convention:** every shipped PR's entry goes in `docs/BUILD_STATUS.md`. CLAUDE.md no longer accretes per-PR log entries. Doc-only post-merge bumps (the `docs: bump CLAUDE.md — Phase X reference` pattern from PRs #24-#42) end here.
+
+---
+
 ## Workflow notes
 
 All v1-roadmap phases (0-13) shipped + Phase 7 Global Search + Phase 10 Safety Bulletins. Phase 9 closed (9a foundation, 9b Copilot, 9c Investigator, 9d Magic Wands + Gemini pivot, 9e Global Panel + Insight Tiles). V2 surface kickoff: Phase 14 Hazard Register + Phase 16 SDS Manager stub shipped together (PR #40); Phase 15 JSA shipped (PR #41); Phase 17 Settings Redesign plan merged (PR #42, code not started). Remaining v2 surface per `PLANNING/IMS_PLANNING.md`: Document Control / Training / Audit / MOC / Permit / Inspection ITA + HSE submission / Risk Register / Contractor / Toolbox Talks / BBS / Emergency Management / Environmental — each needs a fresh scoping pass before being picked up. Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
