@@ -39,9 +39,9 @@ import {
  * dot-indicator come in a follow-up slice; this commit keeps the existing
  * single-turn UX and adds the context plumbing.
  */
-export function ArgusSidePanel() {
+export function ArgusSidePanel({ initialOpen = false }: { initialOpen?: boolean }) {
   const pageContext = useArgusPageContext();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [prompt, setPrompt] = useState("");
   const [response, setResponse] = useState("");
   const [error, setError] = useState<string | null>(null);

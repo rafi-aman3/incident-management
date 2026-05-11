@@ -668,6 +668,27 @@ Other settings pages get the **generic** context (no `hasActiveSignal`), so the 
 
 ---
 
+## Kickoff Q&A resolutions (2026-05-12)
+
+Locked at execution kickoff. Defaults accepted except where noted; one scope expansion.
+
+| # | Question | Resolution |
+|---|---|---|
+| 1 | Cookie clear — also reset theme? | **No** (default). Theme is an explicit user pref, not a tracking cookie. |
+| 2 | Account delete — hard or soft? | **Hard delete** + **two-unlock last-admin gate** *(scope expansion)*: when the user is the sole `org:configure` holder, the UX offers (a) promote-another-admin then come back, OR (b) delete the entire organisation along with the account. Adds a `deleteOwnOrg` server action + AlertDialog flow. |
+| 3 | Notifications life-safety scope — bell AND banner? | **Both** (default). |
+| 4 | Logo — enforce square? | **Suggest only** (default). 96×96 box uses `object-contain`. |
+| 5 | Argus tab when `argus_enabled=false` | **Render with disabled-state copy** (default). |
+| 6 | Sidebar "Restore all" button | **Yes** (default). 1-line `setSidebarHiddenItems([])`. |
+| 7 | `canAnywhere` helper location | **Use existing `orgCan()` in `lib/auth/orgCan.ts`** *(deviation from plan)* — already shipped Phase 3 with identical semantics. No new helper. |
+| 8 | PR sizing | **Single PR** (default). |
+
+**Org-delete confirmation gate (resolution to question raised at kickoff):** Type the exact org name **AND** type the literal word `DELETE` (two fields). Count summary above the gate shows `N members, M sites, K incidents` from a new `org_delete_summary(p_org_id)` RPC.
+
+**FK flips (discovery during kickoff):** Seven FKs from operational tables to `profiles(id)` are currently `ON DELETE RESTRICT` (capas.owner_id, severity_overrides.overridden_by, hazard_risk_assessments.assessor_id, hazard_candidates.identified_by, jsas.created_by, jsa_worker_signoffs.worker_id, jsa_step_hazards.identified_by). For hard-delete to work, the migration drops `NOT NULL` on these columns and flips the FKs to `ON DELETE SET NULL`. UI renders `Removed user` for null actors. The "every CAPA has an owner" invariant moves from the FK to the action layer (create-CAPA still requires owner; orphan only happens on user delete).
+
+---
+
 ## Open questions — resolve at kickoff Q&A
 
 1. **Cookie-preferences depth** — current default is **transparency-only** (table + clear-local-data button). Should the "Clear non-essential local data" button also clear the **next-themes** preference (so the user resets back to System)? Default = **no** (theme is an explicit user pref, not a tracking cookie). ✅/❌

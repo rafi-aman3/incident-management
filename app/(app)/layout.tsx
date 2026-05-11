@@ -6,7 +6,7 @@ import { SIDEBAR_PINNED_COOKIE } from "@/components/app-shell/sidebar-cookie";
 import { Topbar } from "@/components/app-shell/topbar";
 import { RegulatoryBanner } from "@/components/app-shell/regulatory-banner";
 import { StopWorkBanner, type ActiveStopWork } from "@/components/app-shell/stop-work-banner";
-import { NAV_ITEMS, ROLE_BADGE } from "@/components/app-shell/nav-config";
+import { NAV_ITEMS, PINNED_NAV_HREFS, ROLE_BADGE } from "@/components/app-shell/nav-config";
 import { ArgusContextProvider } from "@/components/argus/argus-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/supabase/auth";
@@ -41,7 +41,14 @@ async function AppShell({ children }: { children: ReactNode }) {
       !item.permission || (await can(item.permission, currentSiteId))
     )
   );
-  const allowedHrefs = NAV_ITEMS.filter((_, i) => navChecks[i]).map((i) => i.href);
+  // Phase 17: also drop items the user has hidden via /settings/sidebar.
+  // PINNED_NAV_HREFS short-circuit the hide list — even a stale value can't
+  // remove dashboard/report-incident/admin from the rail.
+  const hiddenSet = new Set(profile.sidebar_hidden_items ?? []);
+  const allowedHrefs = NAV_ITEMS
+    .filter((_, i) => navChecks[i])
+    .filter((item) => PINNED_NAV_HREFS.has(item.href) || !hiddenSet.has(item.href))
+    .map((i) => i.href);
 
   const sites = memberships
     .map((m) =>
@@ -80,6 +87,18 @@ async function AppShell({ children }: { children: ReactNode }) {
     can_create_site: canCreateSite,
   });
 
+  // Phase 17: silenced kinds (per-user). Pre-fetched so the bell + regulatory
+  // banner share the same source of truth — life-safety kinds can't be
+  // inserted via the UI, and the read-layer filter is defence-in-depth
+  // against a hand-rolled DB insert that bypassed the action gate.
+  const { data: silenceRows } = await supabase
+    .from("user_notification_silences")
+    .select("notification_kind")
+    .eq("profile_id", profile.id);
+  const silencedKinds = new Set(
+    (silenceRows ?? []).map((r) => r.notification_kind as string)
+  );
+
   let notifications: NotificationItem[] = [];
   if (currentSiteId) {
     // Bell shows: site-wide regulatory deadlines (recipient_id NULL) +
@@ -93,16 +112,18 @@ async function AppShell({ children }: { children: ReactNode }) {
       .or(`recipient_id.is.null,recipient_id.eq.${profile.id}`)
       .order("deadline_at", { ascending: true })
       .limit(20);
-    notifications = (data ?? []).map((n) => ({
-      id: n.id,
-      kind: n.kind,
-      title: n.title,
-      body: n.body,
-      deadline_at: n.deadline_at,
-      incident_id: n.incident_id,
-      capa_id: n.capa_id,
-      created_at: n.created_at,
-    }));
+    notifications = (data ?? [])
+      .filter((n) => !silencedKinds.has(n.kind as string))
+      .map((n) => ({
+        id: n.id,
+        kind: n.kind,
+        title: n.title,
+        body: n.body,
+        deadline_at: n.deadline_at,
+        incident_id: n.incident_id,
+        capa_id: n.capa_id,
+        created_at: n.created_at,
+      }));
   }
 
   const fullName = profile.full_name ?? profile.email;
@@ -162,6 +183,7 @@ async function AppShell({ children }: { children: ReactNode }) {
             roleKey={currentRoleKey}
             currentSiteName={currentMembership?.site?.name ?? null}
             argusEnabled={argusEnabled}
+            argusPanelDefault={profile.argus_panel_default}
           />
         }
         banner={

@@ -15,6 +15,8 @@ type LoginSearch = {
   signed_out?: string;
   password_reset?: string;
   after_verify?: string;
+  account_deleted?: string;
+  org_deleted?: string;
 };
 
 export default function LoginPage({
@@ -76,9 +78,28 @@ async function LoginFormFromParams({
     signed_out,
     password_reset,
     after_verify,
+    account_deleted,
+    org_deleted,
   } = await searchParams;
   return (
     <>
+      {account_deleted === "1" ? (
+        <div
+          role="status"
+          className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs text-foreground"
+        >
+          Your account has been deleted. Thank you for using the platform.
+        </div>
+      ) : null}
+      {org_deleted === "1" ? (
+        <div
+          role="status"
+          className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs text-foreground"
+        >
+          The organisation has been deleted. All accounts and data within it
+          were permanently removed.
+        </div>
+      ) : null}
       {signed_out === "everywhere" ? (
         <div
           role="status"

@@ -63,6 +63,27 @@ export const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { href: "/admin",           label: "Admin",           icon: Settings2,          permission: "site:configure" },
 ];
 
+/**
+ * Phase 17 — Sidebar customisation.
+ *
+ * `PINNED_NAV_HREFS` are always rendered (after the RBAC gate). The user
+ * cannot hide them from /settings/sidebar. Everything else in NAV_ITEMS is
+ * hideable: a checkbox is offered, and the user's selection lands in
+ * `profiles.sidebar_hidden_items`. AppSidebar filters against the array.
+ *
+ * Hiding only affects the rendered link — direct URL access + ⌘K still work
+ * (RBAC remains the only enforcement boundary).
+ */
+export const PINNED_NAV_HREFS: ReadonlySet<string> = new Set([
+  "/dashboard",
+  "/incidents/new/1",
+  "/admin",
+]);
+
+export const HIDEABLE_NAV_ITEMS: ReadonlyArray<NavItem> = NAV_ITEMS.filter(
+  (item) => !PINNED_NAV_HREFS.has(item.href)
+);
+
 export const ROLE_BADGE: Record<RoleKey, { label: string; icon: LucideIcon }> = {
   worker:      { label: "Worker",       icon: ShieldCheck },
   supervisor:  { label: "Supervisor",   icon: ShieldCheck },

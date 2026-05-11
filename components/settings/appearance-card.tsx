@@ -53,7 +53,7 @@ export function AppearanceCard() {
               className={cn(
                 "inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm transition-colors",
                 active
-                  ? "bg-brand text-white shadow-sm"
+                  ? "bg-primary text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >

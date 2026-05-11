@@ -848,6 +848,65 @@ Shipped 2026-05-12 on `docs/split-claude-md` (PR #43, commit `289ed3d`). Doc-onl
 
 ---
 
+## Phase 17 — Settings Redesign
+
+Shipped 2026-05-12 (PR #44). First runtime PR after the Phase 17 plan landed in PR #42 — kickoff Q&A locked all 8 plan questions plus one scope expansion (delete-org escape hatch for sole-admins). Re-architects `/settings` from a single-column 4-card account-preferences surface (Phase 8 / PR #24) into a left-sidebar IA with **4 groups / 9 nested-route tabs**. Closes the Phase 8 SPEC §15 deferral on per-user notification silencing.
+
+**Migration `20260524120000_phase17_settings_redesign.sql`** lands:
+- `orgs.logo_url text` — nullable Storage path
+- `profiles.sidebar_hidden_items text[]` (default `'{}'`) + `profiles.argus_panel_default boolean` (default `true`)
+- `user_notification_silences (profile_id, notification_kind)` composite-PK table with RLS = own rows
+- New permission key `org:configure` inserted into `permissions` catalog; backfilled onto every existing `site_admin` default role. The init.sql `seed_default_roles()` site_admin branch already uses a catch-all (`select v_role_id, key from permissions`) so future orgs inherit automatically — no `seed_default_roles()` re-creation needed.
+- **7 FKs to `profiles(id)` flipped from `RESTRICT` to `SET NULL`** so hard-delete cascades cleanly: `capas.owner_id` · `severity_overrides.overridden_by` · `hazard_risk_assessments.assessor_id` · `incident_hazard_links.identified_by` · `jsas.created_by` · `jsa_signoffs.worker_id` · `jsa_incident_links.identified_by`. `NOT NULL` dropped on each. The "every CAPA has an owner" invariant moves from the FK to the create-CAPA action; orphan ownership only happens after a deletion. UI renders "Removed user" for null actors.
+- `count_org_configure_holders(p_org_id)` SECURITY DEFINER RPC — unions role-path + team-path holders (mirrors `resolve_org_permissions` semantics) for the last-admin guard.
+- `org_delete_summary(p_org_id)` SECURITY DEFINER RPC — returns `{ name, members, sites, incidents }` JSON for the org-delete confirm dialog's count summary.
+- Public Storage bucket `org-logos` with 4 RLS policies: anyone-reads (it's a public bucket); insert/update/delete gated on `org:configure` with a per-org path-prefix check (`(storage.foldername(name))[1] = p.org_id::text`).
+
+**8 new server actions** in `app/(app)/settings/actions.ts`: `updateOrg`, `uploadOrgLogo`, `removeOrgLogo`, `setSidebarHiddenItems`, `setArgusPanelDefault`, `setNotificationSilence`, `deleteOwnAccount`, `deleteOwnOrg`. Phase 8's existing 3 (`updateProfile`, `changePassword`, `signOutEverywhere`) keep their signatures — the 4 existing cards re-mount into nested routes without rewrite. The plan's "new `canAnywhere` helper" deviated from in favor of the existing `orgCan` (Phase 3, same semantics).
+
+**Routes** (`app/(app)/settings/`):
+- `page.tsx` is now a `redirect("/settings/profile")`
+- New `layout.tsx` wraps every section with `<SettingsShell>` (the sidebar + content area; computes `availability.organization` once via `orgCan("org:configure")`)
+- Nested pages: `profile`, `appearance`, `sidebar`, `organization`, `argus`, `notifications`, `security`, `cookies`, `delete-account`
+- `/settings/organization` returns the `EmptyState` ("admin-only") for non-admins
+
+**Components** (`components/settings/`):
+- `settings-shell.tsx` + `settings-sidebar.tsx` — server + client; sidebar reads `pathname` for active state, renders a `<select>` with `<optgroup>` headings below lg per the inline-collapsibles-in-Sheet memory
+- `organization-card.tsx` + `org-logo-uploader.tsx` — RHF/Zod-style form via `useActionState`; drag-and-drop logo input with 2 MB cap + JPEG/PNG/WebP/GIF allowlist + local preview via `URL.createObjectURL`; AlertDialog confirm for Remove
+- `sidebar-pref-card.tsx` — checkbox-per-hideable-item; "Restore all" footer button; optimistic UI flips immediately and the action revalidates the layout
+- `argus-prefs-card.tsx` — read-only org status (enabled badge + today's token usage / budget) + per-user Switch wired to `setArgusPanelDefault`
+- `notifications-prefs-card.tsx` — 5 groups; life-safety groups (Regulatory clock + Stop-work) render Switches disabled with a `<Lock>` icon and "Locked" badge; toggles roll back optimistically on server rejection
+- `cookies-card.tsx` — transparency table + "Clear non-essential local data" button (client-only `clearLocalData()` helper at `lib/settings/clear-local-data.ts` wipes `argus.search.recent` + `sonner.*` + `sidebar_pinned` cookie; auth cookie + theme preserved)
+- `delete-account-card.tsx` — typed-email gate + sole-admin amber banner + nested AlertDialog for the org-delete escape hatch (type org name + the literal word `DELETE`)
+- `sign-out-section.tsx` — same-device sign-out folded into Security; old `sign-out-card.tsx` removed
+- New `components/ui/switch.tsx` — radix Switch primitive (peer matching Checkbox/Tooltip patterns)
+
+**Cross-cutting wiring** in `app/(app)/layout.tsx`:
+- NAV filter step now drops items in `profile.sidebar_hidden_items` after the RBAC filter; `PINNED_NAV_HREFS = {/dashboard, /incidents/new/1, /admin}` short-circuit the hide list (defence in depth — even a stale value can't hide them)
+- Pre-fetches `user_notification_silences` for the current user and filters the bell-feed query so silenced kinds vanish from both `<NotificationBell>` and `<RegulatoryBanner>`
+- Passes `profile.argus_panel_default` to `<Topbar argusPanelDefault={...}>` which threads it as `<ArgusSidePanel initialOpen={...}>`
+- `lib/supabase/auth.ts` `ProfileRow` + `requireUser` SELECT extended with `sidebar_hidden_items` + `argus_panel_default`
+
+**Permission registry** (`lib/rbac/permissions.ts`): adds `"org:configure"` to the `PERMISSIONS` const tuple. `nav-config.ts` exports `PINNED_NAV_HREFS` + `HIDEABLE_NAV_ITEMS` for the sidebar customisation tab + layout filter.
+
+**Self-service deletion** — see new SPEC §AUTH-DELETE-ACCOUNT. Hard delete via `auth.admin.deleteUser`. Audit row (`account.deleted` or `org.deleted` verb on `activity_events`) is inserted **before** the cascade fires. Login page reads `?account_deleted=1` and `?org_deleted=1` and renders success banners. **Two-unlock last-admin gate**: when `count_org_configure_holders <= 1`, the typed-email button is disabled and an amber banner offers either "promote another admin" (link to `/admin/members`) OR a separate "Delete organisation…" AlertDialog with a stricter two-field gate (org name + the literal word `DELETE`).
+
+**Argus** stays read-only: no new tools, no new wand surfaces, no new system prompts. The Argus tab shows org status + today's token usage. The per-user side-panel-default is the only writable Argus surface in this PR.
+
+**Doc updates:**
+- `docs/SPEC.md` §15 decision-log entry · new §UI-SETTINGS-IA section · new §AUTH-DELETE-ACCOUNT section
+- `docs/ui-flow.md` `/settings` row expanded into 10 lines (one per tab)
+- `docs/smoke-test-phase17.md` (NEW) — 12-step walkthrough (shell + IA · Phase-8 carryover · Sidebar customisation · Organization admin path · Organization permission gate · Argus prefs · Notifications prefs + life-safety guard · Cookies · Delete non-admin · Sole-admin gate · Delete entire org · Activity log)
+- `plans/17-settings-redesign.md` appended "Kickoff Q&A resolutions (2026-05-12)" section locking all 8 questions + the delete-org scope expansion + the 7 FK flips discovered during kickoff
+
+**Kickoff Q&A resolutions** (locked at execution kickoff): cookie clear leaves theme alone · life-safety silencing scope = bell + banner · logo aspect = suggest only · Argus tab renders with disabled-state when org-disabled · Sidebar "Restore all" ships · `orgCan` reused (no new `canAnywhere`) · single PR · hard delete + two-unlock last-admin gate · org-delete gate = org name + literal DELETE.
+
+**Deferred to v2 (hard cuts):** Branding tab · Billing/Invoices · Integrations move into Settings · separate Privacy & Data tab · org-admin Argus on/off toggle · token-budget edit · editable workspace slug · avatar upload · MFA/2FA · active-sessions list · timezone preference · language preference · audit-log surface on org edits · GDPR "Export my data" endpoint · real cookie consent toggles · soft-delete fallback · 14-day grace period before delete.
+
+`pnpm tsc --noEmit` clean. `pnpm lint` **88 problems (69 errors, 19 warnings)** — 2 lower than pre-Phase-17 baseline of 90 (single eslint-disable note added in `org-logo-uploader.tsx` for the same `useActionState` + setState-in-effect false-positive pattern Phase 8 already used in `appearance-card.tsx`). Plan: `plans/17-settings-redesign.md`.
+
+---
+
 ## Workflow notes
 
 All v1-roadmap phases (0-13) shipped + Phase 7 Global Search + Phase 10 Safety Bulletins. Phase 9 closed (9a foundation, 9b Copilot, 9c Investigator, 9d Magic Wands + Gemini pivot, 9e Global Panel + Insight Tiles). V2 surface kickoff: Phase 14 Hazard Register + Phase 16 SDS Manager stub shipped together (PR #40); Phase 15 JSA shipped (PR #41); Phase 17 Settings Redesign plan merged (PR #42, code not started). Remaining v2 surface per `PLANNING/IMS_PLANNING.md`: Document Control / Training / Audit / MOC / Permit / Inspection ITA + HSE submission / Risk Register / Contractor / Toolbox Talks / BBS / Emergency Management / Environmental — each needs a fresh scoping pass before being picked up. Every change that affects runtime behavior goes through a feature branch + PR per `.claude/rules/github-workflow.md`. Direct push to `main` is reserved for doc-only updates the user explicitly asks for.
