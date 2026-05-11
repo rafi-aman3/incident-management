@@ -18,8 +18,10 @@ Run after pulling `feat/safety-bulletins`. Assumes seeded UCB org + `pnpm dev` r
 
 - [ ] As `ehs@demo.local`, click "Draft bulletin" on the Track-A investigation. Land on `/bulletins/new?from_investigation={id}`.
 - [ ] Confirm title is pre-filled as `Lessons Learned — {incident title}`.
-- [ ] Confirm body has the markdown skeleton: source-incident line, site, occurred, then `## What happened` / `## Root cause` / `## Findings` / `## What we're doing about it` / `## What every worker should do`.
-- [ ] Edit the body. Add a 1-line summary. Click **"Save draft"** → redirects to `/bulletins/{id}` (read view, "Draft" badge).
+- [ ] Body editor opens with the pre-filled skeleton already rendered as headings + paragraphs (not raw markup): source-incident line, then "What happened" / "Root cause" / "Findings" / "What we're doing about it" / "What every worker should do".
+- [ ] Use the toolbar — toggle Bold / Italic / H2 / H3 / bullet list / numbered list / blockquote / inline code / link / undo / redo. All buttons reflect active state on the cursor's current node.
+- [ ] Click the **link** button on a selected word → prompt accepts a URL → link inserted, opens in a new tab when clicked.
+- [ ] Add a 1-line summary. Click **"Save draft"** → redirects to `/bulletins/{id}` (read view, "Draft" badge). Body renders with the same formatting.
 - [ ] Refresh the investigation page → CTA card swapped for "Bulletin drafted: …" link.
 
 ## 4. Publish flow
@@ -32,7 +34,7 @@ Run after pulling `feat/safety-bulletins`. Assumes seeded UCB org + `pnpm dev` r
 
 - [ ] Sign in as `worker@demo.local`. Open the dashboard → "Latest safety bulletins" widget visible. Click the bulletin → detail page renders. No Edit / Publish / Unpublish / Archive buttons visible.
 - [ ] `/bulletins` "Published" filter shows the bulletin. "My drafts" filter is empty (worker can't author).
-- [ ] Markdown body renders with headings + paragraphs (not raw text).
+- [ ] Body renders with formatted headings + paragraphs + lists.
 
 ## 6. Edit + publish from edit
 
@@ -72,5 +74,5 @@ Known limitations (by design — see `plans/10-safety-bulletins.md` deferrals):
 - No worker "N unread bulletins" dashboard banner.
 - No Argus magic-wand on the composer; the pre-fill is a plain SQL skeleton.
 - No file attachments via the documents library.
-- Markdown body uses default `react-markdown` set — headings, lists, links, emphasis, code, blockquotes. No raw HTML, no images.
+- Rich-text body covers paragraphs, headings (H2/H3), bullet/numbered lists, blockquote, inline code, bold/italic, and links. No images, no tables, no embeds in v1. Body stored as HTML; sanitized via DOMPurify on render.
 - Edit-while-published flow requires Unpublish → Edit → Republish (intentional — protects against silent edits to published org-wide notices).

@@ -4,8 +4,8 @@ import { useActionState, useEffect } from "react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { RichTextEditor } from "@/components/bulletins/rich-text-editor";
 import { createBulletin, updateBulletin } from "@/app/(app)/bulletins/actions";
 import type { ActionResult } from "@/lib/incidents/schemas";
 
@@ -87,19 +87,10 @@ export function BulletinComposer({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="bulletin-body">Body</Label>
-        <Textarea
-          id="bulletin-body"
-          name="body"
-          required
-          rows={18}
-          defaultValue={mode.initialBody ?? ""}
-          placeholder="Markdown supported."
-          className="font-mono text-sm"
-        />
+        <Label>Body</Label>
+        <RichTextEditor name="body" initialHtml={mode.initialBody ?? ""} />
         <p className="text-xs text-muted-foreground">
-          Review for personal names before publishing. Markdown headings,
-          lists, and links render on the detail page.
+          Review for personal names before publishing.
         </p>
       </div>
 

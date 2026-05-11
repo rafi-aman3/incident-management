@@ -108,7 +108,9 @@ export default async function BulletinDetailPage({ params }: { params: Params })
       </div>
 
       <div className="rounded-lg border bg-card p-6">
-        <BulletinBody markdown={(row.body as string) || "_(No content yet.)_"} />
+        <BulletinBody
+          html={(row.body as string) || "<p><em>(No content yet.)</em></p>"}
+        />
       </div>
     </div>
   );
