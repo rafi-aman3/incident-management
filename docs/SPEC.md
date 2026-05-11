@@ -508,6 +508,7 @@ Plus: incident detail (`/incidents/[id]`), CAPA detail (`/capa/[id]`), per-repor
 
 | 2026-05-10 | **Phase 9d — LLM provider pivot Anthropic → Gemini behind a thin abstraction** | Phase 9d bundles two changes in one PR: (1) introduces `lib/argus/llm/` provider abstraction (`generateStructured` + `streamText` interface, JSONSchema → OpenAPI-3.0-subset translator, Gemini adapter as v1 implementation) and rips `@anthropic-ai/sdk` out of the codebase entirely. `MODEL_HAIKU/SONNET/OPUS` become `TIER_FAST/SMART` (fast → `gemini-2.5-flash`, smart → `gemini-2.5-pro`). All three shipped route handlers (9a ping, 9b Copilot agentic loop, 9c Investigator forced-tool) rewrite onto the abstraction; SSE wire formats preserved end-to-end. Anthropic's `tool_choice: { type: 'tool', name }` becomes Gemini's `toolConfig.functionCallingConfig = { mode: 'ANY', allowedFunctionNames }`. Existing 5 tools migrated `input_schema → parameters`. (2) Adds 5 magic-wand surfaces: risk-matrix on Step 2, finding→incident severity (informational), CAPA verification method, CAPA Create Type+Title (when modal opened from investigation), and OSHA-301 + RIDDOR-F2508 reportability (read-only, auto-load with 24h cache keyed on `incident.updated_at`). Reasons for the provider pivot: (a) cost — Gemini Flash is ~5× cheaper per output token than Haiku; (b) the user's existing infra has Gemini available; (c) future provider flexibility (interface ready for OpenAI / others). Trade-off: Anthropic's free ephemeral prompt caching is gone — Gemini's `cachedContents` has a 32K-token minimum that doesn't fit our ~1–2K system prompts; revisit when payloads grow. Default org daily token budget bumped 5M → 10M to absorb the per-call overhead; net cost still lower thanks to Flash pricing. Env: `ANTHROPIC_API_KEY` → `GEMINI_API_KEY`. The "assistive, not authoritative" 2026-05-10 hard rule is unaffected. The `argus_suggestions.model` column accepts any provider's concrete model id string — old `claude-*` rows stay valid for audit; new rows store `gemini-2.5-flash` / `gemini-2.5-pro`. Adding OpenAI later is a single new adapter file plus an `ARGUS_PROVIDER` env switch. The Reportability surface was originally planned for the OSHA-300 log table — moved to the per-incident OSHA-301 / RIDDOR-F2508 pages because the 13-column print-friendly log row would balloon with an inline pane. See `plans/09d-argus-magic-wands.md` for the full plan. |
 
+| 2026-05-11 | **§SDS-INTEGRATION adopted — SDS Manager stub (v2 spec; build deferred, depends on §HZ)** | The SDS Manager is a separate sub-company application with no API credentials yet. Rather than wait for the real integration, spec a **demo-grade stub** that lights up the integration story end-to-end: Admin → Integrations card with configurable external link (`NEXT_PUBLIC_SDS_MANAGER_URL`), plus an "Import from SDS Manager" button on `/hazards/candidates` that opens a modal listing 6 hardcoded chemicals (Toluene · Sulfuric Acid · Hydraulic Oil · Isopropanol · Acetone · Sodium Hydroxide). Multi-select → batch creates N `hazard_candidates` rows per SDS (one per GHS H-statement) with `source_type='sds_import'` and `proposed_metadata` carrying the SDS reference + suggested controls for the EHS Manager to apply on conversion. Hardcoded catalog lives at `lib/sds/dummy-catalog.ts` — swap-in for a real API call when credentials arrive, candidate creation flow stays identical. No `sds_records` or `sds_chemical_uses` tables in v1 — candidate queue does double duty; lifecycle (revisions, usage tracking) deferred to a v2.5 / real-API phase. Surface lives at `/admin/integrations` (not `/settings`) — integrations are org-scoped, not user account preferences (Phase 8 `/settings` is personal). **Depends on §HZ shipping first** — `hazard_candidates` is the target write surface. **Build status: spec only — implementation queued after §HZ in the v2 surface scoping pass.** |
 | 2026-05-11 | **§JSA Job Safety Analysis adopted as a standalone module (v2 spec; build deferred)** | Pre-job structured analysis per OSHA 3071 / HSE INDG163. Job → ordered steps → per-step hazards (sharing §HZ's 5×5 matrix via `lib/risk/matrix.ts`) → per-hazard controls → approver sign-off → worker pre-job sign-off. 5 new tables (`jsas`, `jsa_steps`, `jsa_step_hazards`, `jsa_step_controls`, `jsa_signoffs`). JSA is **both a methodology and a document**: produces hazards proactively + workers acknowledge before performing the job. **Step-hazards promote to §HZ selectively** — EHS Manager picks which ones earn a permanent register entry via the `hazard_candidates` queue with `source_type='jsa'` + back-pointer `jsa_step_hazards.registered_hazard_id`. **Approver ≠ creator** (separation of duties, same invariant pattern as CAPA owner ≠ verifier). Default 12-month expiry; expired JSAs require re-approval before reuse. Worker `jsa_signoffs` unique per `(jsa_id, worker_id, signed_for_session)` so the same worker re-signs per shift session, not once-forever. 4-step wizard (Identity → Steps → Hazards & Controls → Review & Approve), `@dnd-kit` for step reorder, status lifecycle `draft → under_review → approved → expired → archived`. PPE + permits stored as `text[]`; `performed_by_roles` / `performed_by_workgroups` also `text[]` — formal workgroups table deferred to v2 (premature abstraction). **Depends on §HZ shipping first** — both `hazard_candidates(id)` and `hazards(id)` are referenced by `jsa_step_hazards.{hazard_candidate_id,registered_hazard_id}`. **Build status: spec only — implementation queued after §HZ in the v2 surface scoping pass.** |
 | 2026-05-11 | **§HZ Hazard Register adopted as a standalone module (v2 spec; build deferred)** | ISO 45001 §6.1.2 demands a live, contextualized inventory of workplace hazards distinct from the incident record. Adopts the spec in §HZ below: one `hazards` table (live register) + `hazard_risk_assessments` (history-preserving, periodic + event-driven) + `hazard_controls` (5-level hierarchy: elimination / substitution / engineering / administrative / PPE) + `hazard_candidates` (review queue funnel from 6 identification methods: worker report · inspection · incident review · MOC · JSA promotion · SDS import) + `incident_hazard_links` (closes the feedback loop). Six-state lifecycle (`identified` → `under_assessment` → `controlled` → `monitoring` → `closed`, plus `superseded` for merges). **Shared 5×5 risk matrix extracted to `lib/risk/matrix.ts`** so both incident severity (existing) and hazard risk assessment (new) consume the same lookup; `computeResidual()` returns the post-control level via reduction factors keyed off the highest-tier control applied (elimination = -4 levels, substitution = -3, engineering = -2, administrative/PPE = -1). SDS Manager integration stubbed in v1 — candidate rows can be created with `source_type='sds_import'` but no live SDS API; v2 wires the real lookup. Hazard categories (8) + sources (12) are `text + CHECK` constraints rather than enums to keep future expansion as a one-line migration. Routes scoped to `/hazards/*` + `/hazards/candidates/*`. KPI tiles: identified count, S4/S5 high-risk count, overdue reviews, **PPE-only-control count (auditor warning signal)**. **Build status: spec only — implementation queued for the v2 surface scoping pass.** |
 | 2026-05-09 | **Phase 13 — Site Setup OSHA + RIDDOR alignment** | Reshapes the wizard from 7 steps to 9 with self-explanatory slugs (`/admin/site-setup/<slug>` instead of `/<n>`). Adds 22 new columns on `sites` covering structured address (street_1/2 + city + state_or_region + postal_code), lat/long (`numeric(9,6)` paired-or-null with range CHECK; PostGIS deferred until spatial queries land), jurisdiction (`osha_jurisdiction` federal vs state_plan + `state_plan_code`; `gb_jurisdiction` HSE vs local-authority), identifiers (US: `ein`, `sic_code`, `ita_establishment_id`; GB: `crn`, `uk_sic_2007`, `hse_establishment_number` promoted from JSONB), workforce (`peak_employees_year`, `avg_employees_year`, `partially_exempt_override`), hazards (`applicable_standards text[]` ⊆ {1910/1926/1915/1917/1918/1928}, `psm_applicable`, `hazard_tags text[]` ⊆ 10-tag catalog), lifecycle (`site_type`, `operational_status`, `opened_on`, `closed_on`), and people (`site_ehs_lead_id` FK to profiles, `riddor_responsible_person_{name,role}`). New child table `site_emergency_contacts` (name + role + phone + email + sort_order) for per-site contacts. Two computed-read SQL functions (`is_ita_required(naics, peak_employees)`, `is_partially_exempt(naics, peak_employees)`) curated from 29 CFR 1904.2 + 1904.41 Appendix A — derive recordkeeping flags at read time so the wizard's badges stay live without storage drift. Tag/standard/state-plan catalogs live as TS constants under `lib/site-setup/` (text[] over lookup tables — premature abstraction otherwise). **Also** fixes a Phase-0-era RLS bug: `notification_recipients` shipped with a SELECT-only policy, so site setup Step 6 (now Step 8 — recipients) silently 401'd on Save. Adds INSERT/UPDATE/DELETE policies gated on `site:configure`, mirroring 11a's site-edit perms. URL slugs add `slug` field to `SETUP_STEPS` catalog; `nextIncompleteStep()` returns slug strings; numeric URL backward-compat dropped (admin-only chrome, no external links, redirector at `/admin/site-setup` handles stale tabs). Existing `address text` column stays as legacy denormalized string for one phase; migration runs `update sites set street_1 = address` for backfill — no regex parsing (US/GB formats vary too much; admin re-splits on next walkthrough). All recommendations in `plans/13-site-setup-osha-riddor.md` locked as decisions per kickoff Q&A. |
@@ -1167,4 +1168,245 @@ Proposed permission keys (finalized at build time): `jsa:read_site`, `jsa:draft`
 | 2026-05-11 | **Edits gated to `status='draft'`** | Once a JSA is `under_review` or `approved`, the body is immutable. Edits require unpublishing (draft revert) — same protection pattern as Phase 10 published bulletins. Re-approval kicks the lifecycle back to `under_review`. |
 | 2026-05-11 | **`updateJsa` does a full transactional replace of steps/hazards/controls, not a diff** | The wizard's edit experience is already render-the-whole-tree; diffing on save adds complexity without UX benefit. The cascade `on delete` from `jsa_steps → jsa_step_hazards → jsa_step_controls` makes the delete-then-reinsert cheap. Trade-off: PKs change on every save, so any external reference to a `jsa_step_hazard.id` mid-draft is unstable — promotion only fires post-approval, when edits are locked, so this doesn't bite. |
 | 2026-05-11 | **JSA depends on §HZ shipping first** | `jsa_step_hazards` references `hazard_candidates(id)` and `hazards(id)`. The v2 build order is: §HZ migration + UI → §JSA migration + UI. Could be one phase or two; spec'd as separable so a single PR can land both if scope allows. |
+
+## §SDS-INTEGRATION SDS Manager Integration (Stub)
+
+> **Build status (2026-05-11):** Specification adopted; implementation queued **after §HZ** in the v2 surface scoping pass. The SDS Manager is a separate sub-company application with no API credentials available yet — this section documents the **demo-grade stub** so the integration story is visible end-to-end. When credentials arrive, swap `lib/sds/dummy-catalog.ts` for the API call; the candidate creation flow stays identical. **Depends on §HZ shipping first** — `hazard_candidates` is the write target.
+
+### SDS.1 Behavior
+
+**External link.** `/admin/integrations` page shows an "SDS Manager" card with an "Open SDS Manager" button (`target="_blank"`) pointing at a configurable external URL via `NEXT_PUBLIC_SDS_MANAGER_URL` (default `https://sds.placeholder.example`). The card also shows a brief description of what the integration does and the import-flow CTA below.
+
+**Import flow.** On `/hazards/candidates`, an "Import from SDS Manager" button opens a modal with a hardcoded catalog of 6 chemicals. User selects 1+ chemicals and clicks "Import". For each selected SDS, the system creates 1..n `hazard_candidates` rows with `source_type='sds_import'` and `source_reference_id=<sds.id>`, populated from the chemical's GHS classification. The `proposed_metadata` jsonb stores the full SDS reference (id, product name, CAS, H-statement, suggested controls) so the EHS Manager can apply controls automatically when converting the candidate.
+
+### SDS.2 Dummy catalog
+
+`lib/sds/dummy-catalog.ts`:
+
+```typescript
+import type { HazardCategory, ControlLevel } from "@/lib/risk/types";
+
+export type DummySds = {
+  id: string;                          // "SDS-TOL-001"
+  product_name: string;                // "Toluene"
+  manufacturer: string;
+  cas_number: string;
+  ghs_pictograms: string[];            // ['GHS02','GHS07','GHS08','GHS09']
+  signal_word: "danger" | "warning";
+  hazards: {                           // each becomes a hazard_candidate
+    category: HazardCategory;          // matches hazard_category enum
+    title: string;                     // "Flammable liquid"
+    description: string;
+    h_statement: string;               // "H225"
+  }[];
+  suggested_controls: {
+    level: ControlLevel;
+    description: string;
+  }[];
+};
+
+export const DUMMY_SDS_CATALOG: DummySds[] = [
+  {
+    id: "SDS-TOL-001",
+    product_name: "Toluene",
+    manufacturer: "ChemCo Industries",
+    cas_number: "108-88-3",
+    ghs_pictograms: ["GHS02", "GHS07", "GHS08"],
+    signal_word: "danger",
+    hazards: [
+      { category: "chemical", title: "Highly flammable liquid and vapor",
+        description: "Flash point 4°C. Vapor can travel to ignition source.",
+        h_statement: "H225" },
+      { category: "chemical", title: "Skin irritation",
+        description: "Causes skin irritation on prolonged contact.",
+        h_statement: "H315" },
+      { category: "chemical", title: "Reproductive toxicity",
+        description: "Suspected of damaging the unborn child.",
+        h_statement: "H361d" },
+      { category: "chemical", title: "Specific target organ toxicity",
+        description: "May cause drowsiness or dizziness.",
+        h_statement: "H336" },
+    ],
+    suggested_controls: [
+      { level: "engineering", description: "Use in fume hood or with local exhaust ventilation." },
+      { level: "engineering", description: "Bond and ground all transfer equipment." },
+      { level: "administrative", description: "Eliminate ignition sources within 10 m." },
+      { level: "ppe", description: "Nitrile gloves, splash goggles, chemical apron." },
+    ],
+  },
+  {
+    id: "SDS-SUL-001",
+    product_name: "Sulfuric Acid 98%",
+    manufacturer: "AcidWorks Ltd.",
+    cas_number: "7664-93-9",
+    ghs_pictograms: ["GHS05"],
+    signal_word: "danger",
+    hazards: [
+      { category: "chemical", title: "Corrosive to metals",
+        description: "Reacts with most metals to release hydrogen gas, which may ignite.",
+        h_statement: "H290" },
+      { category: "chemical", title: "Severe skin burns and eye damage",
+        description: "Causes severe skin burns and permanent eye damage on contact.",
+        h_statement: "H314" },
+    ],
+    suggested_controls: [
+      { level: "engineering", description: "Closed transfer / acid-resistant containment with secondary catch." },
+      { level: "engineering", description: "Eyewash station and safety shower within 10 m of the work area." },
+      { level: "administrative", description: "Buddy system; written acid-handling procedure with H&S sign-off." },
+      { level: "ppe", description: "Acid-resistant gauntlets, full face shield, chemical apron, splash boots." },
+    ],
+  },
+  {
+    id: "SDS-HYD-001",
+    product_name: "Hydraulic Oil ISO VG 46",
+    manufacturer: "PetroLine",
+    cas_number: "64742-65-0",
+    ghs_pictograms: [],
+    signal_word: "warning",
+    hazards: [
+      { category: "chemical", title: "Eye irritation",
+        description: "May cause mild eye irritation on direct contact.",
+        h_statement: "H319" },
+      { category: "environmental", title: "Aquatic toxicity (chronic)",
+        description: "Toxic to aquatic life with long-lasting effects if released to drains or waterways.",
+        h_statement: "H413" },
+      { category: "physical", title: "Slip / fall on spilled oil",
+        description: "Spilled hydraulic oil creates a slip hazard until absorbed.",
+        h_statement: "n/a (workplace)" },
+    ],
+    suggested_controls: [
+      { level: "engineering", description: "Drip trays under all couplings and reservoirs." },
+      { level: "administrative", description: "Spill response kit within 5 m; immediate clean-up SOP." },
+      { level: "ppe", description: "Nitrile gloves; oil-resistant footwear." },
+    ],
+  },
+  {
+    id: "SDS-IPA-001",
+    product_name: "Isopropanol (IPA) 99%",
+    manufacturer: "ChemCo Industries",
+    cas_number: "67-63-0",
+    ghs_pictograms: ["GHS02", "GHS07"],
+    signal_word: "danger",
+    hazards: [
+      { category: "chemical", title: "Highly flammable liquid and vapor",
+        description: "Flash point 12°C. Vapor forms explosive mixtures with air.",
+        h_statement: "H225" },
+      { category: "chemical", title: "Serious eye irritation",
+        description: "Causes serious eye irritation on contact.",
+        h_statement: "H319" },
+      { category: "chemical", title: "Specific target organ toxicity",
+        description: "May cause drowsiness or dizziness on inhalation.",
+        h_statement: "H336" },
+    ],
+    suggested_controls: [
+      { level: "engineering", description: "Local exhaust ventilation at the point of use." },
+      { level: "engineering", description: "Bonded / grounded dispensing." },
+      { level: "administrative", description: "No-smoking / no-open-flame zone within 10 m." },
+      { level: "ppe", description: "Nitrile gloves; splash goggles." },
+    ],
+  },
+  {
+    id: "SDS-ACE-001",
+    product_name: "Acetone",
+    manufacturer: "SolvSource",
+    cas_number: "67-64-1",
+    ghs_pictograms: ["GHS02", "GHS07"],
+    signal_word: "danger",
+    hazards: [
+      { category: "chemical", title: "Highly flammable liquid and vapor",
+        description: "Flash point -20°C. Extremely flammable; vapor heavier than air, can travel long distances.",
+        h_statement: "H225" },
+      { category: "chemical", title: "Serious eye irritation",
+        description: "Causes serious eye irritation.",
+        h_statement: "H319" },
+      { category: "chemical", title: "Specific target organ toxicity",
+        description: "May cause drowsiness or dizziness.",
+        h_statement: "H336" },
+    ],
+    suggested_controls: [
+      { level: "engineering", description: "Use only with mechanical ventilation; closed containers when not in use." },
+      { level: "administrative", description: "Restrict to designated solvent-handling area." },
+      { level: "ppe", description: "Solvent-resistant gloves; chemical goggles." },
+    ],
+  },
+  {
+    id: "SDS-NAH-001",
+    product_name: "Sodium Hydroxide (caustic soda) 50%",
+    manufacturer: "AlkaliCo",
+    cas_number: "1310-73-2",
+    ghs_pictograms: ["GHS05"],
+    signal_word: "danger",
+    hazards: [
+      { category: "chemical", title: "Corrosive to metals",
+        description: "May be corrosive to metals — store away from aluminum and zinc.",
+        h_statement: "H290" },
+      { category: "chemical", title: "Severe skin burns and eye damage",
+        description: "Causes severe skin burns and permanent eye damage on contact.",
+        h_statement: "H314" },
+    ],
+    suggested_controls: [
+      { level: "engineering", description: "Closed transfer; bunded storage with secondary containment." },
+      { level: "engineering", description: "Eyewash station and safety shower within 10 m." },
+      { level: "administrative", description: "Caustic-handling permit + buddy system." },
+      { level: "ppe", description: "Alkali-resistant gauntlets, full face shield, chemical apron." },
+    ],
+  },
+];
+```
+
+> **`HazardCategory` and `ControlLevel`** are TS types exported from `lib/risk/types.ts` — the same source used by §HZ and §JSA. Keeps the catalog type-checked against the canonical enum sets.
+
+### SDS.3 Component
+
+`components/sds/sds-import-modal.tsx` — shadcn Dialog wrapping a multi-select list of chemicals from `DUMMY_SDS_CATALOG`. Each row shows product name + CAS number + signal-word badge + pictogram chips + hazard count. On submit, calls `importSdsHazards` server action which creates `hazard_candidates` rows. Returns a toast with the count of candidates created.
+
+`components/admin/sds-integration-card.tsx` — Server Component for the `/admin/integrations` page. Renders the SDS Manager card with the configurable external link, a brief description, and a button linking to `/hazards/candidates` (for the import flow).
+
+### SDS.4 Server action
+
+`actions/sds.ts`:
+
+- `importSdsHazards(siteId, sdsIds[])` — for each SDS in the catalog, iterates `sds.hazards[]` and creates one `hazard_candidates` row per H-statement:
+  - `source_type = 'sds_import'`
+  - `source_reference_id = sds.id` (e.g. `"SDS-TOL-001"`)
+  - `site_id = siteId`
+  - `proposed_title = hazard.title`
+  - `proposed_category = hazard.category`
+  - `proposed_description = hazard.description` (includes H-statement reference)
+  - `proposed_metadata = { sds_id, product_name, cas_number, h_statement, suggested_controls }` so the EHS Manager can apply suggested controls automatically when converting the candidate (the §HZ `convertCandidate` action reads `proposed_metadata.suggested_controls` and pre-fills the controls form)
+  - Returns `{ ok: true, count: number }`
+
+Auth: gated on `hazard_candidate:create` permission (proposed name, finalized at build time alongside the §HZ permission keys).
+
+### SDS.5 What this stub does NOT do
+
+- **No `sds_records` table** — no tracking of which SDSs have been imported into the org, no SDS-list management surface in `/admin`. The hazard candidate queue is the only persistence layer.
+- **No `sds_chemical_uses` table** — no tracking of which sites / processes / chemicals are in active use.
+- **No SDS revisions** — no version history, no "this SDS was updated by the manufacturer" workflow.
+- **No real API calls** to a live SDS Manager backend.
+
+When real API credentials are available, replace `DUMMY_SDS_CATALOG` with an API call (likely `lib/sds/api-client.ts` wrapping the SDS Manager REST endpoints) and add the deferred tables. The candidate creation flow in `actions/sds.ts` stays identical — only the data source changes.
+
+### SDS.6 Acceptance
+
+- The `/admin/integrations` page shows the SDS Manager card with an external link to `NEXT_PUBLIC_SDS_MANAGER_URL`.
+- The `/hazards/candidates` page has an "Import from SDS Manager" button.
+- The modal shows 6 chemicals.
+- Selecting Toluene + clicking Import creates 4 `hazard_candidates` rows (one per H-statement).
+- Candidates appear in the queue with `source_type='sds_import'`, source attribution shown ("SDS-TOL-001 · Toluene").
+- Converting a candidate pre-fills the controls form with `proposed_metadata.suggested_controls`.
+
+### SDS.7 Decisions log
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-05-11 | **Stub the SDS integration end-to-end rather than skip it** | The integration story is part of the product narrative — SDS Manager is a sister sub-company, and "we feed hazards from SDS Manager into the safety platform" is a load-bearing demo moment. Skipping it would mean every demo conversation answers "where do hazards come from?" with "imagination." The stub costs ~200 LOC + 1 modal and lights up the whole flow. |
+| 2026-05-11 | **Hardcoded TS catalog `lib/sds/dummy-catalog.ts`, not a seed table** | When the real API arrives, the swap-in is a one-file refactor of `actions/sds.ts` (replace catalog import with API client). A seed table would add a migration to remove later, plus complicate the demo reset story. Catalog ships as a typed const checked against `HazardCategory` / `ControlLevel`. |
+| 2026-05-11 | **6 chemicals covering 3 hazard families** | Toluene + IPA + Acetone (flammable), Sulfuric Acid + Sodium Hydroxide (corrosive), Hydraulic Oil (low-hazard with environmental + slip risk). Enough variety that a demo can pick any one and tell a different story. Each entry has realistic GHS pictograms, CAS, H-statements, and suggested controls so the candidates look plausible. |
+| 2026-05-11 | **No `sds_records` or `sds_chemical_uses` tables in v1** | The hazard candidate queue does double duty as the SDS-import landing pad. Full SDS lifecycle (revisions, usage tracking, expiry) needs its own module — deferred to a v2.5 / real-API phase once the live integration shape is known. |
+| 2026-05-11 | **Integration surface lives at `/admin/integrations`, not `/settings`** | Integrations are org-scoped, not user account preferences. The existing Phase 8 `/settings` is personal (Profile / Security / Appearance / Sign out). Creating `/admin/integrations` establishes a home for future integrations (HSE/OSHA submission APIs, training providers, contractor portals, etc.). Spec text says "Settings → Integrations" reflecting the user's mental model; the actual route is admin-scoped. |
+| 2026-05-11 | **External link target is a configurable env var, not hardcoded** | `NEXT_PUBLIC_SDS_MANAGER_URL` (default `https://sds.placeholder.example`). Production deploys may have a real SDS Manager URL before the API is ready, and customers running on-prem will have their own. Build-time and deploy-time both stay clean. |
+| 2026-05-11 | **`proposed_metadata` jsonb carries suggested controls** | The §HZ `convertCandidate` server action already accepts a "contextualization" payload (the human review step). Surfacing the SDS-suggested controls into that payload via `proposed_metadata` lets the convert form pre-fill the controls section, which is the highest-value EHS time-saver from this integration. JSONB keeps the schema clean — no new control-pre-fill table. |
+| 2026-05-11 | **Multi-select catalog → batch import (N candidates per SDS)** | A single click can create 4–8 candidates (e.g. selecting Toluene generates 4 rows for the 4 H-statements). The queue surfaces them grouped by `source_reference_id` so the EHS Manager can review the whole SDS context in one pass. Single-record import would force tedious one-by-one click-through. |
+| 2026-05-11 | **Depends on §HZ shipping first** | `hazard_candidates` is the only write target for the import action. Build order: §HZ migration + candidate queue UI → §SDS-INTEGRATION (1 modal + 1 admin card + 1 action + 1 catalog file). Could land in the same v2 phase as §HZ if scope allows. |
 
