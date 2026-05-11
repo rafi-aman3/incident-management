@@ -14,6 +14,7 @@ import {
   FileBarChart,
   Settings2,
   PlusCircle,
+  TriangleAlert,
 } from "lucide-react";
 import type { RoleKey } from "@/lib/supabase/auth";
 import type { PermissionKey } from "@/lib/rbac/permissions";
@@ -48,6 +49,7 @@ export const NAV_ITEMS: ReadonlyArray<NavItem> = [
   // all hold template:read_org by default per Phase 3 perms migration.
   { href: "/templates",       label: "Templates",       icon: ClipboardCheck,     permission: "template:read_org" },
   { href: "/inspections",     label: "Inspections",     icon: ClipboardSignature, permission: "inspection:read_site" },
+  { href: "/hazards",         label: "Hazards",         icon: TriangleAlert,      permission: "hazard:read_site" },
   // Resources — assets is per-site read; documents is org-scoped read.
   // The sidebar filter uses can(currentSiteId), which works for both
   // because the perms are granted to the user's role at every site.
