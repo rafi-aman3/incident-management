@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Pin, PinOff, ShieldCheck } from "lucide-react";
 import { NAV_ITEMS } from "./nav-config";
 import { SiteSwitcher, type SwitcherSite } from "./site-switcher";
+import { SidebarGetStartedChip } from "@/components/get-started/sidebar-get-started-chip";
 
 export function AppSidebar({
   allowedHrefs,
@@ -31,6 +32,7 @@ export function AppSidebar({
   sites,
   currentSiteId,
   canCreateSite,
+  getStartedCounts,
 }: {
   allowedHrefs: ReadonlyArray<string>;
   userLabel: string;
@@ -42,6 +44,7 @@ export function AppSidebar({
   sites: SwitcherSite[];
   currentSiteId: string | null;
   canCreateSite: boolean;
+  getStartedCounts: { done: number; total: number } | null;
 }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -125,8 +128,14 @@ export function AppSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="px-3 py-3 group-data-[collapsible=icon]:hidden">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <SidebarFooter className="space-y-2 px-3 py-3">
+        {getStartedCounts && (
+          <SidebarGetStartedChip
+            doneCount={getStartedCounts.done}
+            totalCount={getStartedCounts.total}
+          />
+        )}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
           <ShieldCheck className="h-3.5 w-3.5" />
           <div className="flex flex-col leading-tight">
             <span className="font-medium text-foreground">{userLabel}</span>
