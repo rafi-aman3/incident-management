@@ -3,8 +3,12 @@ import { CHECKLIST_ITEMS, type ChecklistItem } from "./items";
 import { SECTIONS, type SectionKey } from "./sections";
 import { isUseCaseKey, type UseCaseKey } from "./use-cases";
 
+/** Serializable view of a checklist item — strips the `predicate` function
+ *  so the row can cross the RSC → Client Component boundary. */
+export type SerializableChecklistItem = Omit<ChecklistItem, "predicate">;
+
 export type ChecklistRowState = {
-  item: ChecklistItem;
+  item: SerializableChecklistItem;
   done: boolean;
   dismissed: boolean;
   /** done OR dismissed — what the counter uses. */
@@ -72,11 +76,15 @@ export async function getChecklistState(args: {
     )
   );
 
-  // Assemble row states.
+  // Assemble row states. Strip the `predicate` function so rows are safe
+  // to pass to Client Components (functions aren't serializable across the
+  // RSC boundary).
   const rows: ChecklistRowState[] = applicable.map((item, idx) => {
     const done = predicateResults[idx];
     const isDismissed = dismissed.has(item.id);
-    return { item, done, dismissed: isDismissed, counted: done || isDismissed };
+    const { predicate: _predicate, ...itemSafe } = item;
+    void _predicate;
+    return { item: itemSafe, done, dismissed: isDismissed, counted: done || isDismissed };
   });
 
   // Group into sections (skipping any section that ended up empty).
