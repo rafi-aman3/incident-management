@@ -147,6 +147,9 @@ async function AppShell({ children }: { children: ReactNode }) {
         allowedHrefs={allowedHrefs}
         userLabel={fullName}
         roleLabel={roleLabel}
+        sites={sites}
+        currentSiteId={currentSiteId}
+        canCreateSite={canCreateSite}
         topbar={
           <Topbar
             sites={sites}

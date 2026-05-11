@@ -12,11 +12,13 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Pin, PinOff, ShieldCheck } from "lucide-react";
 import { NAV_ITEMS } from "./nav-config";
+import { SiteSwitcher, type SwitcherSite } from "./site-switcher";
 
 export function AppSidebar({
   allowedHrefs,
@@ -26,6 +28,9 @@ export function AppSidebar({
   onPinToggle,
   onMouseEnter,
   onMouseLeave,
+  sites,
+  currentSiteId,
+  canCreateSite,
 }: {
   allowedHrefs: ReadonlyArray<string>;
   userLabel: string;
@@ -34,8 +39,12 @@ export function AppSidebar({
   onPinToggle: () => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+  sites: SwitcherSite[];
+  currentSiteId: string | null;
+  canCreateSite: boolean;
 }) {
   const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
   const allowed = new Set(allowedHrefs);
   const items = NAV_ITEMS.filter((item) => allowed.has(item.href));
 
@@ -70,6 +79,20 @@ export function AppSidebar({
             </TooltipContent>
           </Tooltip>
         </div>
+
+        {/* Mobile-only site picker: at < lg the topbar drops its SiteSwitcher
+            to keep narrow viewports from overflowing. The picker lives here
+            in the Sheet header instead, right under the brand. */}
+        {isMobile && (
+          <div className="pt-3">
+            <SiteSwitcher
+              sites={sites}
+              currentSiteId={currentSiteId}
+              canCreateSite={canCreateSite}
+              variant="sheet"
+            />
+          </div>
+        )}
       </SidebarHeader>
 
       <SidebarContent>
@@ -83,7 +106,12 @@ export function AppSidebar({
                   (item.href !== "/dashboard" && pathname.startsWith(item.href));
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={active}
+                      tooltip={item.label}
+                      onClick={() => isMobile && setOpenMobile(false)}
+                    >
                       <Link href={item.href}>
                         <Icon />
                         <span>{item.label}</span>

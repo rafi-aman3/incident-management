@@ -35,7 +35,13 @@ export function Topbar({
       {/* Hamburger: only shown below lg, where the shadcn sidebar primitive is
           in Sheet mode. Above lg, the 6k pin/hover-drawer rail handles toggling. */}
       <MobileMenuButton className="-ml-1 lg:hidden" />
-      <SiteSwitcher sites={sites} currentSiteId={currentSiteId} canCreateSite={canCreateSite} />
+      {/* Topbar SiteSwitcher only shows at lg+. Below lg the same widget
+          renders inside the mobile sheet header (see AppSidebar). Keeps
+          narrow viewports (375px) from overflowing — 7 controls plus a
+          wide site chip don't fit. */}
+      <div className="hidden lg:flex">
+        <SiteSwitcher sites={sites} currentSiteId={currentSiteId} canCreateSite={canCreateSite} />
+      </div>
       <div className="mx-auto hidden flex-1 justify-center px-4 md:flex">
         <SearchTrigger variant="input" />
       </div>
