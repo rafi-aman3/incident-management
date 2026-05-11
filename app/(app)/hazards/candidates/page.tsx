@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { CandidateQueue, type CandidateRow } from "@/components/hazards/candidate-queue";
+import { SdsImportModal, type SdsModalSite } from "@/components/sds/sds-import-modal";
+import { Button } from "@/components/ui/button";
 
 const SOURCE_LABEL: Record<string, string> = {
   worker_report: "Worker report",
@@ -24,8 +26,9 @@ export default async function CandidatesPage({
 }) {
   const sp = await searchParams;
   const source = typeof sp.source === "string" ? sp.source : undefined;
+  const autoOpenSds = sp.action === "import-sds";
 
-  const { supabase, currentSiteId } = await requireUser();
+  const { supabase, currentSiteId, memberships } = await requireUser();
   if (!(await can("hazard_candidate:review", currentSiteId))) {
     return (
       <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
@@ -33,6 +36,18 @@ export default async function CandidatesPage({
       </div>
     );
   }
+
+  // Sites the user can import into (hazard:report-eligible).
+  const memberSiteIds = memberships.map((m) => m.site_id).filter((id, i, a) => a.indexOf(id) === i);
+  const { data: siteRows } = await supabase
+    .from("sites")
+    .select("id, name")
+    .in("id", memberSiteIds);
+  const sdsSites: SdsModalSite[] = (siteRows ?? []).map((s) => ({
+    id: s.id as string,
+    name: s.name as string,
+  }));
+  const canImportSds = currentSiteId ? await can("hazard:report", currentSiteId) : false;
 
   type CandidateQueryRow = {
     id: string;
@@ -71,11 +86,16 @@ export default async function CandidatesPage({
         <ArrowLeft className="h-3.5 w-3.5" /> Back to hazards
       </Link>
 
-      <div>
-        <h1 className="text-2xl font-semibold">Hazard candidate queue</h1>
-        <p className="text-sm text-muted-foreground">
-          Review proposed hazards from across the platform. Convert into a register entry, dismiss with reason, or merge into an existing hazard.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Hazard candidate queue</h1>
+          <p className="text-sm text-muted-foreground">
+            Review proposed hazards from across the platform. Convert into a register entry, dismiss with reason, or merge into an existing hazard.
+          </p>
+        </div>
+        {canImportSds && sdsSites.length > 0 && (
+          <SdsImportModal sites={sdsSites} defaultSiteId={currentSiteId} defaultOpen={autoOpenSds} />
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1.5">
