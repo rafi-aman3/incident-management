@@ -2,25 +2,22 @@
 
 import { useState, useTransition } from "react";
 import { RotateCcw } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { HIDEABLE_NAV_ITEMS } from "@/components/app-shell/nav-config";
 import { setSidebarHiddenItems } from "@/app/(app)/settings/actions";
 
-export type HideableItem = {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-};
-
 export function SidebarPrefCard({
-  hideable,
   initialHidden,
 }: {
-  hideable: ReadonlyArray<HideableItem>;
   initialHidden: ReadonlyArray<string>;
 }) {
+  // HIDEABLE_NAV_ITEMS is imported directly into the client so the LucideIcon
+  // function components never cross the RSC boundary (icons are non-
+  // serializable React functions). The server page only ships the hidden-
+  // href array.
+  const hideable = HIDEABLE_NAV_ITEMS;
   const [hidden, setHidden] = useState<Set<string>>(new Set(initialHidden));
   const [isPending, startTransition] = useTransition();
 
