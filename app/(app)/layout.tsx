@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/supabase/auth";
 import { can } from "@/lib/auth/can";
 import { orgCan } from "@/lib/auth/orgCan";
+import { getChecklistState } from "@/lib/get-started/state";
 import type { NotificationItem } from "@/components/app-shell/notification-bell";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -135,11 +136,19 @@ async function AppShell({ children }: { children: ReactNode }) {
   // Argus availability: org-flag AND user-permission AND key-configured.
   // Topbar hides the trigger when any of the three is false; route handler
   // enforces the same gates server-side.
-  const [orgArgusFlag, userArgusPerm] = await Promise.all([
+  const [orgArgusFlag, userArgusPerm, isOrgAdmin] = await Promise.all([
     supabase.from("orgs").select("argus_enabled").eq("id", profile.org_id).maybeSingle(),
     orgCan("argus:use"),
+    orgCan("org:configure"),
   ]);
   const argusEnabled = Boolean(orgArgusFlag.data?.argus_enabled) && userArgusPerm;
+
+  const checklist = isOrgAdmin
+    ? await getChecklistState({ orgId: profile.org_id, userId: profile.id })
+    : null;
+  const getStartedCounts = checklist
+    ? { done: checklist.doneCount, total: checklist.totalCount }
+    : null;
 
   // Active stop-works across the user's accessible sites. RLS already filters
   // incidents by site access; the .is(null) filter excludes acknowledged ones.
@@ -171,6 +180,7 @@ async function AppShell({ children }: { children: ReactNode }) {
         sites={sites}
         currentSiteId={currentSiteId}
         canCreateSite={canCreateSite}
+        getStartedCounts={getStartedCounts}
         topbar={
           <Topbar
             sites={sites}

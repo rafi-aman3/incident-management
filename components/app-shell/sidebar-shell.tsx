@@ -18,6 +18,7 @@ export function SidebarShell({
   sites,
   currentSiteId,
   canCreateSite,
+  getStartedCounts,
   topbar,
   banner,
   children,
@@ -29,6 +30,7 @@ export function SidebarShell({
   sites: SwitcherSite[];
   currentSiteId: string | null;
   canCreateSite: boolean;
+  getStartedCounts: { done: number; total: number } | null;
   topbar: ReactNode;
   banner: ReactNode;
   children: ReactNode;
@@ -105,6 +107,7 @@ export function SidebarShell({
         sites={sites}
         currentSiteId={currentSiteId}
         canCreateSite={canCreateSite}
+        getStartedCounts={getStartedCounts}
       />
       <SidebarInset>
         {topbar}

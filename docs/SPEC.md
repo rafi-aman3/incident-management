@@ -489,6 +489,7 @@ Plus: incident detail (`/incidents/[id]`), CAPA detail (`/capa/[id]`), per-repor
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-05-12 | **Phase 18 — Onboarding slimmed + Get Started checklist added (Phase 18, PR #N).** The onboarding wizard collapses from 3 steps to 2: workspace basics (unchanged) + a multi-select use-case picker. The Invite-teammates step is dropped from the wizard and reappears as the Get Started item `team_invited` linking to /admin/members. A new /get-started page replaces the bottom-of-dashboard `RoleWelcomeCard` for admins — a sectioned checklist auto-detected from existing tables, with per-org dismiss support. The dashboard mounts a compact 3-up `<GetStartedWidget>` above the KPI strip; the sidebar footer mounts a `<SidebarGetStartedChip>` with a circular-ring collapsed state. Audience: `org:configure` only (Phase 17). Workers + supervisors keep today's role welcome cards. See §UI-GETSTARTED for the locked use-case keys and item set. | Onboarding wizard was 3 steps; Invite-teammates step moved to Get Started checklist. New /get-started page for admins with per-org dismiss support and 100% completion state. |
 | 2026-05-04 | Use **shadcn/ui + Tailwind v4** (override PRD §13's MUI v5 stack) | Lighter, plays well with React 19 RSC; visual parity ~95% via token remap |
 | 2026-05-04 | Use **Supabase** (Postgres + Auth + Storage) | Fastest path to a "lived-in" demo with persistence, file uploads, multi-role |
 | 2026-05-04 | Demo strategy: **all 8 screens, phased depth** | Stakeholders see full vision; each phase ends demo-ready |
@@ -1467,6 +1468,60 @@ Locks the structure of the `/settings` surface so future tabs land in the same p
 **Argus side-panel default (per-user)** — `profiles.argus_panel_default boolean` (default `true`). `ArgusSidePanel` reads it as its `initialOpen` state on first mount per navigation. Toggle lives under `/settings/argus`.
 
 **Cookies tab is transparency, not consent** — the app uses essential cookies only (Supabase auth + theme + sonner). No analytics, no marketing, no tracking. The tab lists every cookie/localStorage key with a Purpose column; a "Clear non-essential local data" button wipes `argus.search.recent`, sonner state, and the `sidebar_pinned` cookie. Theme preference and auth cookie are preserved. Real consent toggles would require something to gate; we have nothing.
+
+## §UI-GETSTARTED — Get Started checklist
+
+### Use-case keys (stable, persisted in `orgs.onboarding_use_cases text[]`)
+
+| Key | Tile label | Modules behind it |
+|---|---|---|
+| `incidents` | Report & investigate incidents | Incidents, Investigations, CAPA, Reports |
+| `inspections` | Run inspections | Templates, Inspections |
+| `hazards_jsa` | Manage hazards & JSA | Hazards, JSA, Bulletins, SDS |
+| `assets_documents` | Track assets & documents | Resources (Assets + Documents) |
+| `planner` | Schedule recurring work | Planner |
+
+Empty array = silent state (no use-case sections shown). The wizard's "show me everything" link selects all 5.
+
+### Master item set
+
+Items have stable string ids — never repurposed once shipped. Adding a new tile or section is additive; new entries land at the end of the catalog. Dismissal is per-org (`orgs.onboarding_dismissed text[]`), not per-user.
+
+| Section | Item id | Predicate (all org-scoped) | CTA |
+|---|---|---|---|
+| workspace | `org_created` | always true | (info only) |
+| workspace | `first_site_added` | always true | (info only) |
+| workspace | `use_cases_picked` | `orgs.onboarding_use_cases <> '{}'` | `/get-started?edit=use-cases` |
+| workspace | `site_setup_finished` | every site in the org has `setup_completed_at IS NOT NULL` | `/admin/site-setup` |
+| workspace | `team_invited` | ≥1 distinct non-creator profile_id on `site_members` across any site in the org | `/admin/members` |
+| workspace | `sidebar_customized` | `profiles.sidebar_hidden_items` non-empty (per-user predicate) | `/settings/sidebar` |
+| incidents | `first_incident_reported` | ≥1 non-sandbox `incidents` row (deleted_at NULL) | `/incidents/new/1` |
+| incidents | `first_investigation_run` | ≥1 `investigations` row with `status = 'closed'` (deleted_at NULL) | `/investigations` |
+| inspections | `first_template_built` | ≥1 `templates` row scoped to the org | `/templates/new` |
+| inspections | `first_inspection_run` | ≥1 `inspections` row with `completed_at IS NOT NULL` | `/inspections` |
+| hazards_jsa | `first_hazard_added` | ≥1 `hazards` row in the org | `/hazards/new` |
+| hazards_jsa | `first_jsa_created` | ≥1 `jsas` row in the org | `/jsa/new` |
+| assets_documents | `first_asset_added` | ≥1 `assets` row in the org | `/resources/assets/new` |
+| assets_documents | `first_document_uploaded` | ≥1 non-archived `documents` row in the org | `/resources/documents` |
+| planner | `first_planner_entry` | ≥1 active `template_assignments` row across any site in the org | `/templates` |
+| power_up | `argus_intro_seen` | ≥1 `argus_suggestions` row by this user in the org (gated on `orgs.argus_enabled`) | `/get-started?open=argus` |
+
+### Counter semantics
+
+- **Numerator** = items where the predicate is true OR the item id is in `orgs.onboarding_dismissed`.
+- **Denominator** = items in `workspace` + items in picked use-case sections + the Argus item if `orgs.argus_enabled = true`.
+
+### 100% behavior
+
+When `numerator >= denominator`:
+- `<GetStartedWidget>` on `/dashboard` hides.
+- `<SidebarGetStartedChip>` hides.
+- `/get-started` renders the celebration state (centered card with a `Go to dashboard` CTA).
+
+### Audience
+
+- Render: `orgCan('org:configure')` only. Workers + supervisors never see the widget, chip, or page (route guard on `/get-started` redirects to `/dashboard`).
+- Mutate (dismiss / undismiss / updateUseCases): same `org:configure` guard inside each server action.
 
 ## §AUTH-DELETE-ACCOUNT Self-service account deletion (Phase 17)
 
