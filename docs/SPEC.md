@@ -508,6 +508,7 @@ Plus: incident detail (`/incidents/[id]`), CAPA detail (`/capa/[id]`), per-repor
 
 | 2026-05-10 | **Phase 9d — LLM provider pivot Anthropic → Gemini behind a thin abstraction** | Phase 9d bundles two changes in one PR: (1) introduces `lib/argus/llm/` provider abstraction (`generateStructured` + `streamText` interface, JSONSchema → OpenAPI-3.0-subset translator, Gemini adapter as v1 implementation) and rips `@anthropic-ai/sdk` out of the codebase entirely. `MODEL_HAIKU/SONNET/OPUS` become `TIER_FAST/SMART` (fast → `gemini-2.5-flash`, smart → `gemini-2.5-pro`). All three shipped route handlers (9a ping, 9b Copilot agentic loop, 9c Investigator forced-tool) rewrite onto the abstraction; SSE wire formats preserved end-to-end. Anthropic's `tool_choice: { type: 'tool', name }` becomes Gemini's `toolConfig.functionCallingConfig = { mode: 'ANY', allowedFunctionNames }`. Existing 5 tools migrated `input_schema → parameters`. (2) Adds 5 magic-wand surfaces: risk-matrix on Step 2, finding→incident severity (informational), CAPA verification method, CAPA Create Type+Title (when modal opened from investigation), and OSHA-301 + RIDDOR-F2508 reportability (read-only, auto-load with 24h cache keyed on `incident.updated_at`). Reasons for the provider pivot: (a) cost — Gemini Flash is ~5× cheaper per output token than Haiku; (b) the user's existing infra has Gemini available; (c) future provider flexibility (interface ready for OpenAI / others). Trade-off: Anthropic's free ephemeral prompt caching is gone — Gemini's `cachedContents` has a 32K-token minimum that doesn't fit our ~1–2K system prompts; revisit when payloads grow. Default org daily token budget bumped 5M → 10M to absorb the per-call overhead; net cost still lower thanks to Flash pricing. Env: `ANTHROPIC_API_KEY` → `GEMINI_API_KEY`. The "assistive, not authoritative" 2026-05-10 hard rule is unaffected. The `argus_suggestions.model` column accepts any provider's concrete model id string — old `claude-*` rows stay valid for audit; new rows store `gemini-2.5-flash` / `gemini-2.5-pro`. Adding OpenAI later is a single new adapter file plus an `ARGUS_PROVIDER` env switch. The Reportability surface was originally planned for the OSHA-300 log table — moved to the per-incident OSHA-301 / RIDDOR-F2508 pages because the 13-column print-friendly log row would balloon with an inline pane. See `plans/09d-argus-magic-wands.md` for the full plan. |
 
+| 2026-05-11 | **§JSA Job Safety Analysis adopted as a standalone module (v2 spec; build deferred)** | Pre-job structured analysis per OSHA 3071 / HSE INDG163. Job → ordered steps → per-step hazards (sharing §HZ's 5×5 matrix via `lib/risk/matrix.ts`) → per-hazard controls → approver sign-off → worker pre-job sign-off. 5 new tables (`jsas`, `jsa_steps`, `jsa_step_hazards`, `jsa_step_controls`, `jsa_signoffs`). JSA is **both a methodology and a document**: produces hazards proactively + workers acknowledge before performing the job. **Step-hazards promote to §HZ selectively** — EHS Manager picks which ones earn a permanent register entry via the `hazard_candidates` queue with `source_type='jsa'` + back-pointer `jsa_step_hazards.registered_hazard_id`. **Approver ≠ creator** (separation of duties, same invariant pattern as CAPA owner ≠ verifier). Default 12-month expiry; expired JSAs require re-approval before reuse. Worker `jsa_signoffs` unique per `(jsa_id, worker_id, signed_for_session)` so the same worker re-signs per shift session, not once-forever. 4-step wizard (Identity → Steps → Hazards & Controls → Review & Approve), `@dnd-kit` for step reorder, status lifecycle `draft → under_review → approved → expired → archived`. PPE + permits stored as `text[]`; `performed_by_roles` / `performed_by_workgroups` also `text[]` — formal workgroups table deferred to v2 (premature abstraction). **Depends on §HZ shipping first** — both `hazard_candidates(id)` and `hazards(id)` are referenced by `jsa_step_hazards.{hazard_candidate_id,registered_hazard_id}`. **Build status: spec only — implementation queued after §HZ in the v2 surface scoping pass.** |
 | 2026-05-11 | **§HZ Hazard Register adopted as a standalone module (v2 spec; build deferred)** | ISO 45001 §6.1.2 demands a live, contextualized inventory of workplace hazards distinct from the incident record. Adopts the spec in §HZ below: one `hazards` table (live register) + `hazard_risk_assessments` (history-preserving, periodic + event-driven) + `hazard_controls` (5-level hierarchy: elimination / substitution / engineering / administrative / PPE) + `hazard_candidates` (review queue funnel from 6 identification methods: worker report · inspection · incident review · MOC · JSA promotion · SDS import) + `incident_hazard_links` (closes the feedback loop). Six-state lifecycle (`identified` → `under_assessment` → `controlled` → `monitoring` → `closed`, plus `superseded` for merges). **Shared 5×5 risk matrix extracted to `lib/risk/matrix.ts`** so both incident severity (existing) and hazard risk assessment (new) consume the same lookup; `computeResidual()` returns the post-control level via reduction factors keyed off the highest-tier control applied (elimination = -4 levels, substitution = -3, engineering = -2, administrative/PPE = -1). SDS Manager integration stubbed in v1 — candidate rows can be created with `source_type='sds_import'` but no live SDS API; v2 wires the real lookup. Hazard categories (8) + sources (12) are `text + CHECK` constraints rather than enums to keep future expansion as a one-line migration. Routes scoped to `/hazards/*` + `/hazards/candidates/*`. KPI tiles: identified count, S4/S5 high-risk count, overdue reviews, **PPE-only-control count (auditor warning signal)**. **Build status: spec only — implementation queued for the v2 surface scoping pass.** |
 | 2026-05-09 | **Phase 13 — Site Setup OSHA + RIDDOR alignment** | Reshapes the wizard from 7 steps to 9 with self-explanatory slugs (`/admin/site-setup/<slug>` instead of `/<n>`). Adds 22 new columns on `sites` covering structured address (street_1/2 + city + state_or_region + postal_code), lat/long (`numeric(9,6)` paired-or-null with range CHECK; PostGIS deferred until spatial queries land), jurisdiction (`osha_jurisdiction` federal vs state_plan + `state_plan_code`; `gb_jurisdiction` HSE vs local-authority), identifiers (US: `ein`, `sic_code`, `ita_establishment_id`; GB: `crn`, `uk_sic_2007`, `hse_establishment_number` promoted from JSONB), workforce (`peak_employees_year`, `avg_employees_year`, `partially_exempt_override`), hazards (`applicable_standards text[]` ⊆ {1910/1926/1915/1917/1918/1928}, `psm_applicable`, `hazard_tags text[]` ⊆ 10-tag catalog), lifecycle (`site_type`, `operational_status`, `opened_on`, `closed_on`), and people (`site_ehs_lead_id` FK to profiles, `riddor_responsible_person_{name,role}`). New child table `site_emergency_contacts` (name + role + phone + email + sort_order) for per-site contacts. Two computed-read SQL functions (`is_ita_required(naics, peak_employees)`, `is_partially_exempt(naics, peak_employees)`) curated from 29 CFR 1904.2 + 1904.41 Appendix A — derive recordkeeping flags at read time so the wizard's badges stay live without storage drift. Tag/standard/state-plan catalogs live as TS constants under `lib/site-setup/` (text[] over lookup tables — premature abstraction otherwise). **Also** fixes a Phase-0-era RLS bug: `notification_recipients` shipped with a SELECT-only policy, so site setup Step 6 (now Step 8 — recipients) silently 401'd on Save. Adds INSERT/UPDATE/DELETE policies gated on `site:configure`, mirroring 11a's site-edit perms. URL slugs add `slug` field to `SETUP_STEPS` catalog; `nextIncompleteStep()` returns slug strings; numeric URL backward-compat dropped (admin-only chrome, no external links, redirector at `/admin/site-setup` handles stale tabs). Existing `address text` column stays as legacy denormalized string for one phase; migration runs `update sites set street_1 = address` for backfill — no regex parsing (US/GB formats vary too much; admin re-splits on next walkthrough). All recommendations in `plans/13-site-setup-osha-riddor.md` locked as decisions per kickoff Q&A. |
 
@@ -974,4 +975,196 @@ A hazard can be reported via `/hazards/new`. A candidate created from any source
 | 2026-05-11 | **`incident_hazard_links` closes the feedback loop separately from `source_incident_id`** | `hazards.source_incident_id` records the *single incident that birthed this hazard* (during investigation review). `incident_hazard_links` is the many-to-many of *every incident that exposed this hazard*, with `link_type` (causal / contributing / exposed_but_not_causal) + `was_in_register_at_time` for compliance trend analysis. Two separate columns, distinct semantics. |
 | 2026-05-11 | **SDS Manager integration stubbed in v1** | `hazard_candidates.source_type = 'sds_import'` + a `source_sds_id` text column on `hazards` are present from day one, but no live API. v2 wires the actual lookup. Demo-grade scope: an admin can create candidates with `source_type='sds_import'` manually for demo purposes. |
 | 2026-05-11 | **PPE-only control count is an auditor-warning KPI tile** | The hierarchy of controls explicitly de-prioritizes PPE as a last-resort barrier. Hazards whose *only* applied control is PPE signal that engineering / administrative options weren't pursued — an ISO 45001 review red flag. Surfacing this as a tile makes it discoverable without an audit. |
+
+## §JSA Job Safety Analysis
+
+> **Build status (2026-05-11):** Specification adopted; implementation queued **after §HZ** in the v2 surface scoping pass. The data shapes, route layout, 4-step wizard flow, and step-hazard promotion path below are locked decisions. **Depends on §HZ shipping first** — both `hazard_candidates(id)` and `hazards(id)` are referenced as FKs by `jsa_step_hazards`. Cross-reference §15 decisions log (2026-05-11 row).
+
+### JSA.1 Purpose
+
+A JSA is a structured pre-job analysis. It breaks a job into sequential steps, identifies hazards per step, and applies controls per step. A JSA is **both a methodology** (it produces hazards) **and a document** (workers sign off before performing the job).
+
+JSAs feed the Hazard Register **selectively**: the EHS Manager picks which step-hazards to promote as candidates after the JSA is approved. Not every step-hazard deserves a permanent register entry — some are job-specific and disappear when the job ends.
+
+Regulatory anchor: OSHA 3071 (Job Hazard Analysis) and HSE INDG163 (Five steps to risk assessment).
+
+### JSA.2 Data model
+
+```sql
+create table public.jsas (
+  id uuid primary key default gen_random_uuid(),
+  ref_code text unique not null,                -- "JSA-HOU-2026-0017"
+  site_id uuid not null references public.sites(id),
+
+  title text not null,
+  job_description text,
+  area text,
+
+  performed_by_roles text[] default '{}',
+  performed_by_workgroups text[] default '{}',
+
+  frequency text check (frequency in (
+    'daily','weekly','monthly','as_needed','one_off','continuous'
+  )),
+  estimated_duration_minutes integer,
+
+  ppe_required text[] default '{}',
+  permits_required text[] default '{}',         -- e.g. ['hot_work','confined_space']
+
+  status text not null default 'draft' check (status in (
+    'draft','under_review','approved','expired','archived'
+  )),
+
+  approved_by uuid references public.profiles(id),
+  approved_at timestamptz,
+  expires_at date,                              -- typically approved_at + 12 months
+
+  created_by uuid not null references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+
+  constraint jsas_approver_differs_from_creator
+    check (approved_by is null or approved_by <> created_by)
+);
+
+create index on public.jsas (site_id, status) where deleted_at is null;
+create index on public.jsas (expires_at) where status = 'approved';
+
+create table public.jsa_steps (
+  id uuid primary key default gen_random_uuid(),
+  jsa_id uuid not null references public.jsas(id) on delete cascade,
+
+  sequence integer not null,
+  step_description text not null,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (jsa_id, sequence)
+);
+
+create table public.jsa_step_hazards (
+  id uuid primary key default gen_random_uuid(),
+  jsa_step_id uuid not null references public.jsa_steps(id) on delete cascade,
+
+  hazard_description text not null,
+  hazard_category text not null check (hazard_category in (
+    'physical','chemical','biological','psychosocial',
+    'mechanical','electrical','ergonomic','environmental'
+  )),
+
+  likelihood text not null check (likelihood in (
+    'rare','unlikely','possible','likely','almost_certain'
+  )),
+  consequence text not null check (consequence in (
+    'insignificant','minor','moderate','major','catastrophic'
+  )),
+  inherent_risk_score text not null,
+  residual_risk_score text not null,
+
+  promoted_to_register boolean not null default false,
+  hazard_candidate_id uuid references public.hazard_candidates(id),
+  registered_hazard_id uuid references public.hazards(id),
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.jsa_step_controls (
+  id uuid primary key default gen_random_uuid(),
+  jsa_step_hazard_id uuid not null references public.jsa_step_hazards(id) on delete cascade,
+
+  control_level text not null check (control_level in (
+    'elimination','substitution','engineering','administrative','ppe'
+  )),
+  control_description text not null,
+
+  created_at timestamptz not null default now()
+);
+
+create table public.jsa_signoffs (
+  id uuid primary key default gen_random_uuid(),
+  jsa_id uuid not null references public.jsas(id),
+  worker_id uuid not null references public.profiles(id),
+
+  signed_at timestamptz not null default now(),
+  signed_for_session text,                      -- e.g. "2026-05-15-morning-shift"
+  notes text,
+
+  unique (jsa_id, worker_id, signed_for_session)
+);
+```
+
+> **Enum-list sync note.** `jsa_step_hazards.hazard_category` and `jsa_step_controls.control_level` must stay in sync with `hazards.hazard_category` / `hazard_controls.control_level` in §HZ. The two modules use the same `text + CHECK` constraint copy rather than a shared lookup table — easier expansion (one-line migration vs `ALTER TYPE`) but requires a 2-file edit when adding values. Worth a comment in each migration cross-pointing.
+
+### JSA.3 Routes
+
+- `app/(app)/jsa/page.tsx` — list with status filters
+- `app/(app)/jsa/new/page.tsx` — 4-step wizard
+- `app/(app)/jsa/[id]/page.tsx` — detail (read view)
+- `app/(app)/jsa/[id]/edit/page.tsx` — edit (only when `status='draft'`)
+- `app/(app)/jsa/[id]/perform/page.tsx` — worker pre-job view + sign-off
+
+### JSA.4 4-step wizard
+
+**Step 1: Job identity.** Title, site, area, job description, performed-by roles, frequency, estimated duration, PPE required, permits required.
+
+**Step 2: Steps.** Repeating list of step descriptions. Drag to reorder (use `@dnd-kit` — already in `package.json` from Phase 2 Kanban). Each step has a sequence number, auto-assigned on save.
+
+**Step 3: Hazards & controls per step.** For each step, add 0..n hazards. Each hazard has description, category, likelihood × consequence (computed inherent risk via `lib/risk/matrix.ts`). Add controls per hazard (level + description). Residual risk computed using `computeResidual()` per the §HZ matrix.
+
+**Step 4: Review & approve.** Approver selector (must differ from creator, `ehs_manager+` role). Expiry date default = today + 12 months. "Save draft" or "Submit for approval" buttons. After approval, sets `status='approved'`, `approved_by`, `approved_at`, `expires_at`.
+
+### JSA.5 Promoting step-hazards to the register
+
+After approval, on the JSA detail page, EHS Manager sees a "Promote to hazard register" button next to each step-hazard. Clicking creates a `hazard_candidates` row with `source_type='jsa'` and `source_reference_id=jsa_step_hazard.id`.
+
+The candidate goes through the normal review flow in §HZ. On conversion, `jsa_step_hazards.registered_hazard_id` is back-filled so the JSA detail page can show "Already in register: HAZ-HOU-2026-0042 →" instead of the promotion button.
+
+Promotion is **selective and one-way per step-hazard** — once a step-hazard has a `hazard_candidate_id`, the button hides regardless of candidate resolution (the candidate review flow decides whether it converts/dismisses/merges).
+
+### JSA.6 Worker sign-off
+
+The `/perform` page is read-only with a prominent "I have read and understood this JSA" button. Clicking creates a `jsa_signoffs` row.
+
+Session string format: `"{YYYY-MM-DD}-{shift}"` — worker picks the session before signing. Sign-offs are unique per `(jsa, worker, session)` so a worker who signs the same JSA for the morning shift can't sign again the same morning, but **can** sign for the evening shift.
+
+For v1, `signed_for_session` is a freeform text field with a small set of suggested values via a `<datalist>` (`morning`, `afternoon`, `evening`, `night`). A formal `shifts` table is deferred to v2.
+
+### JSA.7 Server actions
+
+`actions/jsa.ts`:
+- `createJsaDraft(input)` — creates `jsas` + `jsa_steps` + `jsa_step_hazards` + `jsa_step_controls` in a single transaction
+- `updateJsa(id, input)` — only when `status='draft'`; full replace of steps/hazards/controls in a transaction (simpler than diffing)
+- `submitForReview(id)` — `draft → under_review`
+- `approveJsa(id, expiresAt)` — `under_review → approved`, sets `approved_by` to the caller (must differ from `created_by`), enforced at DB CHECK + server action + UI
+- `signOffJsa(id, session)` — worker acknowledges
+- `promoteStepHazard(stepHazardId)` — creates `hazard_candidate` with `source_type='jsa'`; flips `promoted_to_register=true`
+
+### JSA.8 RLS + permissions
+
+Same patterns as `incidents`:
+
+- **Worker:** SELECT JSAs at sites they belong to + INSERT `jsa_signoffs` for themselves
+- **Supervisor:** + create + edit drafts at their sites
+- **EHS Manager:** + approve (when not creator) + promote step-hazards
+- **Site Admin:** full access to their org's sites
+
+Proposed permission keys (finalized at build time): `jsa:read_site`, `jsa:draft`, `jsa:approve`, `jsa:signoff`, `jsa:promote_step_hazard`. The `jsa:approve` check at action time still enforces `approver ≠ creator` regardless of role.
+
+### JSA.9 Decisions log
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-05-11 | **JSA is its own module, not a §HZ sub-feature** | A JSA is a *pre-job document* with its own approval workflow, sign-off ledger, and expiry. The hazard-register feed is a side effect, not the primary purpose. Coupling would force every JSA hazard through the register's lifecycle (and force `status='superseded'` on expired-JSA hazards, which is wrong — those hazards may still be valid in the register). |
+| 2026-05-11 | **Step-hazards promote to the register selectively, via the candidate queue** | Auto-promotion would flood the register with job-specific noise. The promote-button-per-step-hazard model lets EHS pick the few that genuinely deserve a permanent register entry. Reuses the §HZ `hazard_candidates` queue rather than inventing a separate JSA-only pathway. |
+| 2026-05-11 | **Approver ≠ creator enforced at DB, server action, and UI** | Same invariant pattern as CAPA owner ≠ verifier (an existing hard rule in the project). Implemented as a `CHECK (approved_by IS NULL OR approved_by <> created_by)` constraint, plus a server-action guard, plus a disabled-approver-option in the picker. Three-layer enforcement mirrors the project convention. |
+| 2026-05-11 | **Default 12-month expiry; expired JSAs require re-approval** | OSHA 3071 expects periodic review of JHAs; HSE INDG163 says "review whenever you think it might no longer be valid." 12 months is the industry default for stable jobs (industry / contractor toolkits all converge here). Expiration is a `status` flip via cron, not a hard delete — workers can still see the expired text for context but can't sign off against it. |
+| 2026-05-11 | **`jsa_signoffs` unique per `(jsa, worker, session)` — workers re-sign per shift, not once-forever** | A worker signing "I read this JSA" once doesn't carry forward across shifts (memory degrades, conditions change, contractors rotate). Session-scoped sign-offs match the toolbox-talk / shift-briefing cadence safety teams already use. `signed_for_session` is freeform text in v1; a formal `shifts` table is v2. |
+| 2026-05-11 | **PPE + permits + performed-by stored as `text[]`** | Same rationale as §HZ's `hazard_categories` — `text[]` is a one-line migration to add a value, and the lookup tables are tiny and slow-moving. Workgroups in particular have no formal table yet (deferred to v2 when training/competency module lands). |
+| 2026-05-11 | **JSA shares the §HZ 5×5 risk matrix via `lib/risk/matrix.ts`** | Two surfaces (JSA step-hazard scoring + Hazard Register risk assessment) use the same 5×5 grid + the same `computeResidual()` reduction. Splitting them would invite drift. Reaffirms the §HZ matrix-extraction commitment. |
+| 2026-05-11 | **Steps reorder via `@dnd-kit`** | Dep already in `package.json` from Phase 2 (CAPA Kanban). No new dep needed. Sequence is an `integer` column with `UNIQUE (jsa_id, sequence)`; reorder rewrites the sequence range in a transaction. |
+| 2026-05-11 | **Edits gated to `status='draft'`** | Once a JSA is `under_review` or `approved`, the body is immutable. Edits require unpublishing (draft revert) — same protection pattern as Phase 10 published bulletins. Re-approval kicks the lifecycle back to `under_review`. |
+| 2026-05-11 | **`updateJsa` does a full transactional replace of steps/hazards/controls, not a diff** | The wizard's edit experience is already render-the-whole-tree; diffing on save adds complexity without UX benefit. The cascade `on delete` from `jsa_steps → jsa_step_hazards → jsa_step_controls` makes the delete-then-reinsert cheap. Trade-off: PKs change on every save, so any external reference to a `jsa_step_hazard.id` mid-draft is unstable — promotion only fires post-approval, when edits are locked, so this doesn't bite. |
+| 2026-05-11 | **JSA depends on §HZ shipping first** | `jsa_step_hazards` references `hazard_candidates(id)` and `hazards(id)`. The v2 build order is: §HZ migration + UI → §JSA migration + UI. Could be one phase or two; spec'd as separable so a single PR can land both if scope allows. |
 
