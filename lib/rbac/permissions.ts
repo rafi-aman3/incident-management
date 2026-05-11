@@ -66,6 +66,11 @@ export const PERMISSIONS = [
   "bulletin:create",
   "bulletin:publish",
   "argus:use",
+  "hazard:read_site",
+  "hazard:report",
+  "hazard:manage",
+  "hazard:close",
+  "hazard_candidate:review",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];

@@ -25,7 +25,8 @@ export type NotificationKind =
   | "capa_overdue"
   | "capa_escalated"
   | "assigned"
-  | "stop_work_raised";
+  | "stop_work_raised"
+  | "hazard_incident_linked";
 
 /**
  * Site jurisdiction. Driven by sites.country in v1; setup_progress.regulator

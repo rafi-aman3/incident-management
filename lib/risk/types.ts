@@ -9,72 +9,28 @@
  * SPEC §HZ.3 draft was corrected at build time (see SPEC §15, 2026-05-11 row).
  */
 
-export type Likelihood =
-  | "rare"
-  | "unlikely"
-  | "possible"
-  | "likely"
-  | "almost_certain";
-
-export type Consequence =
-  | "insignificant"
-  | "minor"
-  | "moderate"
-  | "major"
-  | "catastrophic";
-
-export type RiskLevel = "S1" | "S2" | "S3" | "S4" | "S5";
-
-export type HazardCategory =
-  | "physical"
-  | "chemical"
-  | "biological"
-  | "psychosocial"
-  | "mechanical"
-  | "electrical"
-  | "ergonomic"
-  | "environmental";
-
-export type ControlLevel =
-  | "elimination"
-  | "substitution"
-  | "engineering"
-  | "administrative"
-  | "ppe";
-
-export const LIKELIHOOD_VALUES: readonly Likelihood[] = [
+export const LIKELIHOOD_VALUES = [
   "rare",
   "unlikely",
   "possible",
   "likely",
   "almost_certain",
 ] as const;
+export type Likelihood = (typeof LIKELIHOOD_VALUES)[number];
 
-export const CONSEQUENCE_VALUES: readonly Consequence[] = [
+export const CONSEQUENCE_VALUES = [
   "insignificant",
   "minor",
   "moderate",
   "major",
   "catastrophic",
 ] as const;
+export type Consequence = (typeof CONSEQUENCE_VALUES)[number];
 
-export const RISK_LEVEL_VALUES: readonly RiskLevel[] = [
-  "S1",
-  "S2",
-  "S3",
-  "S4",
-  "S5",
-] as const;
+export const RISK_LEVEL_VALUES = ["S1", "S2", "S3", "S4", "S5"] as const;
+export type RiskLevel = (typeof RISK_LEVEL_VALUES)[number];
 
-export const CONTROL_LEVEL_VALUES: readonly ControlLevel[] = [
-  "elimination",
-  "substitution",
-  "engineering",
-  "administrative",
-  "ppe",
-] as const;
-
-export const HAZARD_CATEGORY_VALUES: readonly HazardCategory[] = [
+export const HAZARD_CATEGORY_VALUES = [
   "physical",
   "chemical",
   "biological",
@@ -84,3 +40,13 @@ export const HAZARD_CATEGORY_VALUES: readonly HazardCategory[] = [
   "ergonomic",
   "environmental",
 ] as const;
+export type HazardCategory = (typeof HAZARD_CATEGORY_VALUES)[number];
+
+export const CONTROL_LEVEL_VALUES = [
+  "elimination",
+  "substitution",
+  "engineering",
+  "administrative",
+  "ppe",
+] as const;
+export type ControlLevel = (typeof CONTROL_LEVEL_VALUES)[number];
