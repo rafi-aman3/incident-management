@@ -24,6 +24,9 @@ import { getReportabilityUncertainTilePayload } from "@/lib/argus/tiles/reportab
 import { getCapaOverdueTilePayload } from "@/lib/argus/tiles/capa-overdue";
 import { LatestBulletinsCard } from "@/components/dashboard/latest-bulletins-card";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
+import { getChecklistState, pickNextItems } from "@/lib/get-started/state";
+import { GetStartedWidget } from "@/components/get-started/dashboard-widget";
+import { orgCan } from "@/lib/auth/orgCan";
 
 export default async function DashboardPage() {
   const { supabase, profile, currentMembership, currentSiteId, currentRoleKey } =
@@ -63,6 +66,8 @@ export default async function DashboardPage() {
     stopWorkPayload,
     reportabilityPayload,
     capaOverduePayload,
+    isOrgAdmin,
+    checklistState,
   ] = await Promise.all([
     isArgusAvailable(profile.org_id),
     currentSiteId ? can("investigation:lead", currentSiteId) : Promise.resolve(false),
@@ -72,7 +77,13 @@ export default async function DashboardPage() {
     getStopWorkActiveTilePayload(supabase, currentSiteId),
     getReportabilityUncertainTilePayload(supabase, currentSiteId),
     getCapaOverdueTilePayload(supabase, currentSiteId),
+    orgCan("org:configure"),
+    getChecklistState({ orgId: profile.org_id, userId: profile.id }),
   ]);
+
+  const showGetStartedWidget =
+    isOrgAdmin && checklistState.doneCount < checklistState.totalCount;
+  const nextItems = showGetStartedWidget ? pickNextItems(checklistState, 3) : [];
 
   // ----- Live KPIs for the current calendar year -----
   // Open / S1+S2 are true site-wide counts via head:true count queries;
@@ -240,6 +251,14 @@ export default async function DashboardPage() {
               </Link>
             </div>
           </div>
+        )}
+
+        {showGetStartedWidget && (
+          <GetStartedWidget
+            rows={nextItems}
+            doneCount={checklistState.doneCount}
+            totalCount={checklistState.totalCount}
+          />
         )}
 
         <div className="flex flex-wrap items-end justify-between gap-3">
