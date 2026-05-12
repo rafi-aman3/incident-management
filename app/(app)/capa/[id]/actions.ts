@@ -20,12 +20,10 @@ const UpdateProgressSchema = z.object({
   pct: z.number().int().min(0).max(100),
 });
 
-export type UpdateProgressResult = ActionResult<{ promoted: boolean }>;
-
 export async function updateCapaProgress(input: {
   capa_id: string;
   pct: number;
-}): Promise<UpdateProgressResult> {
+}): Promise<ActionResult<{ promoted: boolean }>> {
   const parsed = UpdateProgressSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
