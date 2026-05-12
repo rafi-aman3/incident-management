@@ -90,22 +90,6 @@ export default async function DashboardPage() {
   const yearStart = `${year}-01-01`;
   const yearEnd = `${year + 1}-01-01`;
 
-  let recentIncidents: Array<{
-    id: string;
-    ref_code: string | null;
-    type: string;
-    title: string | null;
-    severity: string | null;
-    track: string | null;
-    status: string | null;
-    occurred_at: string | null;
-  }> = [];
-  let openCount = 0;
-  let s1s2Count = 0;
-  let recordableCases = 0;
-  let dartCases = 0;
-  let hoursWorked: number | null = null;
-
   const orgId = profile.org_id;
   const [recentRes, openRes, s1s2Res, recordableRes, sitesRes] = await Promise.all([
     supabase
@@ -146,12 +130,12 @@ export default async function DashboardPage() {
       .eq("org_id", orgId)
       .not("setup_completed_at", "is", null),
   ]);
-  recentIncidents = recentRes.data ?? [];
-  openCount = openRes.count ?? 0;
-  s1s2Count = s1s2Res.count ?? 0;
+  const recentIncidents = recentRes.data ?? [];
+  const openCount = openRes.count ?? 0;
+  const s1s2Count = s1s2Res.count ?? 0;
   const incs = recordableRes.data ?? [];
-  recordableCases = incs.length;
-  dartCases = incs.filter((inc) =>
+  const recordableCases = incs.length;
+  const dartCases = incs.filter((inc) =>
     (inc.injured_persons ?? []).some((p) =>
       isDartCase({ days_away: p.days_away, days_restricted: p.days_restricted }),
     ),
@@ -164,7 +148,7 @@ export default async function DashboardPage() {
     .select("hours_worked, site:sites!inner(org_id)")
     .eq("year", year)
     .eq("site.org_id", orgId);
-  hoursWorked = (hoursRes.data ?? []).reduce(
+  const hoursWorked = (hoursRes.data ?? []).reduce(
     (sum, row) => sum + (row.hours_worked ?? 0),
     0,
   ) || null;
@@ -280,7 +264,7 @@ export default async function DashboardPage() {
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Dashboard</p>
             <h1 className="text-2xl font-semibold">Hi, {firstName}</h1>
             <p className="text-sm text-muted-foreground">
-              Site-scoped activity, regulatory clocks, and quick actions.
+              A live picture of incidents, inspections, and risk across your sites.
             </p>
           </div>
           {canReportIncident && (
