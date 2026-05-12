@@ -21,7 +21,7 @@ import type {
 
 interface UseArgusInsightTileArgs {
   tile: TileKey;
-  payload: TileAggregatorPayload & { siteId: string };
+  payload: TileAggregatorPayload & { siteId: string | null };
 }
 
 export type ArgusTileStatus = "idle" | "loading" | "resolved" | "error";

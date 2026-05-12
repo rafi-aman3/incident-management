@@ -3,10 +3,10 @@ import type { Database } from "@/lib/supabase/types";
 import type { TileAggregatorPayload } from "./index";
 
 /**
- * Aggregates open investigations whose `due_date` is in the past for the
- * caller's current site. Read-only — RLS bounds visibility to sites the
- * user can access. Returns `null` when there's no current site so the page
- * can hide the tile entirely.
+ * Aggregates open investigations whose `due_date` is in the past.
+ * When `siteId` is null the query fans org-wide; when set it scopes to
+ * that site. RLS bounds visibility to sites the user can access in
+ * either case. Returns `null` only on DB error.
  *
  * `freshnessKey` mixes `count` + max(updated_at) so a status flip (closed)
  * or a due-date push invalidates the cache immediately. The trailing date
@@ -17,18 +17,19 @@ export async function getOverdueInvestigationsTilePayload(
   supabase: SupabaseClient<Database>,
   siteId: string | null,
 ): Promise<TileAggregatorPayload | null> {
-  if (!siteId) return null;
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
+  let q = supabase
     .from("investigations")
     .select("id, ref_code, due_date, updated_at, status")
-    .eq("site_id", siteId)
     .is("deleted_at", null)
     .neq("status", "closed")
     .lt("due_date", today)
     .order("due_date", { ascending: true })
     .limit(20);
+  if (siteId) q = q.eq("site_id", siteId);
+
+  const { data, error } = await q;
 
   if (error || !data) return null;
 

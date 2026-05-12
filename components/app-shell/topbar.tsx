@@ -1,4 +1,5 @@
-import { SiteSwitcher, type SwitcherSite } from "./site-switcher";
+import { SiteSwitcherSlot } from "./site-switcher-slot";
+import type { SwitcherSite } from "./site-switcher";
 import { NotificationBell, type NotificationItem } from "./notification-bell";
 import { HelpDrawer } from "./help-drawer";
 import { UserMenu } from "./user-menu";
@@ -42,7 +43,11 @@ export function Topbar({
           narrow viewports (375px) from overflowing — 7 controls plus a
           wide site chip don't fit. */}
       <div className="hidden lg:flex">
-        <SiteSwitcher sites={sites} currentSiteId={currentSiteId} canCreateSite={canCreateSite} />
+        <SiteSwitcherSlot
+          sites={sites}
+          currentSiteId={currentSiteId}
+          canCreateSite={canCreateSite}
+        />
       </div>
       <div className="mx-auto hidden flex-1 justify-center px-4 md:flex">
         <SearchTrigger variant="input" />

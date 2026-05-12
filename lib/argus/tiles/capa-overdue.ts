@@ -4,7 +4,10 @@ import type { TileAggregatorPayload } from "./index";
 
 /**
  * Open CAPAs (any status that isn't `verified` / `closed` / `rejected`)
- * whose `due_date` is in the past for the caller's current site.
+ * whose `due_date` is in the past.
+ * When `siteId` is null the query fans org-wide; when set it scopes to
+ * that site. RLS bounds visibility to sites the user can access in
+ * either case.
  *
  * `freshnessKey` mixes `today | count | max(updated_at)` so a CAPA flipping
  * to `verified` or a due-date push invalidates the cache immediately, and
@@ -15,19 +18,19 @@ export async function getCapaOverdueTilePayload(
   supabase: SupabaseClient<Database>,
   siteId: string | null,
 ): Promise<TileAggregatorPayload | null> {
-  if (!siteId) return null;
-
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
+  let q = supabase
     .from("capas")
     .select("id, ref_code, due_date, status, updated_at")
-    .eq("site_id", siteId)
     .is("deleted_at", null)
     .not("status", "in", "(verified,closed,rejected)")
     .lt("due_date", today)
     .order("due_date", { ascending: true })
     .limit(20);
+  if (siteId) q = q.eq("site_id", siteId);
+
+  const { data, error } = await q;
 
   if (error || !data) return null;
 

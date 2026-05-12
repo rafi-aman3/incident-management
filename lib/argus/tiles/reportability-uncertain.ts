@@ -3,29 +3,31 @@ import type { Database } from "@/lib/supabase/types";
 import type { TileAggregatorPayload } from "./index";
 
 /**
- * Proxy "reportability uncertain" signal for v1: high-severity incidents
- * (S1 / S2) flagged NOT osha_recordable in the last 60 days. The full
- * "latest argus_suggestion confidence < 0.7" query requires a JSONB path
- * filter that's awkward over RLS — defer to 9.1 if the proxy turns out to
- * miss real cases.
+ * Aggregates open incidents whose reportability classification (OSHA
+ * recordable / RIDDOR reportable) is still uncertain. When `siteId` is
+ * null the query fans org-wide; when set it scopes to that site. RLS
+ * bounds visibility to sites the user can access in either case.
+ * Returns `null` only on DB error.
  *
- * `freshnessKey` is `today | count | max(updated_at)` so a re-classify or a
- * recordability flip invalidates the cache immediately.
+ * v1 proxy: flags high-severity incidents (S1 / S2) marked NOT
+ * osha_recordable in the last 60 days. The full "latest argus_suggestion
+ * confidence < 0.7" query requires a JSONB path filter that's awkward
+ * over RLS — defer to 9.1 if the proxy misses real cases.
+ *
+ * `freshnessKey` is `today | count | max(updated_at)` so a re-classify or
+ * a recordability flip invalidates the cache immediately.
  */
 export async function getReportabilityUncertainTilePayload(
   supabase: SupabaseClient<Database>,
   siteId: string | null,
 ): Promise<TileAggregatorPayload | null> {
-  if (!siteId) return null;
-
   const today = new Date().toISOString().slice(0, 10);
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
     .toISOString();
 
-  const { data, error } = await supabase
+  let q = supabase
     .from("incidents")
     .select("id, ref_code, severity, osha_recordable, updated_at, occurred_at")
-    .eq("site_id", siteId)
     .eq("is_sandbox", false)
     .is("deleted_at", null)
     .in("severity", ["S1", "S2"])
@@ -33,6 +35,9 @@ export async function getReportabilityUncertainTilePayload(
     .gte("occurred_at", cutoff)
     .order("occurred_at", { ascending: false })
     .limit(20);
+  if (siteId) q = q.eq("site_id", siteId);
+
+  const { data, error } = await q;
 
   if (error || !data) return null;
 

@@ -3,30 +3,31 @@ import type { Database } from "@/lib/supabase/types";
 import type { TileAggregatorPayload } from "./index";
 
 /**
- * Active, unacknowledged stop-works at the caller's current site. Highest-
- * priority signal on the platform — `freshnessKey` includes `max(raised_at)`
- * so the moment a new stop-work lands, the cache invalidates and the
- * dashboard's next render re-asks Argus.
+ * Aggregates active stop-work events that have not yet been lifted.
+ * When `siteId` is null the query fans org-wide; when set it scopes to
+ * that site. RLS bounds visibility to sites the user can access in
+ * either case. Returns `null` only on DB error.
  *
- * The 1h TTL on `tile_stop_work_active` is a backstop; freshness does the
- * real work. We never list the *reason* free-text on the tile (PII), but the
- * count + ref_codes are safe.
+ * `freshnessKey` mixes count + max(raised_at) so a lift action or a new
+ * stop-work invalidates the cache immediately. Highest-priority signal on
+ * the platform. The 1h TTL on `tile_stop_work_active` is a backstop; freshness
+ * does the real work.
  */
 export async function getStopWorkActiveTilePayload(
   supabase: SupabaseClient<Database>,
   siteId: string | null,
 ): Promise<TileAggregatorPayload | null> {
-  if (!siteId) return null;
-
-  const { data, error } = await supabase
+  let q = supabase
     .from("incidents")
     .select("id, ref_code, stop_work_raised_at")
-    .eq("site_id", siteId)
     .eq("stop_work", true)
     .is("stop_work_acknowledged_at", null)
     .is("deleted_at", null)
     .order("stop_work_raised_at", { ascending: false })
     .limit(10);
+  if (siteId) q = q.eq("site_id", siteId);
+
+  const { data, error } = await q;
 
   if (error || !data) return null;
 

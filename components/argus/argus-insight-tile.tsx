@@ -29,7 +29,7 @@ import {
 
 interface ArgusInsightTileProps {
   tile: TileKey;
-  payload: TileAggregatorPayload & { siteId: string };
+  payload: TileAggregatorPayload & { siteId: string | null };
   /** Optional href override — falls back to TILE_CONFIG[tile].defaultHref. */
   href?: string;
   /** Optional default label — model can override via recommended_action_label. */

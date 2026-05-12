@@ -5,6 +5,7 @@ import { z } from "zod";
 import { runArgusGates } from "@/lib/argus/gates";
 import { logArgusSuggestion } from "@/lib/argus/log";
 import { can } from "@/lib/auth/can";
+import { orgCan } from "@/lib/auth/orgCan";
 import { ArgusInvalidResponseError } from "@/lib/argus/llm";
 import { tileInsightTool } from "@/lib/argus/tools/tile-insight";
 import {
@@ -36,7 +37,7 @@ import type { Json } from "@/lib/supabase/types";
  */
 
 const tilePayloadSchema = z.object({
-  siteId: z.string().uuid(),
+  siteId: z.string().uuid().nullable(),
   aggregates: z.record(z.string(), z.number()),
   recordRefs: z.array(z.string().max(40)).max(10),
   freshnessKey: z.string().min(1).max(200),
@@ -100,9 +101,12 @@ export async function POST(request: NextRequest) {
     return jsonError(message, gate.response.status);
   }
 
-  if (!(await can(config.permission, payload.siteId))) {
+  const permitted = payload.siteId
+    ? await can(config.permission, payload.siteId)
+    : await orgCan(config.permission);
+  if (!permitted) {
     return jsonError(
-      "You do not have permission to view this tile on this site.",
+      "You do not have permission to view this tile.",
       403,
     );
   }
