@@ -212,8 +212,8 @@ export default async function CapaPage({
       .from("capas")
       .select(
         `id, ref_code, type, title, status, progress_pct, due_date,
-         owner:profiles!capas_owner_id_fkey ( full_name, email ),
-         verifier:profiles!capas_verifier_id_fkey ( full_name, email )`
+         owner:profiles!owner_id ( full_name, email ),
+         verifier:profiles!verifier_id ( full_name, email )`
       )
       .is("deleted_at", null)
       .in("site_id", filterSiteIds)

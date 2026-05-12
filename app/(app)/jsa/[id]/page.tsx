@@ -76,9 +76,9 @@ export default async function JsaDetailPage({ params }: { params: Params }) {
         "site:site_id(name), " +
         "performed_by_roles, performed_by_workgroups, frequency, estimated_duration_minutes, " +
         "ppe_required, permits_required, status, expires_at, approved_at, approved_by, " +
-        "approved_by_profile:profiles!jsas_approved_by_fkey(full_name), " +
+        "approved_by_profile:profiles!approved_by(full_name), " +
         "created_at, created_by, " +
-        "created_by_profile:profiles!jsas_created_by_fkey(full_name), " +
+        "created_by_profile:profiles!created_by(full_name), " +
         "steps:jsa_steps(id, sequence, step_description, " +
         "  hazards:jsa_step_hazards(id, hazard_description, hazard_category, " +
         "    inherent_risk_score, residual_risk_score, promoted_to_register, " +
@@ -86,7 +86,7 @@ export default async function JsaDetailPage({ params }: { params: Params }) {
         "    controls:jsa_step_controls(control_level, control_description)" +
         "  )" +
         "), " +
-        "signoffs:jsa_signoffs(id, signed_at, signed_for_session, worker:profiles!jsa_signoffs_worker_id_fkey(full_name)), " +
+        "signoffs:jsa_signoffs(id, signed_at, signed_for_session, worker:profiles!worker_id(full_name)), " +
         "incident_links:jsa_incident_links(id, link_type, identified_at, " +
         "  incident:incidents(id, ref_code, title, severity)" +
         ")",

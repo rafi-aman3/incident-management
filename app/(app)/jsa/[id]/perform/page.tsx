@@ -51,7 +51,7 @@ export default async function PerformJsaPage({ params }: { params: Params }) {
         "    controls:jsa_step_controls(control_level, control_description)" +
         "  )" +
         "), " +
-        "my_signoffs:jsa_signoffs!jsa_signoffs_jsa_id_fkey(id, signed_at, signed_for_session)",
+        "my_signoffs:jsa_signoffs!jsa_id(id, signed_at, signed_for_session)",
     )
     .eq("id", id)
     .eq("my_signoffs.worker_id", user.id)

@@ -29,19 +29,25 @@ export default async function CapaDetailPage({ params }: { params: Params }) {
   const { id } = await params;
   const { supabase, user, profile, currentSiteId } = await requireUser();
 
+  // Hints are <table>!<column> (not <table>!<constraint_name>). Phase 17's
+  // drop+re-add of capas_owner_id_fkey can invalidate PostgREST's schema
+  // cache for the entire capas table's FK names, which surfaced as PGRST200
+  // "Could not find a relationship between 'capas' and 'capas' using hint
+  // 'capas_follow_up_capa_id_fkey'" — even though the constraint exists.
+  // Column-name hints resolve via the column itself, sidestepping the cache.
   const { data: capa, error: readErr } = await supabase
     .from("capas")
     .select(
       `id, ref_code, type, title, description, status, progress_pct, due_date,
        owner_id, verifier_id, site_id, completed_at, verified_at, closed_at,
        rejection_reason, follow_up_capa_id, investigation_id,
-       owner:profiles!capas_owner_id_fkey ( id, full_name, email ),
-       verifier:profiles!capas_verifier_id_fkey ( id, full_name, email ),
+       owner:profiles!owner_id ( id, full_name, email ),
+       verifier:profiles!verifier_id ( id, full_name, email ),
        investigation:investigation_id (
          id, ref_code,
          incident:incident_id ( title )
        ),
-       follow_up:capas!capas_follow_up_capa_id_fkey ( id, ref_code, title )`
+       follow_up:capas!follow_up_capa_id ( id, ref_code, title )`
     )
     .eq("id", id)
     .is("deleted_at", null)
