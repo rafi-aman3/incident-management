@@ -18,11 +18,12 @@ import { getOverdueInvestigationsTilePayload } from "@/lib/argus/tiles/overdue-i
 import { getStopWorkActiveTilePayload } from "@/lib/argus/tiles/stop-work-active";
 import { getReportabilityUncertainTilePayload } from "@/lib/argus/tiles/reportability-uncertain";
 import { getCapaOverdueTilePayload } from "@/lib/argus/tiles/capa-overdue";
-import { LatestBulletinsCard } from "@/components/dashboard/latest-bulletins-card";
 import { SitesMapCard } from "@/components/dashboard/sites-map-card";
 import { QuickActionsRow } from "@/components/dashboard/quick-actions-row";
 import { ModuleCardsGrid } from "@/components/dashboard/module-cards-grid";
 import { TrendsSection } from "@/components/dashboard/trends-section";
+import { ActivityRow } from "@/components/dashboard/activity-row";
+import { BottomRow } from "@/components/dashboard/bottom-row";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 import { getChecklistState, pickNextItems } from "@/lib/get-started/state";
 import { GetStartedWidget } from "@/components/get-started/dashboard-widget";
@@ -358,7 +359,9 @@ export default async function DashboardPage() {
 
         <TrendsSection orgId={profile.org_id} siteId={null} />
 
-        <LatestBulletinsCard />
+        <ActivityRow orgId={profile.org_id} siteId={null} />
+
+        <BottomRow orgId={profile.org_id} siteId={null} userId={profile.id} />
 
         {!currentSiteId && (
           <section className="rounded-md border border-dashed p-8 text-center">
