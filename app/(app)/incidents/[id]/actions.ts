@@ -7,7 +7,6 @@ import { requireUser } from "@/lib/supabase/auth";
 import { requirePermission } from "@/lib/auth/can";
 import type { ActionResult } from "@/lib/incidents/schemas";
 import { finalizeIncident } from "@/lib/workflow/finalize-incident";
-import type { MatrixCoord } from "@/lib/workflow/severity";
 
 // ---------------------------------------------------------------------------
 // Severity Override
@@ -233,4 +232,3 @@ export async function closeIncident(
 
 // Re-export finalizeIncident so the wizard step 3 imports it from one place.
 export { finalizeIncident };
-export type { MatrixCoord };
