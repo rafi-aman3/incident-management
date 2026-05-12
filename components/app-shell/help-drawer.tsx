@@ -133,7 +133,7 @@ export function HelpDrawer({ roleKey }: { roleKey: RoleKey }) {
           </section>
 
           <section className="rounded-md border bg-muted/30 p-3 text-[10px] text-muted-foreground">
-            EHS Operations Platform · v1.0
+            TitanEHS · v1.0
           </section>
         </div>
       </SheetContent>
