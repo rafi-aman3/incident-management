@@ -20,6 +20,7 @@ import { getStopWorkActiveTilePayload } from "@/lib/argus/tiles/stop-work-active
 import { getReportabilityUncertainTilePayload } from "@/lib/argus/tiles/reportability-uncertain";
 import { getCapaOverdueTilePayload } from "@/lib/argus/tiles/capa-overdue";
 import { LatestBulletinsCard } from "@/components/dashboard/latest-bulletins-card";
+import { SitesMapCard } from "@/components/dashboard/sites-map-card";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 import { getChecklistState, pickNextItems } from "@/lib/get-started/state";
 import { GetStartedWidget } from "@/components/get-started/dashboard-widget";
@@ -305,6 +306,8 @@ export default async function DashboardPage() {
             </div>
           ))}
         </div>
+
+        <SitesMapCard orgId={profile.org_id} />
 
         {argusAvailable && (
           <div className="grid gap-3 md:grid-cols-2">
