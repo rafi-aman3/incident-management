@@ -1015,6 +1015,20 @@ CLAUDE.md hard rule added:
 
 `pnpm lint` matches main baseline (87 problems, identical). `pnpm build` clean. Plan: `plans/19c-quick-actions-and-module-cards.md`.
 
+### Phase 19b/19c hotfix — Leaflet CSS resolution + illegal `"use server"` type re-export
+
+Merged 2026-05-12 (PR #53, squash `2e1ccf8`). Two dev/build-time bugs surfaced after Phase 19b shipped Leaflet on `/dashboard`:
+
+**(1) `app/globals.css` failed to compile** with `CssSyntaxError: tailwindcss: ... Can't resolve 'leaflet/dist/leaflet.css'`. Phase 19b had added `@import "leaflet/dist/leaflet.css";` at the top of `globals.css`. Tailwind v4's `@tailwindcss/postcss` plugin runs PostCSS without Turbopack/Webpack's module resolver, so the `node_modules`-relative `@import` can't be resolved — the build errors out. **Fix:** drop the `globals.css` import; add `import "leaflet/dist/leaflet.css";` at the top of `components/dashboard/sites-map.tsx` (the Client Component that already does `import L from "leaflet"`). Next bundles the CSS with that component so it ships only when the map mounts — matches the three-file SSR-split pattern Phase 19b established for the lib itself.
+
+**(2) `overrideSeverity` + `assignTriageOwner` server actions crashed at runtime** with `MatrixCoord is not defined`, thrown at the line of the unrelated `export async function closeIncident` declaration in `app/(app)/incidents/[id]/actions.ts`. Phase 6b's docs already flagged this trap for asset schemas; the same trap recurred here when the file re-exported a type from a `"use server"` module: `import type { MatrixCoord } from "@/lib/workflow/severity"` + `export type { MatrixCoord }`. Next compiles every export of a `"use server"` file into a registered server-action reference and emits a runtime symbol — for a type-only re-export the symbol resolves to `undefined`, so the *whole module* throws `<TypeName> is not defined` on first invocation of *any* sibling async export. No callers actually imported `MatrixCoord` from this file (every consumer reads it directly from `@/lib/workflow/severity`), so the re-export was dead. **Fix:** drop both the `import type` and the `export type`.
+
+**Two CLAUDE.md hard rules added** to make these durable:
+- Vendor CSS from browser-only libs goes in the Client Component, not `app/globals.css` — Tailwind v4 PostCSS can't resolve `node_modules` paths.
+- `"use server"` modules can only export async functions; type re-exports crash the whole module with `<Name> is not defined` thrown at an *unrelated* sibling action — the diagnostic tell that a non-async export is hiding upward in the file.
+
+`pnpm tsc --noEmit` clean; lint clean on touched files. Branch `fix/build-errors-leaflet-and-incident-actions`. No plan file (post-merge hotfix).
+
 ---
 
 ## Workflow notes
