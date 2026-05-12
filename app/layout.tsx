@@ -14,7 +14,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "EHS Incident Management",
+  title: "TitanEHS",
   description: "Capture, classify, investigate and report safety incidents.",
 };
 

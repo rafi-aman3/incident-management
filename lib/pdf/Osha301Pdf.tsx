@@ -81,7 +81,7 @@ export function Osha301Pdf({ source }: { source: Osha301Source }) {
   return (
     <Document
       title={`OSHA 301 — ${source.incident.ref_code ?? "Case"}`}
-      author="EHS Operations Platform"
+      author="TitanEHS"
     >
       <Page size="LETTER" style={styles.page}>
         <Text style={styles.title}>OSHA Form 301 — Injury and Illness Incident Report</Text>
@@ -116,7 +116,7 @@ export function Osha301Pdf({ source }: { source: Osha301Source }) {
         ))}
 
         <Text style={styles.footer} fixed>
-          Generated {generatedAt} · EHS Operations Platform · Source ref{" "}
+          Generated {generatedAt} · TitanEHS · Source ref{" "}
           {source.incident.ref_code ?? "—"}
         </Text>
       </Page>

@@ -13,7 +13,7 @@ export default function VerifyOtpPage({ searchParams }: { searchParams: Search }
     <div className="flex flex-col gap-6">
       <div className="flex flex-col items-center gap-2 text-center">
         <Link href="/" className="text-2xl font-bold tracking-tight text-primary">
-          EHS
+          TitanEHS
         </Link>
         <h1 className="text-xl font-semibold">Verify your email</h1>
       </div>

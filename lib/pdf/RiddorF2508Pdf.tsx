@@ -73,7 +73,7 @@ export function RiddorF2508Pdf({ source }: { source: F2508Source }) {
   return (
     <Document
       title={`RIDDOR F2508 — ${source.incident.ref_code ?? "Case"}`}
-      author="EHS Operations Platform"
+      author="TitanEHS"
     >
       <Page size="A4" style={styles.page}>
         <Text style={styles.title}>RIDDOR F2508 — Report of an injury or dangerous occurrence</Text>
@@ -105,7 +105,7 @@ export function RiddorF2508Pdf({ source }: { source: F2508Source }) {
         ))}
 
         <Text style={styles.footer} fixed>
-          Generated {generatedAt} · EHS Operations Platform · Source ref{" "}
+          Generated {generatedAt} · TitanEHS · Source ref{" "}
           {source.incident.ref_code ?? "—"}
         </Text>
       </Page>
