@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Check, ChevronDown, Building2, Plus } from "lucide-react";
 import {
   DropdownMenu,
@@ -74,13 +74,20 @@ function TopbarSiteSwitcher({
   canCreateSite: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const current = sites.find((s) => s.id === currentSiteId) ?? sites[0];
 
   function handleSelect(siteId: string) {
     startTransition(async () => {
       await setSelectedSite(siteId);
-      router.refresh();
+      // On /sites/[id], the URL param drives the page — refresh alone won't
+      // re-render with the new site. Navigate so the URL follows the switch.
+      if (pathname?.startsWith("/sites/")) {
+        router.push(`/sites/${siteId}`);
+      } else {
+        router.refresh();
+      }
     });
   }
 
@@ -157,6 +164,7 @@ function SheetSiteSwitcher({
   canCreateSite: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState(false);
   const { setOpenMobile } = useSidebar();
@@ -171,7 +179,11 @@ function SheetSiteSwitcher({
     startTransition(async () => {
       await setSelectedSite(siteId);
       setOpenMobile(false);
-      router.refresh();
+      if (pathname?.startsWith("/sites/")) {
+        router.push(`/sites/${siteId}`);
+      } else {
+        router.refresh();
+      }
     });
   }
 
