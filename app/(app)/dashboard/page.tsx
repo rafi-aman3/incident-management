@@ -118,7 +118,7 @@ export default async function DashboardPage() {
       .neq("status", "closed"),
     supabase
       .from("incidents")
-      .select("id, injured_persons(days_away, days_restricted, fatality), site_id")
+      .select("id, injured_persons(days_away, days_restricted, fatality)")
       .eq("org_id", orgId)
       .eq("osha_recordable", true)
       .eq("is_sandbox", false)
