@@ -8,7 +8,7 @@ const SitesMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[360px] w-full rounded-md border bg-muted/30" />
+      <div className="relative isolate h-[360px] w-full overflow-hidden rounded-md border bg-muted/30" />
     ),
   },
 );
