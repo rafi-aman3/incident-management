@@ -3,10 +3,10 @@ import type { Database } from "@/lib/supabase/types";
 import type { TileAggregatorPayload } from "./index";
 
 /**
- * Aggregates open investigations whose `due_date` is in the past for the
- * caller's current site. Read-only — RLS bounds visibility to sites the
- * user can access. Returns `null` when there's no current site so the page
- * can hide the tile entirely.
+ * Aggregates open investigations whose `due_date` is in the past.
+ * When `siteId` is null the query fans org-wide; when set it scopes to
+ * that site. RLS bounds visibility to sites the user can access in
+ * either case. Returns `null` only on DB error.
  *
  * `freshnessKey` mixes `count` + max(updated_at) so a status flip (closed)
  * or a due-date push invalidates the cache immediately. The trailing date

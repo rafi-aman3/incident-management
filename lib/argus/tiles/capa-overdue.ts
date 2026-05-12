@@ -4,7 +4,10 @@ import type { TileAggregatorPayload } from "./index";
 
 /**
  * Open CAPAs (any status that isn't `verified` / `closed` / `rejected`)
- * whose `due_date` is in the past for the caller's current site.
+ * whose `due_date` is in the past.
+ * When `siteId` is null the query fans org-wide; when set it scopes to
+ * that site. RLS bounds visibility to sites the user can access in
+ * either case.
  *
  * `freshnessKey` mixes `today | count | max(updated_at)` so a CAPA flipping
  * to `verified` or a due-date push invalidates the cache immediately, and
