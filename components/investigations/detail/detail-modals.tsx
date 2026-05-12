@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
   Dialog,
@@ -375,8 +375,10 @@ function AddWitnessModal({
 
 // ---------------------------------------------------------------------------
 function useToastOnError(state: ActionResult | null) {
+  const handledRef = useRef<ActionResult | null>(null);
   useEffect(() => {
-    if (state && state.ok === false) {
+    if (state && state.ok === false && handledRef.current !== state) {
+      handledRef.current = state;
       toast.error(state.error);
     }
   }, [state]);
@@ -387,10 +389,18 @@ function useToastAndCloseOnSuccess(
   message: string,
   onClose: () => void
 ) {
+  // onClose is recreated on every parent render (it captures router/pathname),
+  // so we stash it in a ref to keep the effect deps stable. Without this, the
+  // effect re-fires every time onClose() triggers a parent re-render via
+  // router.replace, looping the toast indefinitely.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const handledRef = useRef<ActionResult | null>(null);
   useEffect(() => {
-    if (state && state.ok === true) {
+    if (state && state.ok === true && handledRef.current !== state) {
+      handledRef.current = state;
       toast.success(message);
-      onClose();
+      onCloseRef.current();
     }
-  }, [state, message, onClose]);
+  }, [state, message]);
 }
