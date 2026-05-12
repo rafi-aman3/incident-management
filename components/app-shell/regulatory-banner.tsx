@@ -46,7 +46,13 @@ export function RegulatoryBanner({ deadlines }: { deadlines: ActiveDeadline[] })
   const top = sorted[0];
 
   return (
-    <div className="sticky top-14 z-20 border-b border-destructive/40 bg-destructive/5 px-4 py-2 text-sm">
+    <div
+      className="sticky top-14 z-20 border-b border-destructive/40 px-4 py-2 text-sm"
+      style={{
+        backgroundColor:
+          "color-mix(in srgb, var(--destructive) 10%, var(--background))",
+      }}
+    >
       <div className="flex items-start gap-3">
         <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
         <div className="flex-1 min-w-0">
