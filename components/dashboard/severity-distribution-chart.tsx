@@ -41,7 +41,7 @@ export function SeverityDistributionChart({ data }: { data: SeverityDistribution
               border: "1px solid var(--border)",
               fontSize: 12,
             }}
-            formatter={(value: number, name: string) => [`${value} incidents`, name]}
+            formatter={(value, name) => [`${value} incidents`, String(name)]}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
         </PieChart>

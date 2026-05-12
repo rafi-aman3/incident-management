@@ -22,6 +22,7 @@ import { LatestBulletinsCard } from "@/components/dashboard/latest-bulletins-car
 import { SitesMapCard } from "@/components/dashboard/sites-map-card";
 import { QuickActionsRow } from "@/components/dashboard/quick-actions-row";
 import { ModuleCardsGrid } from "@/components/dashboard/module-cards-grid";
+import { TrendsSection } from "@/components/dashboard/trends-section";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 import { getChecklistState, pickNextItems } from "@/lib/get-started/state";
 import { GetStartedWidget } from "@/components/get-started/dashboard-widget";
@@ -354,6 +355,8 @@ export default async function DashboardPage() {
         )}
 
         <ModuleCardsGrid orgId={profile.org_id} siteId={null} />
+
+        <TrendsSection orgId={profile.org_id} siteId={null} />
 
         <LatestBulletinsCard />
 
