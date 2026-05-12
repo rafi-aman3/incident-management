@@ -17,18 +17,19 @@ export async function getOverdueInvestigationsTilePayload(
   supabase: SupabaseClient<Database>,
   siteId: string | null,
 ): Promise<TileAggregatorPayload | null> {
-  if (!siteId) return null;
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
+  let q = supabase
     .from("investigations")
     .select("id, ref_code, due_date, updated_at, status")
-    .eq("site_id", siteId)
     .is("deleted_at", null)
     .neq("status", "closed")
     .lt("due_date", today)
     .order("due_date", { ascending: true })
     .limit(20);
+  if (siteId) q = q.eq("site_id", siteId);
+
+  const { data, error } = await q;
 
   if (error || !data) return null;
 

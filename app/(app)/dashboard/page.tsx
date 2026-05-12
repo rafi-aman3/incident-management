@@ -47,18 +47,18 @@ export default async function DashboardPage() {
   }
 
   const canReportIncident = currentSiteId ? await can("incident:report", currentSiteId) : false;
-  const canReadSite = currentSiteId ? await can("incident:read_site", currentSiteId) : false;
 
   // ----- Argus tiles availability + permissions -----
   // Tiles render only when:
   //   - org has argus_enabled AND user has argus:use
-  //   - the per-tile read permission is granted on the current site
-  //   - the aggregator returned a payload (siteId-bound; null when no site)
+  //   - the per-tile read permission is granted on any accessible site (orgCan)
+  //   - the aggregator returned a payload (org-wide fan-out when siteId is null)
   const [
     argusAvailable,
     canInvestigationRead,
     canCapaRead,
     canReportRead,
+    canStopWorkRead,
     overdueInvPayload,
     stopWorkPayload,
     reportabilityPayload,
@@ -67,13 +67,14 @@ export default async function DashboardPage() {
     checklistState,
   ] = await Promise.all([
     isArgusAvailable(profile.org_id),
-    currentSiteId ? can("investigation:lead", currentSiteId) : Promise.resolve(false),
-    currentSiteId ? can("capa:complete", currentSiteId) : Promise.resolve(false),
-    currentSiteId ? can("report:read", currentSiteId) : Promise.resolve(false),
-    getOverdueInvestigationsTilePayload(supabase, currentSiteId),
-    getStopWorkActiveTilePayload(supabase, currentSiteId),
-    getReportabilityUncertainTilePayload(supabase, currentSiteId),
-    getCapaOverdueTilePayload(supabase, currentSiteId),
+    orgCan("investigation:lead"),
+    orgCan("capa:complete"),
+    orgCan("report:read"),
+    orgCan("incident:read_site"),
+    getOverdueInvestigationsTilePayload(supabase, null),
+    getStopWorkActiveTilePayload(supabase, null),
+    getReportabilityUncertainTilePayload(supabase, null),
+    getCapaOverdueTilePayload(supabase, null),
     orgCan("org:configure"),
     getChecklistState({ orgId: profile.org_id, userId: profile.id }),
   ]);
@@ -305,30 +306,30 @@ export default async function DashboardPage() {
           ))}
         </div>
 
-        {argusAvailable && currentSiteId && (
+        {argusAvailable && (
           <div className="grid gap-3 md:grid-cols-2">
             {canInvestigationRead && overdueInvPayload && (
               <ArgusInsightTile
                 tile="overdue_investigations"
-                payload={{ ...overdueInvPayload, siteId: currentSiteId }}
+                payload={{ ...overdueInvPayload, siteId: null }}
               />
             )}
-            {canReadSite && stopWorkPayload && (
+            {canStopWorkRead && stopWorkPayload && (
               <ArgusInsightTile
                 tile="stop_work_active"
-                payload={{ ...stopWorkPayload, siteId: currentSiteId }}
+                payload={{ ...stopWorkPayload, siteId: null }}
               />
             )}
             {canReportRead && reportabilityPayload && (
               <ArgusInsightTile
                 tile="reportability_uncertain"
-                payload={{ ...reportabilityPayload, siteId: currentSiteId }}
+                payload={{ ...reportabilityPayload, siteId: null }}
               />
             )}
             {canCapaRead && capaOverduePayload && (
               <ArgusInsightTile
                 tile="capa_overdue"
-                payload={{ ...capaOverduePayload, siteId: currentSiteId }}
+                payload={{ ...capaOverduePayload, siteId: null }}
               />
             )}
           </div>

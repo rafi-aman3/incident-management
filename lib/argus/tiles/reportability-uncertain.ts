@@ -16,16 +16,13 @@ export async function getReportabilityUncertainTilePayload(
   supabase: SupabaseClient<Database>,
   siteId: string | null,
 ): Promise<TileAggregatorPayload | null> {
-  if (!siteId) return null;
-
   const today = new Date().toISOString().slice(0, 10);
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
     .toISOString();
 
-  const { data, error } = await supabase
+  let q = supabase
     .from("incidents")
     .select("id, ref_code, severity, osha_recordable, updated_at, occurred_at")
-    .eq("site_id", siteId)
     .eq("is_sandbox", false)
     .is("deleted_at", null)
     .in("severity", ["S1", "S2"])
@@ -33,6 +30,9 @@ export async function getReportabilityUncertainTilePayload(
     .gte("occurred_at", cutoff)
     .order("occurred_at", { ascending: false })
     .limit(20);
+  if (siteId) q = q.eq("site_id", siteId);
+
+  const { data, error } = await q;
 
   if (error || !data) return null;
 

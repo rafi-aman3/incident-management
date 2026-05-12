@@ -16,17 +16,17 @@ export async function getStopWorkActiveTilePayload(
   supabase: SupabaseClient<Database>,
   siteId: string | null,
 ): Promise<TileAggregatorPayload | null> {
-  if (!siteId) return null;
-
-  const { data, error } = await supabase
+  let q = supabase
     .from("incidents")
     .select("id, ref_code, stop_work_raised_at")
-    .eq("site_id", siteId)
     .eq("stop_work", true)
     .is("stop_work_acknowledged_at", null)
     .is("deleted_at", null)
     .order("stop_work_raised_at", { ascending: false })
     .limit(10);
+  if (siteId) q = q.eq("site_id", siteId);
+
+  const { data, error } = await q;
 
   if (error || !data) return null;
 
