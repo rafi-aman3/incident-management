@@ -4,7 +4,6 @@ import { Plus, AlertTriangle } from "lucide-react";
 import { SiteCreatedToast } from "@/components/app-shell/site-created-toast";
 import { InvitedToast } from "@/components/app-shell/invited-toast";
 import { requireUser } from "@/lib/supabase/auth";
-import { can } from "@/lib/auth/can";
 import { WorkerWelcomeCard } from "@/components/onboarding/worker-welcome-card";
 import { RoleWelcomeCard } from "@/components/onboarding/role-welcome-card";
 import { ROLE_WELCOME_CONTENT } from "@/lib/onboarding/role-welcome-content";
@@ -21,6 +20,8 @@ import { getReportabilityUncertainTilePayload } from "@/lib/argus/tiles/reportab
 import { getCapaOverdueTilePayload } from "@/lib/argus/tiles/capa-overdue";
 import { LatestBulletinsCard } from "@/components/dashboard/latest-bulletins-card";
 import { SitesMapCard } from "@/components/dashboard/sites-map-card";
+import { QuickActionsRow } from "@/components/dashboard/quick-actions-row";
+import { ModuleCardsGrid } from "@/components/dashboard/module-cards-grid";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 import { getChecklistState, pickNextItems } from "@/lib/get-started/state";
 import { GetStartedWidget } from "@/components/get-started/dashboard-widget";
@@ -47,9 +48,7 @@ export default async function DashboardPage() {
     }
   }
 
-  const canReportIncident = currentSiteId ? await can("incident:report", currentSiteId) : false;
-
-  // ----- Argus tiles availability + permissions -----
+  // ----- Argus tiles availability + permissions, plus Quick-actions gates -----
   // Tiles render only when:
   //   - org has argus_enabled AND user has argus:use
   //   - the per-tile read permission is granted on any accessible site (orgCan)
@@ -66,6 +65,12 @@ export default async function DashboardPage() {
     capaOverduePayload,
     isOrgAdmin,
     checklistState,
+    canReportIncident,
+    canStartInspection,
+    canAddHazard,
+    canCreateCapa,
+    canCreateJsa,
+    canCreateBulletin,
   ] = await Promise.all([
     isArgusAvailable(profile.org_id),
     orgCan("investigation:lead"),
@@ -78,6 +83,12 @@ export default async function DashboardPage() {
     getCapaOverdueTilePayload(supabase, null),
     orgCan("org:configure"),
     getChecklistState({ orgId: profile.org_id, userId: profile.id }),
+    orgCan("incident:report"),
+    orgCan("inspection:run"),
+    orgCan("hazard:report"),
+    orgCan("capa:create"),
+    orgCan("jsa:draft"),
+    orgCan("bulletin:create"),
   ]);
 
   const showGetStartedWidget =
@@ -128,9 +139,10 @@ export default async function DashboardPage() {
       .lt("occurred_at", yearEnd),
     supabase
       .from("sites")
-      .select("id", { count: "exact", head: true })
+      .select("id, name")
       .eq("org_id", orgId)
-      .not("setup_completed_at", "is", null),
+      .not("setup_completed_at", "is", null)
+      .order("name", { ascending: true }),
   ]);
   const recentIncidents = recentRes.data ?? [];
   const openCount = openRes.count ?? 0;
@@ -142,7 +154,8 @@ export default async function DashboardPage() {
       isDartCase({ days_away: p.days_away, days_restricted: p.days_restricted }),
     ),
   ).length;
-  const activeSitesCount = sitesRes.count ?? 0;
+  const sitesForPicker = sitesRes.data ?? [];
+  const activeSitesCount = sitesForPicker.length;
 
   // TRIR/DART hours — sum across sites in the org with annual hours for the year
   const hoursRes = await supabase
@@ -261,23 +274,25 @@ export default async function DashboardPage() {
           />
         )}
 
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Dashboard</p>
-            <h1 className="text-2xl font-semibold">Hi, {firstName}</h1>
-            <p className="text-sm text-muted-foreground">
-              A live picture of incidents, inspections, and risk across your sites.
-            </p>
-          </div>
-          {canReportIncident && (
-            <Link
-              href="/incidents/new/1"
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4" /> Report incident
-            </Link>
-          )}
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Dashboard</p>
+          <h1 className="text-2xl font-semibold">Hi, {firstName}</h1>
+          <p className="text-sm text-muted-foreground">
+            A live picture of incidents, inspections, and risk across your sites.
+          </p>
         </div>
+        <QuickActionsRow
+          perms={{
+            reportIncident: canReportIncident,
+            startInspection: canStartInspection,
+            addHazard: canAddHazard,
+            createCapa: canCreateCapa,
+            createJsa: canCreateJsa,
+            createBulletin: canCreateBulletin,
+          }}
+          sites={sitesForPicker}
+          currentSiteId={currentSiteId}
+        />
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {kpiCards.map((c) => (
@@ -337,6 +352,8 @@ export default async function DashboardPage() {
             )}
           </div>
         )}
+
+        <ModuleCardsGrid orgId={profile.org_id} siteId={null} />
 
         <LatestBulletinsCard />
 
