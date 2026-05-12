@@ -35,56 +35,61 @@ export function SitesMap({ markers }: { markers: SiteMapMarker[] }) {
   const zoom = markers.length === 1 ? 10 : 2;
 
   return (
-    <MapContainer
-      bounds={bounds}
-      center={center}
-      zoom={zoom}
-      scrollWheelZoom={false}
-      className="h-[360px] w-full rounded-md border"
+    <div
+      className="relative isolate h-[360px] w-full overflow-hidden rounded-md border [&_.leaflet-container]:h-full [&_.leaflet-container]:w-full [&_.leaflet-pane]:z-0 [&_.leaflet-top]:z-10 [&_.leaflet-bottom]:z-10"
+      style={{ zIndex: 0 }}
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      {markers.map((m) => (
-        <CircleMarker
-          key={m.id}
-          center={[m.lat, m.lng]}
-          radius={9}
-          pathOptions={{
-            color: colorFor(m),
-            fillColor: colorFor(m),
-            fillOpacity: 0.7,
-            weight: 2,
-          }}
-          eventHandlers={{
-            click: () => router.push(`/sites/${m.id}`),
-            keydown: (e: LeafletKeyboardEvent) => {
-              if (e.originalEvent.key === "Enter" || e.originalEvent.key === " ") {
-                router.push(`/sites/${m.id}`);
-              }
-            },
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent={false}>
-            <div className="text-xs">
-              <div className="font-semibold">{m.name}</div>
-              {m.stopWorkActive && (
-                <div className="text-red-600">Stop-work active</div>
-              )}
-              {!m.stopWorkActive && m.criticalOpen > 0 && (
-                <div className="text-amber-700">
-                  {m.criticalOpen} critical open
-                </div>
-              )}
-              {!m.stopWorkActive && m.criticalOpen === 0 && (
-                <div className="text-green-700">Clean</div>
-              )}
-              <div className="text-muted-foreground">Click to open →</div>
-            </div>
-          </Tooltip>
-        </CircleMarker>
-      ))}
-    </MapContainer>
+      <MapContainer
+        bounds={bounds}
+        center={center}
+        zoom={zoom}
+        scrollWheelZoom={false}
+        className="h-full w-full"
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {markers.map((m) => (
+          <CircleMarker
+            key={m.id}
+            center={[m.lat, m.lng]}
+            radius={9}
+            pathOptions={{
+              color: colorFor(m),
+              fillColor: colorFor(m),
+              fillOpacity: 0.7,
+              weight: 2,
+            }}
+            eventHandlers={{
+              click: () => router.push(`/sites/${m.id}`),
+              keydown: (e: LeafletKeyboardEvent) => {
+                if (e.originalEvent.key === "Enter" || e.originalEvent.key === " ") {
+                  router.push(`/sites/${m.id}`);
+                }
+              },
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent={false}>
+              <div className="text-xs">
+                <div className="font-semibold">{m.name}</div>
+                {m.stopWorkActive && (
+                  <div className="text-red-600">Stop-work active</div>
+                )}
+                {!m.stopWorkActive && m.criticalOpen > 0 && (
+                  <div className="text-amber-700">
+                    {m.criticalOpen} critical open
+                  </div>
+                )}
+                {!m.stopWorkActive && m.criticalOpen === 0 && (
+                  <div className="text-green-700">Clean</div>
+                )}
+                <div className="text-muted-foreground">Click to open →</div>
+              </div>
+            </Tooltip>
+          </CircleMarker>
+        ))}
+      </MapContainer>
+    </div>
   );
 }
