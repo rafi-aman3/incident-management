@@ -41,8 +41,30 @@ export default async function ReportWizardPage({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 ring-1 ring-foreground/5">
+    <div className="relative isolate space-y-4">
+      {/* Aurora gradient backdrop — destructive/amber blobs, decorative.
+          Sets a quiet "important task" tone without panic. */}
+      <div className="pointer-events-none absolute inset-x-0 -top-10 -z-10 h-[420px] overflow-hidden" aria-hidden>
+        <div
+          className="aurora-blob -left-20 top-0 h-[360px] w-[480px] rounded-full"
+          style={{ background: "radial-gradient(closest-side, var(--destructive), transparent 70%)", opacity: 0.32 }}
+        />
+        <div
+          className="aurora-blob right-[-8%] top-16 h-[320px] w-[420px] rounded-full"
+          style={{ background: "radial-gradient(closest-side, var(--warning), transparent 70%)", animationDelay: "-7s", opacity: 0.28 }}
+        />
+        <div
+          className="aurora-blob left-1/3 top-32 h-[260px] w-[360px] rounded-full"
+          style={{ background: "radial-gradient(closest-side, var(--brand), transparent 70%)", animationDelay: "-13s", opacity: 0.22 }}
+        />
+      </div>
+
+      <div
+        className="dashboard-enter relative overflow-hidden rounded-xl border border-destructive/25 bg-gradient-to-br from-destructive/10 via-card to-card p-5 shadow-sm ring-1 ring-foreground/5"
+        style={{ ["--d" as string]: "0ms" }}
+      >
+        <span className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-destructive/15 blur-3xl" aria-hidden />
+        <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-destructive via-warning to-destructive/40" aria-hidden />
         <p className="text-xs uppercase tracking-wide text-muted-foreground">
           <Link href="/incidents" className="hover:underline">
             Incidents
@@ -51,13 +73,16 @@ export default async function ReportWizardPage({
         </p>
         <div className="mt-1 flex items-start gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-destructive/20 to-destructive/5 text-destructive ring-1 ring-destructive/30"
             aria-hidden
           >
-            <AlertTriangle className="h-5 w-5" />
+            <span className="animate-pulse-ring absolute inset-0 rounded-full bg-destructive/40" />
+            <AlertTriangle className="relative h-5 w-5" />
           </span>
           <div>
-            <h1 className="text-2xl font-semibold leading-tight">Report Incident</h1>
+            <h1 className="bg-gradient-to-r from-destructive via-foreground to-foreground bg-clip-text text-2xl font-semibold leading-tight text-transparent">
+              Report Incident
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Complete all three steps to create a full investigation package.
             </p>
@@ -68,23 +93,31 @@ export default async function ReportWizardPage({
           Mounts on every step (Step 1 has a pre-created blank draft; 2+3
           have the draft from Step 1 submit). Per the assets/ mock, this
           lives BETWEEN the page header and the step progress. */}
-      {incidentId && <FormAssistantMount incidentId={incidentId} />}
+      {incidentId && (
+        <div className="dashboard-enter" style={{ ["--d" as string]: "60ms" }}>
+          <FormAssistantMount incidentId={incidentId} />
+        </div>
+      )}
 
-      <WizardProgress current={stepNum as 1 | 2 | 3} />
+      <div className="dashboard-enter" style={{ ["--d" as string]: "120ms" }}>
+        <WizardProgress current={stepNum as 1 | 2 | 3} />
+      </div>
 
-      {stepNum === 1 &&
-        (incidentId ? <Step1Server incidentId={incidentId} initialSandbox={initialSandbox} /> : <MissingId />)}
-      {stepNum === 2 && (incidentId ? <Step2Server incidentId={incidentId} /> : <MissingId />)}
-      {stepNum === 3 &&
-        (incidentId ? (
-          <Step3Server
-            incidentId={incidentId}
-            likelihood={Number(sp.l) as MatrixCoord}
-            consequence={Number(sp.c) as MatrixCoord}
-          />
-        ) : (
-          <MissingId />
-        ))}
+      <div className="dashboard-enter" style={{ ["--d" as string]: "180ms" }}>
+        {stepNum === 1 &&
+          (incidentId ? <Step1Server incidentId={incidentId} initialSandbox={initialSandbox} /> : <MissingId />)}
+        {stepNum === 2 && (incidentId ? <Step2Server incidentId={incidentId} /> : <MissingId />)}
+        {stepNum === 3 &&
+          (incidentId ? (
+            <Step3Server
+              incidentId={incidentId}
+              likelihood={Number(sp.l) as MatrixCoord}
+              consequence={Number(sp.c) as MatrixCoord}
+            />
+          ) : (
+            <MissingId />
+          ))}
+      </div>
     </div>
   );
 }

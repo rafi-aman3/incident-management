@@ -146,3 +146,59 @@
     font-feature-settings: "tnum" 1;
   }
 }
+
+/* Dashboard ambient motion + gradient surface.
+   All visual flourishes here are decorative — text/data remains readable
+   without them, and prefers-reduced-motion fully disables motion. */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.15); }
+}
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.6; }
+  100% { transform: scale(2.6); opacity: 0;   }
+}
+@keyframes aurora-drift {
+  0%, 100% { transform: translate3d(0, 0, 0)        scale(1); }
+  50%      { transform: translate3d(2%, -2%, 0)     scale(1.08); }
+}
+@keyframes shimmer-sweep {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+@utility aurora-blob {
+  position: absolute;
+  pointer-events: none;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: aurora-drift 18s ease-in-out infinite;
+  will-change: transform;
+}
+
+@utility animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+@utility animate-pulse-ring {
+  animation: pulse-ring 2.4s ease-out infinite;
+}
+
+/* Stagger helper: applies an enter animation with a per-element delay
+   driven by the inline --d custom property (set in JSX). Used on every
+   dashboard section for a top-to-bottom reveal. */
+@utility dashboard-enter {
+  animation: enter 600ms cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms) both;
+  --tw-enter-opacity: 0;
+  --tw-enter-translate-y: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob,
+  .animate-pulse-soft,
+  .animate-pulse-ring,
+  .dashboard-enter {
+    animation: none !important;
+  }
+  .aurora-blob { opacity: 0.35; }
+}

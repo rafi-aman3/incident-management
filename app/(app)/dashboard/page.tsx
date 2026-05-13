@@ -8,7 +8,6 @@ import { WorkerWelcomeCard } from "@/components/onboarding/worker-welcome-card";
 import { RoleWelcomeCard } from "@/components/onboarding/role-welcome-card";
 import { ROLE_WELCOME_CONTENT } from "@/lib/onboarding/role-welcome-content";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { InfoTooltip } from "@/components/info-tooltip";
 import type { TooltipKey } from "@/lib/constants/tooltips";
 import { trir, dart, formatKpi, isDartCase } from "@/lib/format/kpi";
 import { ArgusContextPayload } from "@/components/argus/argus-context";
@@ -24,6 +23,7 @@ import { ModuleCardsGrid } from "@/components/dashboard/module-cards-grid";
 import { TrendsSection } from "@/components/dashboard/trends-section";
 import { ActivityRow } from "@/components/dashboard/activity-row";
 import { BottomRow } from "@/components/dashboard/bottom-row";
+import { AnimatedKpiStrip } from "@/components/dashboard/animated-kpi-strip";
 import type { ArgusPageContext } from "@/lib/argus/page-context";
 import { getChecklistState, pickNextItems } from "@/lib/get-started/state";
 import { GetStartedWidget } from "@/components/get-started/dashboard-widget";
@@ -244,14 +244,31 @@ export default async function DashboardPage() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-6">
+      <div className="relative isolate space-y-6">
+        {/* Aurora gradient backdrop — soft brand-purple → cyan blobs drifting
+            behind the dashboard content. Decorative only; hidden from AT. */}
+        <div className="pointer-events-none absolute inset-x-0 -top-12 -z-10 h-[520px] overflow-hidden" aria-hidden>
+          <div
+            className="aurora-blob -left-24 top-0 h-[420px] w-[520px] rounded-full"
+            style={{ background: "radial-gradient(closest-side, var(--brand), transparent 70%)" }}
+          />
+          <div
+            className="aurora-blob right-[-10%] top-24 h-[360px] w-[480px] rounded-full"
+            style={{ background: "radial-gradient(closest-side, var(--accent-cyan), transparent 70%)", animationDelay: "-6s" }}
+          />
+          <div
+            className="aurora-blob left-1/3 top-40 h-[300px] w-[400px] rounded-full"
+            style={{ background: "radial-gradient(closest-side, var(--brand-hover), transparent 70%)", animationDelay: "-12s", opacity: 0.35 }}
+          />
+        </div>
+
         <ArgusContextPayload context={argusContext} />
         <Suspense fallback={null}>
           <SiteCreatedToast />
           <InvitedToast />
         </Suspense>
         {setupIncompleteSiteName && (
-          <div className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+          <div className="dashboard-enter flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm" style={{ ["--d" as string]: "0ms" }}>
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
             <div className="flex-1">
               <strong className="font-semibold">Site setup in progress:</strong>{" "}
@@ -269,65 +286,48 @@ export default async function DashboardPage() {
         )}
 
         {showGetStartedWidget && (
-          <GetStartedWidget
-            rows={nextItems}
-            doneCount={checklistState.doneCount}
-            totalCount={checklistState.totalCount}
-          />
+          <div className="dashboard-enter" style={{ ["--d" as string]: "0ms" }}>
+            <GetStartedWidget
+              rows={nextItems}
+              doneCount={checklistState.doneCount}
+              totalCount={checklistState.totalCount}
+            />
+          </div>
         )}
 
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Dashboard</p>
-          <h1 className="text-2xl font-semibold">Hi, {firstName}</h1>
+        <div className="dashboard-enter relative overflow-hidden rounded-lg border border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-sm" style={{ ["--d" as string]: "60ms" }}>
+          <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/15 blur-3xl" aria-hidden />
+          <p className="text-xs uppercase tracking-wide text-primary/80">Dashboard</p>
+          <h1 className="bg-gradient-to-r from-primary via-foreground to-foreground bg-clip-text text-2xl font-semibold text-transparent">
+            Hi, {firstName}
+          </h1>
           <p className="text-sm text-muted-foreground">
             A live picture of incidents, inspections, and risk across your sites.
           </p>
         </div>
-        <QuickActionsRow
-          perms={{
-            reportIncident: canReportIncident,
-            startInspection: canStartInspection,
-            addHazard: canAddHazard,
-            createCapa: canCreateCapa,
-            createJsa: canCreateJsa,
-            createBulletin: canCreateBulletin,
-          }}
-          sites={sitesForPicker}
-          currentSiteId={currentSiteId}
-        />
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {kpiCards.map((c) => (
-            <div
-              key={c.label}
-              className={
-                c.emphasis
-                  ? "rounded-md border border-primary/30 bg-primary/5 p-4"
-                  : "rounded-md border bg-card p-4"
-              }
-            >
-              <div className="flex items-center text-xs uppercase tracking-wide text-muted-foreground">
-                {c.label}
-                {c.tip && <InfoTooltip tip={c.tip} />}
-              </div>
-              <div
-                className={
-                  c.emphasis
-                    ? "mt-2 text-2xl font-semibold tabular-nums text-primary"
-                    : "mt-2 text-2xl font-semibold tabular-nums"
-                }
-              >
-                {c.value}
-              </div>
-              <div className="text-xs text-muted-foreground">{c.hint}</div>
-            </div>
-          ))}
+        <div className="dashboard-enter" style={{ ["--d" as string]: "120ms" }}>
+          <QuickActionsRow
+            perms={{
+              reportIncident: canReportIncident,
+              startInspection: canStartInspection,
+              addHazard: canAddHazard,
+              createCapa: canCreateCapa,
+              createJsa: canCreateJsa,
+              createBulletin: canCreateBulletin,
+            }}
+            sites={sitesForPicker}
+            currentSiteId={currentSiteId}
+          />
         </div>
 
-        <SitesMapCard orgId={profile.org_id} />
+        <AnimatedKpiStrip cards={kpiCards} />
+
+        <div className="dashboard-enter" style={{ ["--d" as string]: "420ms" }}>
+          <SitesMapCard orgId={profile.org_id} />
+        </div>
 
         {argusAvailable && (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="dashboard-enter grid gap-3 md:grid-cols-2" style={{ ["--d" as string]: "480ms" }}>
             {canInvestigationRead && overdueInvPayload && (
               <ArgusInsightTile
                 tile="overdue_investigations"
@@ -355,13 +355,21 @@ export default async function DashboardPage() {
           </div>
         )}
 
-        <ModuleCardsGrid orgId={profile.org_id} siteId={null} />
+        <div className="dashboard-enter" style={{ ["--d" as string]: "540ms" }}>
+          <ModuleCardsGrid orgId={profile.org_id} siteId={null} />
+        </div>
 
-        <TrendsSection orgId={profile.org_id} siteId={null} />
+        <div className="dashboard-enter" style={{ ["--d" as string]: "600ms" }}>
+          <TrendsSection orgId={profile.org_id} siteId={null} />
+        </div>
 
-        <ActivityRow orgId={profile.org_id} siteId={null} />
+        <div className="dashboard-enter" style={{ ["--d" as string]: "660ms" }}>
+          <ActivityRow orgId={profile.org_id} siteId={null} />
+        </div>
 
-        <BottomRow orgId={profile.org_id} siteId={null} userId={profile.id} />
+        <div className="dashboard-enter" style={{ ["--d" as string]: "720ms" }}>
+          <BottomRow orgId={profile.org_id} siteId={null} userId={profile.id} />
+        </div>
 
         {!currentSiteId && (
           <section className="rounded-md border border-dashed p-8 text-center">
@@ -371,7 +379,7 @@ export default async function DashboardPage() {
             </p>
             <Link
               href="/admin/sites/new"
-              className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-gradient-to-br from-primary to-primary-hover px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:shadow-md"
             >
               <Plus className="h-4 w-4" /> Create your first site
             </Link>

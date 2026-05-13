@@ -526,9 +526,13 @@ export function Step2Details(props: Props) {
         <button
           type="submit"
           disabled={isPending || matrix.likelihood === null || matrix.consequence === null}
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+          className="group relative inline-flex items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-primary via-primary to-[var(--brand-hover)] px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:hover:translate-y-0"
         >
-          {isPending ? "Saving…" : "Continue to Step 3"}
+          <span
+            className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden"
+            aria-hidden
+          />
+          <span className="relative">{isPending ? "Saving…" : "Continue to Step 3"}</span>
         </button>
       </div>
     </form>

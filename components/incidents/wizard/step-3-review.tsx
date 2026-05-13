@@ -140,9 +140,13 @@ export function Step3Review(props: Props) {
           <button
             type="submit"
             disabled={isPending}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+            className="group relative inline-flex items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-primary via-primary to-[var(--brand-hover)] px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:hover:translate-y-0"
           >
-            {isPending ? "Finalizing…" : "Finalize report"}
+            <span
+              className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden"
+              aria-hidden
+            />
+            <span className="relative">{isPending ? "Finalizing…" : "Finalize report"}</span>
           </button>
           {!isSandbox && (
             <p className="max-w-xs text-right text-xs text-muted-foreground">
