@@ -42,29 +42,29 @@ export default async function ReportWizardPage({
 
   return (
     <div className="relative isolate space-y-4">
-      {/* Aurora gradient backdrop — destructive/amber blobs, decorative.
-          Sets a quiet "important task" tone without panic. */}
+      {/* Aurora gradient backdrop — brand-purple/cyan blobs, decorative.
+          Matches the dashboard tone; brand-aligned. */}
       <div className="pointer-events-none absolute inset-x-0 -top-10 -z-10 h-[420px] overflow-hidden" aria-hidden>
         <div
           className="aurora-blob -left-20 top-0 h-[360px] w-[480px] rounded-full"
-          style={{ background: "radial-gradient(closest-side, var(--destructive), transparent 70%)", opacity: 0.32 }}
+          style={{ background: "radial-gradient(closest-side, var(--brand), transparent 70%)", opacity: 0.32 }}
         />
         <div
           className="aurora-blob right-[-8%] top-16 h-[320px] w-[420px] rounded-full"
-          style={{ background: "radial-gradient(closest-side, var(--warning), transparent 70%)", animationDelay: "-7s", opacity: 0.28 }}
+          style={{ background: "radial-gradient(closest-side, var(--accent-cyan), transparent 70%)", animationDelay: "-7s", opacity: 0.28 }}
         />
         <div
           className="aurora-blob left-1/3 top-32 h-[260px] w-[360px] rounded-full"
-          style={{ background: "radial-gradient(closest-side, var(--brand), transparent 70%)", animationDelay: "-13s", opacity: 0.22 }}
+          style={{ background: "radial-gradient(closest-side, var(--brand-hover), transparent 70%)", animationDelay: "-13s", opacity: 0.22 }}
         />
       </div>
 
       <div
-        className="dashboard-enter relative overflow-hidden rounded-xl border border-destructive/25 bg-gradient-to-br from-destructive/10 via-card to-card p-5 shadow-sm ring-1 ring-foreground/5"
+        className="dashboard-enter relative overflow-hidden rounded-xl border border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-sm ring-1 ring-foreground/5"
         style={{ ["--d" as string]: "0ms" }}
       >
-        <span className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-destructive/15 blur-3xl" aria-hidden />
-        <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-destructive via-warning to-destructive/40" aria-hidden />
+        <span className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-primary/15 blur-3xl" aria-hidden />
+        <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary via-accent-cyan to-primary/40" aria-hidden />
         <p className="text-xs uppercase tracking-wide text-muted-foreground">
           <Link href="/incidents" className="hover:underline">
             Incidents
@@ -73,13 +73,13 @@ export default async function ReportWizardPage({
         </p>
         <div className="mt-1 flex items-start gap-3">
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-destructive/20 to-destructive/5 text-destructive ring-1 ring-destructive/30"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 text-primary ring-1 ring-primary/30"
             aria-hidden
           >
             <AlertTriangle className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="bg-gradient-to-r from-destructive via-foreground to-foreground bg-clip-text text-2xl font-semibold leading-tight text-transparent">
+            <h1 className="bg-gradient-to-r from-primary via-foreground to-foreground bg-clip-text text-2xl font-semibold leading-tight text-transparent">
               Report Incident
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
