@@ -73,11 +73,10 @@ export default async function ReportWizardPage({
         </p>
         <div className="mt-1 flex items-start gap-3">
           <span
-            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-destructive/20 to-destructive/5 text-destructive ring-1 ring-destructive/30"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-destructive/20 to-destructive/5 text-destructive ring-1 ring-destructive/30"
             aria-hidden
           >
-            <span className="animate-pulse-ring absolute inset-0 rounded-full bg-destructive/40" />
-            <AlertTriangle className="relative h-5 w-5" />
+            <AlertTriangle className="h-5 w-5" />
           </span>
           <div>
             <h1 className="bg-gradient-to-r from-destructive via-foreground to-foreground bg-clip-text text-2xl font-semibold leading-tight text-transparent">
