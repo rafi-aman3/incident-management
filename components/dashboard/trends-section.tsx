@@ -19,14 +19,22 @@ export async function TrendsSection({
 
   return (
     <section className="grid gap-3 lg:grid-cols-2">
-      <div className="rounded-md border bg-card p-4">
+      <div className="relative overflow-hidden rounded-md border bg-card p-4 transition hover:shadow-sm">
+        <span
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary/70 via-accent-cyan/60 to-transparent"
+          aria-hidden
+        />
         <h3 className="text-sm font-semibold">Incidents — last 12 months</h3>
         <p className="text-xs text-muted-foreground">Stacked by severity</p>
         <div className="mt-3">
           <IncidentsTrendChart data={trend} />
         </div>
       </div>
-      <div className="rounded-md border bg-card p-4">
+      <div className="relative overflow-hidden rounded-md border bg-card p-4 transition hover:shadow-sm">
+        <span
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-primary/60 to-primary/70"
+          aria-hidden
+        />
         <h3 className="text-sm font-semibold">Severity distribution (YTD)</h3>
         <p className="text-xs text-muted-foreground">
           {new Date().getFullYear()} incidents by severity

@@ -4,11 +4,9 @@ import { useActionState, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { INCIDENT_TYPES, INCIDENT_TYPE_META, type IncidentType } from "@/lib/incidents/types";
 import type { ActionResult } from "@/lib/incidents/schemas";
 import { saveStep1 } from "@/app/(app)/incidents/new/[step]/actions";
-import { SandboxBanner } from "./wizard-progress";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -52,7 +50,7 @@ export function Step1WhatHappened({
     null,
   );
   const [type, setType] = useState<IncidentType | null>(initial.type);
-  const [sandbox, setSandbox] = useState(initial.is_sandbox || initialSandbox);
+  const sandbox = initial.is_sandbox || initialSandbox;
 
   const fieldErr = (k: string) => state?.ok === false ? state.fieldErrors?.[k]?.[0] : undefined;
 
@@ -60,7 +58,9 @@ export function Step1WhatHappened({
     <TooltipProvider>
     <form action={formAction} className="space-y-6">
       <input type="hidden" name="incident_id" value={incidentId} />
-      {sandbox && <SandboxBanner />}
+      {/* sandbox state preserved via hidden input so the ?sandbox=true URL
+          path keeps working; UI affordances are intentionally hidden. */}
+      <input type="hidden" name="is_sandbox" value={sandbox ? "true" : ""} />
 
       <div className="space-y-2">
         <Label className="flex items-center">
@@ -69,7 +69,7 @@ export function Step1WhatHappened({
         </Label>
         <p className="text-xs text-muted-foreground">Pick one — you can add more detail in the next step.</p>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {INCIDENT_TYPES.map((t) => {
+          {INCIDENT_TYPES.map((t, i) => {
             const meta = INCIDENT_TYPE_META[t];
             const Icon = meta.icon;
             const selected = type === t;
@@ -79,13 +79,47 @@ export function Step1WhatHappened({
                 type="button"
                 onClick={() => setType(t)}
                 aria-pressed={selected}
+                style={{ ["--d" as string]: `${240 + i * 50}ms` }}
                 className={cn(
-                  "flex flex-col items-start gap-1.5 rounded-md border p-3 text-left text-sm transition-colors",
-                  selected ? "border-primary bg-accent" : "hover:bg-accent"
+                  "dashboard-enter group relative flex flex-col items-start gap-1.5 overflow-hidden rounded-md border p-3 text-left text-sm transition-all duration-300",
+                  "hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0",
+                  selected
+                    ? "border-primary/60 bg-gradient-to-br from-primary/15 via-primary/5 to-card ring-1 ring-primary/40"
+                    : "border-border hover:border-primary/30 hover:bg-accent",
                 )}
               >
-                <Icon className={cn("h-5 w-5", selected ? "text-primary" : "text-muted-foreground")} />
-                <div className="font-medium">{meta.label}</div>
+                {/* selected glow */}
+                {selected && (
+                  <span
+                    className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/20 blur-2xl"
+                    aria-hidden
+                  />
+                )}
+                {/* hover top rail (unselected only) */}
+                {!selected && (
+                  <span
+                    className="pointer-events-none absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gradient-to-r from-primary via-accent-cyan to-primary transition-transform duration-300 group-hover:scale-x-100"
+                    aria-hidden
+                  />
+                )}
+                <span
+                  className={cn(
+                    "relative flex h-8 w-8 items-center justify-center rounded-md transition-all duration-300",
+                    selected
+                      ? "bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/30"
+                      : "bg-muted/60 group-hover:bg-primary/10",
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      "h-4 w-4 transition-colors duration-300",
+                      selected ? "text-primary" : "text-muted-foreground group-hover:text-primary",
+                    )}
+                  />
+                </span>
+                <div className={cn("font-medium transition-colors", selected && "text-primary")}>
+                  {meta.label}
+                </div>
                 <div className="text-xs leading-snug text-muted-foreground">{meta.description}</div>
               </button>
             );
@@ -150,21 +184,6 @@ export function Step1WhatHappened({
         <p className="text-xs text-muted-foreground">No blame, no judgment — just the facts. Stays confidential.</p>
       </div>
 
-      <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-        <Checkbox
-          name="is_sandbox"
-          checked={sandbox}
-          onCheckedChange={(c) => setSandbox(Boolean(c))}
-          className="mt-0.5"
-        />
-        <span>
-          <span className="font-medium">Practice mode (sandbox)</span>
-          <span className="ml-2 text-muted-foreground">
-            — Submit a real-feeling report without affecting KPIs or firing notifications.
-          </span>
-        </span>
-      </label>
-
       {state?.ok === false && state.error !== "Validation failed" && (
         <p className="text-sm text-destructive">{state.error}</p>
       )}
@@ -176,9 +195,13 @@ export function Step1WhatHappened({
         <button
           type="submit"
           disabled={isPending || !type}
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+          className="group relative inline-flex items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-primary via-primary to-[var(--brand-hover)] px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:hover:translate-y-0"
         >
-          {isPending ? "Saving…" : "Continue to Step 2"}
+          <span
+            className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden"
+            aria-hidden
+          />
+          <span className="relative">{isPending ? "Saving…" : "Continue to Step 2"}</span>
         </button>
       </div>
     </form>

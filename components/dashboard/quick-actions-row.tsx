@@ -94,12 +94,18 @@ export function QuickActionsRow({
             onClick={() => trigger(key)}
             className={
               primary
-                ? "inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
-                : "inline-flex items-center gap-1.5 rounded-md border bg-card px-3 py-2 text-sm font-medium hover:bg-accent"
+                ? "group relative inline-flex items-center gap-1.5 overflow-hidden rounded-md bg-gradient-to-br from-primary via-primary to-[var(--brand-hover)] px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0"
+                : "group inline-flex items-center gap-1.5 rounded-md border bg-card px-3 py-2 text-sm font-medium transition-colors duration-200 hover:border-primary/30 hover:bg-accent hover:text-primary"
             }
           >
-            <Icon className="h-4 w-4" aria-hidden />
-            {label}
+            {primary && (
+              <span
+                className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden"
+                aria-hidden
+              />
+            )}
+            <Icon className="relative h-4 w-4" aria-hidden />
+            <span className="relative">{label}</span>
           </button>
         ))}
       </div>

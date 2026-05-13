@@ -29,7 +29,6 @@ import type { ActionResult } from "@/lib/incidents/schemas";
 import type { MatrixCoord } from "@/lib/workflow/severity";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
-import { SandboxBanner } from "./wizard-progress";
 
 type InjuredDraft = {
   name: string;
@@ -91,7 +90,6 @@ export function Step2Details(props: Props) {
     description,
     area,
     argusEnabled,
-    isSandbox,
     isUKSite,
     initial,
   } = props;
@@ -137,8 +135,6 @@ export function Step2Details(props: Props) {
   return (
     <TooltipProvider>
     <form action={formAction} className="space-y-6">
-      {isSandbox && <SandboxBanner />}
-
       <input type="hidden" name="incident_id" value={incidentId} />
       <input type="hidden" name="injured_persons_json" value={JSON.stringify(injured)} />
       <input type="hidden" name="witnesses_json" value={JSON.stringify(witnesses)} />
@@ -526,9 +522,13 @@ export function Step2Details(props: Props) {
         <button
           type="submit"
           disabled={isPending || matrix.likelihood === null || matrix.consequence === null}
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+          className="group relative inline-flex items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-primary via-primary to-[var(--brand-hover)] px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm motion-reduce:hover:translate-y-0"
         >
-          {isPending ? "Saving…" : "Continue to Step 3"}
+          <span
+            className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden"
+            aria-hidden
+          />
+          <span className="relative">{isPending ? "Saving…" : "Continue to Step 3"}</span>
         </button>
       </div>
     </form>

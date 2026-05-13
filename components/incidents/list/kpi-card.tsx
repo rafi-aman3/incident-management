@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { TrendPill, type TrendInput } from "./trend-pill";
 
 export type KpiAccent =
@@ -93,14 +94,13 @@ export function KpiCard({
           <Icon className={cn("h-4 w-4", a.iconFg)} />
         </span>
       </div>
-      <div
+      <AnimatedNumber
+        value={value}
         className={cn(
-          "font-semibold tabular-nums leading-none text-3xl xl:text-4xl",
+          "block font-semibold tabular-nums leading-none text-3xl xl:text-4xl",
           a.valueFg,
         )}
-      >
-        {value}
-      </div>
+      />
       {sub && <div className="text-sm text-muted-foreground">{sub}</div>}
       {formula && (
         <div className="font-mono text-[11px] text-muted-foreground">{formula}</div>
