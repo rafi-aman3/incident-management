@@ -30,12 +30,13 @@ export default async function ReportsLandingPage({
   const currentSite = memberships.find((m) => m.site_id === currentSiteId);
   const isCurrentSiteGb = currentSite?.site?.country === "GB";
 
-  // Counts (head-only)
+  // Counts (head-only) + latest recordable id for direct 301 link
   let oshaRecordableCount = 0;
   let osha301PendingCount = 0;
   let riddorCount = 0;
+  let latestRecordableId: string | null = null;
   if (canRead && currentSiteId) {
-    const [recordableRes, pendingRes, riddorRes] = await Promise.all([
+    const [recordableRes, latestRecordableRes, pendingRes, riddorRes] = await Promise.all([
       supabase
         .from("incidents")
         .select("id", { count: "exact", head: true })
@@ -45,6 +46,18 @@ export default async function ReportsLandingPage({
         .is("deleted_at", null)
         .gte("occurred_at", yearStart)
         .lt("occurred_at", yearEnd),
+      supabase
+        .from("incidents")
+        .select("id")
+        .eq("site_id", currentSiteId)
+        .eq("osha_recordable", true)
+        .eq("is_sandbox", false)
+        .is("deleted_at", null)
+        .gte("occurred_at", yearStart)
+        .lt("occurred_at", yearEnd)
+        .order("occurred_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       // 301 "pending" = OSHA-recordable AND occurred in the last 7 days (the
       // 7-day form deadline). A real implementation tracks form-completion
       // separately; for v1 the count surfaces upcoming deadlines.
@@ -74,6 +87,7 @@ export default async function ReportsLandingPage({
     oshaRecordableCount = recordableRes.count ?? 0;
     osha301PendingCount = pendingRes.count ?? 0;
     riddorCount = riddorRes.count ?? 0;
+    latestRecordableId = latestRecordableRes.data?.id ?? null;
   }
 
   const [argusAvailable, canReportRead, reportsTilePayload] = await Promise.all([
@@ -143,24 +157,28 @@ export default async function ReportsLandingPage({
           <ReportCard
             icon={FileCheck}
             title="OSHA 301 reports"
-            href={`/incidents?year=${year}&recordable=1`}
+            href={
+              latestRecordableId
+                ? `/reports/osha-301/${latestRecordableId}`
+                : `/incidents?year=${year}&recordable=1`
+            }
             metric={`${osha301PendingCount} from last 7 days`}
             body="Per-incident detail (18 fields). Must complete within 7 days of the event."
-            cta="Browse recordable incidents"
+            cta={latestRecordableId ? "Open latest 301" : "Browse recordable incidents"}
           />
           {hasGbSite && (
             <ReportCard
               icon={Flag}
               title="RIDDOR F2508"
-              href={`/incidents?year=${year}&riddor=1`}
+              href={isCurrentSiteGb ? `/incidents?year=${year}&riddor=1` : null}
               metric={
                 isCurrentSiteGb
                   ? `${riddorCount} reportable case${riddorCount === 1 ? "" : "s"} YTD`
-                  : "GB sites only"
+                  : "Switch to a UK site to file"
               }
               body="UK event-triggered HSE report. Death / specified injury → phone immediate + written 10 days."
-              cta="Browse RIDDOR-reportable"
-              dimmed={!isCurrentSiteGb}
+              cta={isCurrentSiteGb ? "Browse RIDDOR-reportable" : "UK sites only"}
+              disabled={!isCurrentSiteGb}
             />
           )}
         </div>
@@ -176,29 +194,53 @@ function ReportCard({
   metric,
   body,
   cta,
-  dimmed,
+  disabled,
 }: {
   icon: typeof FileText;
   title: string;
-  href: string;
+  href: string | null;
   metric: string;
   body: string;
   cta: string;
-  dimmed?: boolean;
+  disabled?: boolean;
 }) {
+  const inner = (
+    <>
+      <div className="mb-3 flex items-center justify-between">
+        <Icon className={`h-5 w-5 ${disabled ? "text-muted-foreground" : "text-primary"}`} />
+        {!disabled && (
+          <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        )}
+      </div>
+      <h2 className="text-base font-semibold">{title}</h2>
+      <p className={`mt-0.5 text-xs font-medium ${disabled ? "text-muted-foreground" : "text-primary"}`}>
+        {metric}
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
+      <p className="mt-3 text-xs font-medium text-foreground">
+        {cta}
+        {disabled ? "" : " →"}
+      </p>
+    </>
+  );
+
+  if (disabled || !href) {
+    return (
+      <div
+        aria-disabled="true"
+        className="flex cursor-not-allowed flex-col rounded-lg border bg-card p-5 opacity-60"
+      >
+        {inner}
+      </div>
+    );
+  }
+
   return (
     <Link
       href={href}
-      className={`group flex flex-col rounded-lg border bg-card p-5 transition-colors hover:border-primary ${dimmed ? "opacity-60" : ""}`}
+      className="group flex flex-col rounded-lg border bg-card p-5 transition-colors hover:border-primary"
     >
-      <div className="mb-3 flex items-center justify-between">
-        <Icon className="h-5 w-5 text-primary" />
-        <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-      </div>
-      <h2 className="text-base font-semibold">{title}</h2>
-      <p className="mt-0.5 text-xs font-medium text-primary">{metric}</p>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
-      <p className="mt-3 text-xs font-medium text-foreground">{cta} →</p>
+      {inner}
     </Link>
   );
 }

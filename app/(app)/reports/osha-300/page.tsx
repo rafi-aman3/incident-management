@@ -238,14 +238,16 @@ export default async function Osha300Page({
             </TableHeader>
             <TableBody>
               {logRows.map((r, i) => (
-                <TableRow key={`${r.caseNumber}-${i}`}>
+                <TableRow key={`${r.caseNumber}-${i}`} className="align-top">
                   <TableCell className="font-mono text-[11px]">{r.caseNumber}</TableCell>
                   <TableCell className="text-xs">{r.employee}</TableCell>
                   <TableCell className="tabular-nums text-xs text-muted-foreground">
                     {new Date(r.date).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-xs">{r.location}</TableCell>
-                  <TableCell className="max-w-md text-xs">{r.description}</TableCell>
+                  <TableCell className="text-xs">
+                    <div className="max-w-md whitespace-normal break-words">{r.description}</div>
+                  </TableCell>
                   <TableCell className="text-xs">{classificationLabel(r.classification)}</TableCell>
                   <TableCell className="text-center text-xs">{r.death ? "✓" : ""}</TableCell>
                   <TableCell className="text-center text-xs">{r.daysAway ? "✓" : ""}</TableCell>
