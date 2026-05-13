@@ -24,8 +24,6 @@ export default function LoginPage({
 }: {
   searchParams: Promise<LoginSearch>;
 }) {
-  const showDemoChips = process.env.NODE_ENV !== "production";
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col items-center gap-2 text-center">
@@ -41,7 +39,7 @@ export default function LoginPage({
       <Suspense fallback={<LoginFormSkeleton />}>
         <LoginFormFromParams
           searchParams={searchParams}
-          demoAccounts={showDemoChips ? DEMO_ACCOUNTS : []}
+          demoAccounts={DEMO_ACCOUNTS}
         />
       </Suspense>
 
