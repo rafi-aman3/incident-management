@@ -4,11 +4,9 @@ import { useActionState, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { INCIDENT_TYPES, INCIDENT_TYPE_META, type IncidentType } from "@/lib/incidents/types";
 import type { ActionResult } from "@/lib/incidents/schemas";
 import { saveStep1 } from "@/app/(app)/incidents/new/[step]/actions";
-import { SandboxBanner } from "./wizard-progress";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -52,7 +50,7 @@ export function Step1WhatHappened({
     null,
   );
   const [type, setType] = useState<IncidentType | null>(initial.type);
-  const [sandbox, setSandbox] = useState(initial.is_sandbox || initialSandbox);
+  const sandbox = initial.is_sandbox || initialSandbox;
 
   const fieldErr = (k: string) => state?.ok === false ? state.fieldErrors?.[k]?.[0] : undefined;
 
@@ -60,7 +58,9 @@ export function Step1WhatHappened({
     <TooltipProvider>
     <form action={formAction} className="space-y-6">
       <input type="hidden" name="incident_id" value={incidentId} />
-      {sandbox && <SandboxBanner />}
+      {/* sandbox state preserved via hidden input so the ?sandbox=true URL
+          path keeps working; UI affordances are intentionally hidden. */}
+      <input type="hidden" name="is_sandbox" value={sandbox ? "true" : ""} />
 
       <div className="space-y-2">
         <Label className="flex items-center">
@@ -183,21 +183,6 @@ export function Step1WhatHappened({
         />
         <p className="text-xs text-muted-foreground">No blame, no judgment — just the facts. Stays confidential.</p>
       </div>
-
-      <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-        <Checkbox
-          name="is_sandbox"
-          checked={sandbox}
-          onCheckedChange={(c) => setSandbox(Boolean(c))}
-          className="mt-0.5"
-        />
-        <span>
-          <span className="font-medium">Practice mode (sandbox)</span>
-          <span className="ml-2 text-muted-foreground">
-            — Submit a real-feeling report without affecting KPIs or firing notifications.
-          </span>
-        </span>
-      </label>
 
       {state?.ok === false && state.error !== "Validation failed" && (
         <p className="text-sm text-destructive">{state.error}</p>

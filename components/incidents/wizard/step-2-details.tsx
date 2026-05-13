@@ -29,7 +29,6 @@ import type { ActionResult } from "@/lib/incidents/schemas";
 import type { MatrixCoord } from "@/lib/workflow/severity";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTooltip } from "@/components/info-tooltip";
-import { SandboxBanner } from "./wizard-progress";
 
 type InjuredDraft = {
   name: string;
@@ -91,7 +90,6 @@ export function Step2Details(props: Props) {
     description,
     area,
     argusEnabled,
-    isSandbox,
     isUKSite,
     initial,
   } = props;
@@ -137,8 +135,6 @@ export function Step2Details(props: Props) {
   return (
     <TooltipProvider>
     <form action={formAction} className="space-y-6">
-      {isSandbox && <SandboxBanner />}
-
       <input type="hidden" name="incident_id" value={incidentId} />
       <input type="hidden" name="injured_persons_json" value={JSON.stringify(injured)} />
       <input type="hidden" name="witnesses_json" value={JSON.stringify(witnesses)} />

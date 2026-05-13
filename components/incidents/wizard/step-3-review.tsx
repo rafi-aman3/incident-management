@@ -6,7 +6,6 @@ import { computeTrack, type IncidentType, type Treatment } from "@/lib/workflow/
 import { INCIDENT_TYPE_META } from "@/lib/incidents/types";
 import { submitIncident } from "@/app/(app)/incidents/new/[step]/actions";
 import type { ActionResult } from "@/lib/incidents/schemas";
-import { SandboxBanner } from "./wizard-progress";
 
 type Props = {
   incidentId: string;
@@ -64,8 +63,6 @@ export function Step3Review(props: Props) {
 
   return (
     <form action={formAction} className="space-y-6">
-      {isSandbox && <SandboxBanner />}
-
       <input type="hidden" name="incident_id" value={incidentId} />
       <input type="hidden" name="likelihood" value={likelihood} />
       <input type="hidden" name="consequence" value={consequence} />
