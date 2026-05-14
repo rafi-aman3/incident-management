@@ -47,3 +47,7 @@ next-env.d.ts
 
 # brainstorming companion (transient mockups)
 /.superpowers/
+
+# skills installer (vercel-labs/agent-skills) — pin via skills-lock.json, ignore the rest
+/.agents/
+/.claude/skills/
